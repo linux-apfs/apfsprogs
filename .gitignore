@@ -1,0 +1,6 @@
+*.swp
+*.d
+*.o
+/apfsck/apfsck
+/mkapfs/mkapfs
+/tags
