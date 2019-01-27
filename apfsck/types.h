@@ -13,6 +13,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define EAGAIN	1
+#define ENODATA	2
+
 #define __packed	__attribute__((packed))
 
 #ifdef __CHECKER__
@@ -39,5 +42,7 @@ typedef uint64_t __bitwise __le64;
 #define le32_to_cpu(x)	((__force u32)(__le32)(x))
 #define cpu_to_le64(x)	((__force __le64)(u64)(x))
 #define le64_to_cpu(x)	((__force u64)(__le64)(x))
+
+#define DIV_ROUND_UP(n, d) (((n) + (d) - 1) / (d))
 
 #endif	/* _TYPES_H */

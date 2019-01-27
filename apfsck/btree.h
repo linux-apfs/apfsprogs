@@ -10,6 +10,8 @@
 #include "object.h"
 #include "types.h"
 
+struct super_block;
+
 /*
  * On-disk representation of an object map
  */
@@ -150,6 +152,42 @@ static inline bool node_has_fixed_kv_size(struct node *node)
 	return (node->flags & APFS_BTNODE_FIXED_KV_SIZE) != 0;
 }
 
+/* Flags for the query structure */
+#define QUERY_TREE_MASK		0007	/* Which b-tree we query */
+#define QUERY_OMAP		0001	/* This is a b-tree object map query */
+#define QUERY_CAT		0002	/* This is a catalog tree query */
+#define QUERY_MULTIPLE		0010	/* Search for multiple matches */
+#define QUERY_NEXT		0020	/* Find next of multiple matches */
+#define QUERY_EXACT		0040	/* Search for an exact match */
+#define QUERY_DONE		0100	/* The search at this level is over */
+
+/*
+ * Structure used to retrieve data from an APFS B-Tree. For now only used
+ * on the calalog and the object map.
+ */
+struct query {
+	struct node *node;		/* Node being searched */
+	struct key *key;		/* What the query is looking for */
+
+	struct query *parent;		/* Query for parent node */
+	unsigned int flags;
+
+	/* Set by the query on success */
+	int index;			/* Index of the entry in the node */
+	int key_off;			/* Offset of the key in the node */
+	int key_len;			/* Length of the key */
+	int off;			/* Offset of the data in the node */
+	int len;			/* Length of the data */
+
+	int depth;			/* Put a limit on recursion */
+};
+
 extern struct node *parse_omap_btree(struct super_block *sb, u64 oid, int fd);
+extern struct query *alloc_query(struct node *node, struct query *parent);
+extern void free_query(struct super_block *sb, struct query *query);
+extern int btree_query(struct super_block *sb, struct query **query, int fd);
+extern struct node *omap_read_node(struct super_block *sb, u64 id);
+extern u64 omap_lookup_block(struct super_block *sb, struct node *tbl, u64 id,
+			     int fd);
 
 #endif	/* _BTREE_H */

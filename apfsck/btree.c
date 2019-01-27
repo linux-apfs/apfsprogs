@@ -47,7 +47,7 @@ static bool node_is_valid(struct super_block *sb, struct node *node)
  * @block:	number of the block where the node is stored
  * @fd:		file descriptor for the device
  *
- * Returns a pointer to the resulting apfs_node structure.
+ * Returns a pointer to the resulting node structure.
  */
 static struct node *read_node(struct super_block *sb, u64 block, int fd)
 {
@@ -91,6 +91,23 @@ static struct node *read_node(struct super_block *sb, u64 block, int fd)
 
 	node->raw = raw;
 	return node;
+}
+
+/**
+ * node_free - Free a node structure
+ * @node: node to free
+ *
+ * This function works under the assumption that the node flags are not
+ * corrupted, but we are not yet checking that (TODO).
+ */
+static void node_free(struct node *node)
+{
+	struct super_block *sb = node->object.sb;
+
+	if (node_is_root(node))
+		return;	/* The root nodes are needed by the sb until the end */
+	munmap(node->raw, sb->s_blocksize);
+	free(node);
 }
 
 /**
@@ -291,4 +308,369 @@ struct node *parse_omap_btree(struct super_block *sb, u64 oid, int fd)
 	root = read_node(sb, le64_to_cpu(raw->om_tree_oid), fd);
 	parse_omap_subtree(sb, root, &last_key, fd);
 	return root;
+}
+
+/**
+ * child_from_query - Read the child id found by a successful nonleaf query
+ * @query:	the query that found the record
+ *
+ * Returns the child id in the nonleaf node record.
+ */
+static u64 child_from_query(struct query *query)
+{
+	void *raw = query->node->raw;
+
+	/* This check is actually redundant, at least for now */
+	if (query->len != 8) { /* The data on a nonleaf node is the child id */
+		printf("Wrong size of nonleaf record value\n");
+		exit(1);
+	}
+
+	return le64_to_cpu(*(__le64 *)(raw + query->off));
+}
+
+/**
+ * bno_from_query - Read the block number found by a successful omap query
+ * @query:	the query that found the record
+ *
+ * Returns the block number in the omap record after performing a basic
+ * sanity check.
+ */
+static u64 bno_from_query(struct query *query)
+{
+	struct apfs_omap_val *omap_val;
+	void *raw = query->node->raw;
+
+	if (query->len != sizeof(*omap_val)) {
+		printf("Wrong size of omap leaf record value\n");
+		exit(1);
+	}
+
+	omap_val = (struct apfs_omap_val *)(raw + query->off);
+	return le64_to_cpu(omap_val->ov_paddr);
+}
+
+/**
+ * omap_lookup_block - Find the block number of a b-tree node from its id
+ * @sb:		filesystem superblock
+ * @tbl:	Root of the object map to be searched
+ * @id:		id of the node
+ * @fd:		file descriptor for the device
+ *
+ * Returns the block number.
+ */
+u64 omap_lookup_block(struct super_block *sb, struct node *tbl, u64 id, int fd)
+{
+	struct query *query;
+	struct key key;
+	u64 block;
+
+	query = alloc_query(tbl, NULL /* parent */);
+
+	init_omap_key(id, &key);
+	query->key = &key;
+	query->flags |= QUERY_OMAP | QUERY_EXACT;
+
+	if (btree_query(sb, &query, fd)) { /* Omap queries shouldn't fail */
+		printf("Omap record missing for id 0x%llx\n",
+		       (unsigned long long)id);
+		exit(1);
+	}
+
+	block = bno_from_query(query);
+	free_query(sb, query);
+	return block;
+}
+
+/**
+ * alloc_query - Allocates a query structure
+ * @node:	node to be searched
+ * @parent:	query for the parent node
+ *
+ * Callers other than btree_query() should set @parent to NULL, and @node
+ * to the root of the b-tree. They should also initialize most of the query
+ * fields themselves; when @parent is not NULL the query will inherit them.
+ *
+ * Returns the allocated query.
+ */
+struct query *alloc_query(struct node *node, struct query *parent)
+{
+	struct query *query;
+
+	query = malloc(sizeof(*query));
+	if (!query) {
+		perror(NULL);
+		exit(1);
+	}
+
+	query->node = node;
+	query->key = parent ? parent->key : NULL;
+	query->flags = parent ? parent->flags & ~(QUERY_DONE | QUERY_NEXT) : 0;
+	query->parent = parent;
+	/* Start the search with the last record and go backwards */
+	query->index = node->records;
+	query->depth = parent ? parent->depth + 1 : 0;
+
+	return query;
+}
+
+/**
+ * free_query - Free a query structure
+ * @sb:		filesystem superblock
+ * @query:	query to free
+ *
+ * Also frees the ancestor queries, if they are kept.
+ */
+void free_query(struct super_block *sb, struct query *query)
+{
+	while (query) {
+		struct query *parent = query->parent;
+
+		node_free(query->node);
+		free(query);
+		query = parent;
+	}
+}
+
+/**
+ * key_from_query - Read the current key from a query structure
+ * @query:	the query, with @query->key_off and @query->key_len already set
+ * @key:	return parameter for the key
+ *
+ * Reads the key into @key after some basic sanity checks.
+ */
+static void key_from_query(struct query *query, struct key *key)
+{
+	void *raw = query->node->raw;
+	void *raw_key = (void *)(raw + query->key_off);
+
+	switch (query->flags & QUERY_TREE_MASK) {
+	/* For now we are only working with the omap */
+	case QUERY_OMAP:
+		read_omap_key(raw_key, query->key_len, key);
+		break;
+	default:
+		printf("Bug!\n");
+		exit(1);
+	}
+
+	if (query->flags & QUERY_MULTIPLE) {
+		/* A multiple query must ignore these fields */
+		key->number = 0;
+		key->name = NULL;
+	}
+}
+
+/**
+ * node_next - Find the next matching record in the current node
+ * @sb:		filesystem superblock
+ * @query:	multiple query in execution
+ *
+ * Returns 0 on success, -EAGAIN if the next record is in another node, and
+ * -ENODATA if no more matching records exist.
+ */
+static int node_next(struct super_block *sb, struct query *query)
+{
+	struct node *node = query->node;
+	struct key curr_key;
+	int cmp;
+	u64 bno = node->object.block_nr;
+
+	if (query->flags & QUERY_DONE)
+		/* Nothing left to search; the query failed */
+		return -ENODATA;
+
+	if (!query->index) /* The next record may be in another node */
+		return -EAGAIN;
+	--query->index;
+
+	query->key_len = node_locate_key(node, query->index, &query->key_off);
+	key_from_query(query, &curr_key);
+
+	cmp = keycmp(sb, &curr_key, query->key);
+
+	if (cmp > 0) {
+		printf("B-tree records are out of order.\n");
+		exit(1);
+	}
+
+	if (cmp != 0 && node_is_leaf(node) && query->flags & QUERY_EXACT)
+		return -ENODATA;
+
+	query->len = node_locate_data(node, query->index, &query->off);
+	if (query->len == 0) {
+		printf("Corrupted record value in node 0x%llx.\n",
+		       (unsigned long long)bno);
+		exit(1);
+	}
+
+	if (cmp != 0) {
+		/*
+		 * This is the last entry that can be relevant in this node.
+		 * Keep searching the children, but don't return to this level.
+		 */
+		query->flags |= QUERY_DONE;
+	}
+
+	return 0;
+}
+
+/**
+ * node_query - Execute a query on a single node
+ * @sb:		filesystem superblock
+ * @query:	the query to execute
+ *
+ * The search will start at index @query->index, looking for the key that comes
+ * right before @query->key, according to the order given by keycmp().
+ *
+ * The @query->index will be updated to the last index checked. This is
+ * important when searching for multiple entries, since the query may need
+ * to remember where it was on this level. If we are done with this node, the
+ * query will be flagged as QUERY_DONE, and the search will end in failure
+ * as soon as we return to this level. The function may also return -EAGAIN,
+ * to signal that the search should go on in a different branch.
+ *
+ * On success returns 0; the offset of the data within the block will be saved
+ * in @query->off, and its length in @query->len. The function checks that this
+ * length fits within the block; callers must use the returned value to make
+ * sure they never operate outside its bounds.
+ *
+ * -ENODATA will be returned if no appropriate entry was found.
+ */
+static int node_query(struct super_block *sb, struct query *query)
+{
+	struct node *node = query->node;
+	int left, right;
+	int cmp;
+	u64 bno = node->object.block_nr;
+
+	if (query->flags & QUERY_NEXT)
+		return node_next(sb, query);
+
+	/* Search by bisection */
+	cmp = 1;
+	left = 0;
+	do {
+		struct key curr_key;
+		if (cmp > 0) {
+			right = query->index - 1;
+			if (right < left)
+				return -ENODATA;
+			query->index = (left + right) / 2;
+		} else {
+			left = query->index;
+			query->index = DIV_ROUND_UP(left + right, 2);
+		}
+
+		query->key_len = node_locate_key(node, query->index,
+						 &query->key_off);
+		key_from_query(query, &curr_key);
+
+		cmp = keycmp(sb, &curr_key, query->key);
+		if (cmp == 0 && !(query->flags & QUERY_MULTIPLE))
+			break;
+	} while (left != right);
+
+	if (cmp > 0)
+		return -ENODATA;
+
+	if (cmp != 0 && node_is_leaf(query->node) && query->flags & QUERY_EXACT)
+		return -ENODATA;
+
+	if (query->flags & QUERY_MULTIPLE) {
+		if (cmp != 0) /* Last relevant entry in level */
+			query->flags |= QUERY_DONE;
+		query->flags |= QUERY_NEXT;
+	}
+
+	query->len = node_locate_data(node, query->index, &query->off);
+	if (query->len == 0) {
+		printf("Corrupted record value in node 0x%llx.\n",
+		       (unsigned long long)bno);
+		exit(1);
+	}
+	return 0;
+}
+
+/**
+ * btree_query - Execute a query on a b-tree
+ * @sb:		filesystem superblock
+ * @query:	the query to execute
+ * @fd:		file descriptor for the device
+ *
+ * Searches the b-tree starting at @query->index in @query->node, looking for
+ * the record corresponding to @query->key.
+ *
+ * Returns 0 in case of success and sets the @query->len, @query->off and
+ * @query->index fields to the results of the query. @query->node will now
+ * point to the leaf node holding the record.
+ *
+ * In case of failure returns -ENODATA.
+ */
+int btree_query(struct super_block *sb, struct query **query, int fd)
+{
+	struct node *node;
+	struct query *parent;
+	u64 child_id, child_blk;
+	int err;
+
+next_node:
+	if ((*query)->depth >= 12) {
+		/* This is the maximum depth allowed by the module */
+		printf("Corrupted b-tree is too deep.\n");
+		exit(1);
+	}
+
+	err = node_query(sb, *query);
+	if (err == -EAGAIN) {
+		if (!(*query)->parent) /* We are at the root of the tree */
+			return -ENODATA;
+
+		/* Move back up one level and continue the query */
+		parent = (*query)->parent;
+		(*query)->parent = NULL; /* Don't free the parent */
+		free_query(sb, *query);
+		*query = parent;
+		goto next_node;
+	}
+	if (err)
+		return err;
+	if (node_is_leaf((*query)->node)) /* All done */
+		return 0;
+
+	child_id = child_from_query(*query);
+
+	/*
+	 * The omap maps a node id into a block number. The nodes
+	 * of the omap itself do not need this translation.
+	 */
+	if ((*query)->flags & QUERY_OMAP)
+		child_blk = child_id;
+	else
+		child_blk = omap_lookup_block(sb, sb->s_omap_root,
+					      child_id, fd);
+
+	/* Now go a level deeper and search the child */
+	node = read_node(sb, child_blk, fd);
+
+	if (node->object.oid != child_id) {
+		printf("Wrong object id on block number 0x%llx\n",
+		       (unsigned long long)child_blk);
+		exit(1);
+	}
+
+	if ((*query)->flags & QUERY_MULTIPLE) {
+		/*
+		 * We are looking for multiple entries, so we must remember
+		 * the parent node and index to continue the search later.
+		 */
+		*query = alloc_query(node, *query);
+	} else {
+		/* Reuse the same query structure to search the child */
+		node_free((*query)->node);
+		(*query)->node = node;
+		(*query)->index = node->records;
+		(*query)->depth++;
+	}
+	goto next_node;
 }

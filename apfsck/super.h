@@ -257,7 +257,11 @@ struct apfs_superblock {
 /* Superblock data in memory */
 struct super_block {
 	struct apfs_nx_superblock *s_container_raw;
+	struct node *s_omap_root;
 	unsigned long s_blocksize;
+
+	/* This is excessive in most cases.  TODO: switch to a linked list? */
+	struct apfs_superblock *s_volume_raw[APFS_NX_MAX_FILE_SYSTEMS];
 };
 
 extern struct super_block *parse_super(int fd);
