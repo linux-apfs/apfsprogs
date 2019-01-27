@@ -1,4 +1,4 @@
-SRCS = apfsck.c object.c super.c
+SRCS = apfsck.c btree.c key.c object.c super.c
 OBJS = $(SRCS:.c=.o)
 DEPS = $(SRCS:.c=.d)
 

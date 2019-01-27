@@ -71,6 +71,15 @@ struct apfs_obj_phys {
 	__le32 o_subtype;	/* Object subtype */
 } __packed;
 
+/*
+ * In-memory representation of an APFS object
+ */
+struct object {
+	struct super_block *sb;
+	u64 block_nr;
+	u64 oid;	/* Often the same as the block number */
+};
+
 #define APFS_MAX_CKSUM_SIZE 8
 
 extern int obj_verify_csum(struct super_block *sb, struct apfs_obj_phys *obj);

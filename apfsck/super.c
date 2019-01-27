@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include "btree.h"
 #include "object.h"
 #include "types.h"
 #include "super.h"
@@ -147,5 +148,7 @@ struct super_block *parse_super(int fd)
 	}
 
 	map_main_super(sb, fd);
+	/* Check for corruption in the container object map */
+	parse_omap_btree(sb, le64_to_cpu(sb->s_container_raw->nx_omap_oid), fd);
 	return sb;
 }

@@ -9,6 +9,8 @@
 #ifndef _TYPES_H
 #define _TYPES_H
 
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define __packed	__attribute__((packed))
