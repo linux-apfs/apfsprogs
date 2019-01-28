@@ -68,7 +68,7 @@ static struct apfs_nx_superblock *read_super_copy(struct super_block *sb,
  * @sb:	superblock structure
  * @fd: file descriptor for the device
  *
- * Sets @sb->s_container_raw to the in-memory location of the main superblock.
+ * Sets @sb->s_raw to the in-memory location of the main superblock.
  */
 static void map_main_super(struct super_block *sb, int fd)
 {
@@ -96,7 +96,7 @@ static void map_main_super(struct super_block *sb, int fd)
 	}
 
 	/* Now we go through the checkpoints one by one */
-	sb->s_container_raw = NULL;
+	sb->s_raw = NULL;
 	xid = le64_to_cpu(msb_raw->nx_o.o_xid);
 	for (i = 0; i < desc_blocks; ++i) {
 		if (desc_raw)
@@ -117,13 +117,13 @@ static void map_main_super(struct super_block *sb, int fd)
 			continue; /* Corrupted */
 
 		xid = le64_to_cpu(desc_raw->nx_o.o_xid);
-		if (sb->s_container_raw)
-			munmap(sb->s_container_raw, sb->s_blocksize);
-		sb->s_container_raw = desc_raw;
+		if (sb->s_raw)
+			munmap(sb->s_raw, sb->s_blocksize);
+		sb->s_raw = desc_raw;
 		desc_raw = NULL;
 	}
 
-	if (!sb->s_container_raw) {
+	if (!sb->s_raw) {
 		printf("Missing latest checkpoint superblock.\n");
 		exit(1);
 	}
@@ -145,7 +145,7 @@ static void map_main_super(struct super_block *sb, int fd)
 static struct apfs_superblock *map_volume_super(struct super_block *sb,
 						int vol, int fd)
 {
-	struct apfs_nx_superblock *msb_raw = sb->s_container_raw;
+	struct apfs_nx_superblock *msb_raw = sb->s_raw;
 	struct apfs_superblock *vsb_raw;
 	u64 vol_id;
 	u64 vsb;
@@ -197,12 +197,27 @@ struct super_block *parse_super(int fd)
 	map_main_super(sb, fd);
 	/* Check for corruption in the container object map */
 	sb->s_omap_root = parse_omap_btree(sb,
-		le64_to_cpu(sb->s_container_raw->nx_omap_oid), fd);
+		le64_to_cpu(sb->s_raw->nx_omap_oid), fd);
 
 	for (vol = 0; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol) {
-		sb->s_volume_raw[vol] = map_volume_super(sb, vol, fd);
-		if (!sb->s_volume_raw[vol])
+		struct volume_superblock *vsb;
+		struct apfs_superblock *vsb_raw;
+
+		vsb_raw = map_volume_super(sb, vol, fd);
+		if (!vsb_raw)
 			break;
+
+		vsb = malloc(sizeof(*vsb));
+		if (!vsb) {
+			perror(NULL);
+			exit(1);
+		}
+
+		vsb->v_raw = vsb_raw;
+		/* Check for corruption in the volume object map */
+		vsb->v_omap_root = parse_omap_btree(sb,
+				le64_to_cpu(vsb_raw->apfs_omap_oid), fd);
+		sb->s_volumes[vol] = vsb;
 	}
 
 	return sb;
