@@ -127,7 +127,60 @@ static inline void init_omap_key(u64 oid, struct key *key)
 	key->name = NULL;
 }
 
+/**
+ * init_inode_key - Initialize an in-memory key for an inode query
+ * @ino:	inode number
+ * @key:	key structure to initialize
+ */
+static inline void init_inode_key(u64 ino, struct key *key)
+{
+	key->id = ino;
+	key->type = APFS_TYPE_INODE;
+	key->number = 0;
+	key->name = NULL;
+}
+
+/**
+ * init_file_extent_key - Initialize an in-memory key for an extent query
+ * @id:		extent id
+ * @offset:	logical address (0 for a multiple query)
+ * @key:	key structure to initialize
+ */
+static inline void init_file_extent_key(u64 id, u64 offset, struct key *key)
+{
+	key->id = id;
+	key->type = APFS_TYPE_FILE_EXTENT;
+	key->number = offset;
+	key->name = NULL;
+}
+
+/**
+ * init_xattr_key - Initialize an in-memory key for a xattr query
+ * @ino:	inode number of the parent file
+ * @name:	xattr name (NULL for a multiple query)
+ * @key:	key structure to initialize
+ */
+static inline void init_xattr_key(u64 ino, const char *name, struct key *key)
+{
+	key->id = ino;
+	key->type = APFS_TYPE_XATTR;
+	key->number = 0; /* Maybe use the name length here, for speed? */
+	key->name = name;
+}
+
+/**
+ * key_type_is_known - Check if we know what to do with this record type
+ * @key: the record key
+ */
+static inline bool key_type_is_known(struct key *key)
+{
+	return key->type == 0 || key->type == APFS_TYPE_INODE ||
+	       key->type == APFS_TYPE_EXTENT || key->type == APFS_TYPE_XATTR ||
+	       key->type == APFS_TYPE_DIR_REC;
+}
+
 extern int keycmp(struct super_block *sb, struct key *k1, struct key *k2);
+extern void read_cat_key(void *raw, int size, struct key *key);
 extern void read_omap_key(void *raw, int size, struct key *key);
 
 #endif	/* _KEY_H */

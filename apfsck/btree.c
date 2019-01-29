@@ -219,16 +219,17 @@ static int node_locate_data(struct node *node, int index, int *off)
 }
 
 /**
- * parse_omap_subtree - Parse an omap subtree and check for corruption
+ * parse_subtree - Parse a subtree and check for corruption
  * @sb:		superblock structure
  * @root:	root node of the subtree
  * @last_key:	parent key, that must come before all the keys in this subtree;
  *		on return, this will hold the last key of this subtree, that
  *		must come before the next key of the parent node
  * @fd:		file descriptor for the device
+ * @omap_root:	root of the omap for the b-tree (NULL if parsing an omap itself)
  */
-static void parse_omap_subtree(struct super_block *sb, struct node *root,
-			       struct key *last_key, int fd)
+static void parse_subtree(struct super_block *sb, struct node *root,
+			  struct key *last_key, int fd, struct node *omap_root)
 {
 	struct key curr_key;
 	int i;
@@ -237,18 +238,26 @@ static void parse_omap_subtree(struct super_block *sb, struct node *root,
 		struct node *child;
 		void *raw = root->raw;
 		int off, len;
-		u64 child_id;
+		u64 child_id, bno;
 
 		len = node_locate_key(root, i, &off);
-		read_omap_key(raw + off, len, &curr_key);
+		if (omap_root)
+			read_cat_key(raw + off, len, &curr_key);
+		else
+			read_omap_key(raw + off, len, &curr_key);
 
 		if (keycmp(sb, last_key, &curr_key) > 0) {
-			printf("Omap node keys are out of order.\n");
+			printf("Node keys are out of order.\n");
 			exit(1);
 		}
+
+		if (node_is_leaf(root) && !key_type_is_known(&curr_key))
+			/* TODO: support all record types */
+			continue;
+
 		if (i != 0 && node_is_leaf(root) &&
 		    !keycmp(sb, last_key, &curr_key)) {
-			printf("Omap leaf keys are repeated.\n");
+			printf("Leaf keys are repeated.\n");
 			exit(1);
 		}
 		*last_key = curr_key;
@@ -263,15 +272,43 @@ static void parse_omap_subtree(struct super_block *sb, struct node *root,
 		}
 		child_id = le64_to_cpu(*(__le64 *)(raw + off));
 
-		child = read_node(sb, child_id, fd);
-		if (child->object.block_nr != child->object.oid) {
-			printf("Wrong object id on omap node\n");
+		if (omap_root)
+			bno = omap_lookup_block(sb, omap_root, child_id, fd);
+		else
+			bno = child_id;
+
+		child = read_node(sb, bno, fd);
+		if (child_id != child->object.oid) {
+			printf("Wrong object id on b-tree node.\n");
 			exit(1);
 		}
 
-		parse_omap_subtree(sb, child, last_key, fd);
+		parse_subtree(sb, child, last_key, fd, omap_root);
 		free(child);
 	}
+}
+
+/**
+ * parse_cat_btree - Parse a catalog tree and check for corruption
+ * @sb:		superblock structure
+ * @oid:	object id for the catalog root
+ * @fd:		file descriptor for the device
+ * @omap_root:	root of the object map for the b-tree
+ *
+ * Returns a pointer to the root node of the catalog.
+ */
+struct node *parse_cat_btree(struct super_block *sb, u64 oid, int fd,
+			     struct node *omap_root)
+{
+	struct node *root;
+	struct key last_key = {0};
+	u64 bno;
+
+	bno = omap_lookup_block(sb, omap_root, oid, fd);
+	root = read_node(sb, bno, fd);
+
+	parse_subtree(sb, root, &last_key, fd, omap_root);
+	return root;
 }
 
 /**
@@ -306,7 +343,7 @@ struct node *parse_omap_btree(struct super_block *sb, u64 oid, int fd)
 	}
 
 	root = read_node(sb, le64_to_cpu(raw->om_tree_oid), fd);
-	parse_omap_subtree(sb, root, &last_key, fd);
+	parse_subtree(sb, root, &last_key, fd, NULL);
 	return root;
 }
 
@@ -445,7 +482,9 @@ static void key_from_query(struct query *query, struct key *key)
 	void *raw_key = (void *)(raw + query->key_off);
 
 	switch (query->flags & QUERY_TREE_MASK) {
-	/* For now we are only working with the omap */
+	case QUERY_CAT:
+		read_cat_key(raw_key, query->key_len, key);
+		break;
 	case QUERY_OMAP:
 		read_omap_key(raw_key, query->key_len, key);
 		break;

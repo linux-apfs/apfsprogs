@@ -255,8 +255,11 @@ struct apfs_superblock {
 } __packed;
 
 struct volume_superblock {
+	struct super_block *sb;
+
 	struct apfs_superblock *v_raw;
 	struct node *v_omap_root;
+	struct node *v_cat_root;
 };
 
 /* Superblock data in memory */

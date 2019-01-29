@@ -183,6 +183,8 @@ struct query {
 };
 
 extern struct node *parse_omap_btree(struct super_block *sb, u64 oid, int fd);
+extern struct node *parse_cat_btree(struct super_block *sb, u64 oid, int fd,
+				    struct node *omap_root);
 extern struct query *alloc_query(struct node *node, struct query *parent);
 extern void free_query(struct super_block *sb, struct query *query);
 extern int btree_query(struct super_block *sb, struct query **query, int fd);

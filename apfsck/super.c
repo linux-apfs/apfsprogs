@@ -212,11 +212,17 @@ struct super_block *parse_super(int fd)
 			perror(NULL);
 			exit(1);
 		}
-
+		vsb->sb = sb;
 		vsb->v_raw = vsb_raw;
-		/* Check for corruption in the volume object map */
+
+		/* Check for corruption in the volume object map... */
 		vsb->v_omap_root = parse_omap_btree(sb,
 				le64_to_cpu(vsb_raw->apfs_omap_oid), fd);
+		/* ...and in the catalog tree */
+		vsb->v_cat_root = parse_cat_btree(sb,
+				le64_to_cpu(vsb_raw->apfs_root_tree_oid), fd,
+				vsb->v_omap_root);
+
 		sb->s_volumes[vol] = vsb;
 	}
 

@@ -26,6 +26,8 @@
 #define __force
 #endif /* __CHECKER__ */
 
+#define likely(x)	__builtin_expect(!!(x), 1)
+
 typedef uint8_t		u8;
 typedef uint16_t	u16;
 typedef uint32_t	u32;
@@ -44,5 +46,7 @@ typedef uint64_t __bitwise __le64;
 #define le64_to_cpu(x)	((__force u64)(__le64)(x))
 
 #define DIV_ROUND_UP(n, d) (((n) + (d) - 1) / (d))
+
+typedef u32 unicode_t;
 
 #endif	/* _TYPES_H */
