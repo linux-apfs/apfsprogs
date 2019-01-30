@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "crc32c.h"
 #include "types.h"
 #include "key.h"
 #include "unicode.h"
@@ -116,6 +117,76 @@ int keycmp(struct super_block *sb, struct key *k1, struct key *k2)
 }
 
 /**
+ * dentry_hash - Find the key hash for a given filename
+ * @name: filename to hash
+ */
+static u32 dentry_hash(const char *name)
+{
+	struct unicursor cursor;
+	bool case_fold = true; /* For now */
+	u32 hash = 0xFFFFFFFF;
+	int namelen;
+
+	init_unicursor(&cursor, name);
+
+	while (1) {
+		unicode_t utf32;
+
+		utf32 = normalize_next(&cursor, case_fold);
+		if (!utf32)
+			break;
+
+		hash = crc32c(hash, &utf32, sizeof(utf32));
+	}
+
+	/* APFS counts the NULL termination for the filename length */
+	namelen = cursor.utf8curr - name;
+
+	return ((hash & 0x3FFFFF) << 10) | (namelen & 0x3FF);
+}
+
+/**
+ * read_dir_rec_key - Parse an on-disk dentry key and check its consistency
+ * @raw:	pointer to the raw key
+ * @size:	size of the raw key
+ * @key:	key structure to store the result
+ */
+static void read_dir_rec_key(void *raw, int size, struct key *key)
+{
+	struct apfs_drec_hashed_key *raw_key;
+	int namelen;
+
+	if (size < sizeof(struct apfs_drec_hashed_key) + 1) {
+		printf("Wrong size for directory record key.\n");
+		exit(1);
+	}
+	if (*((char *)raw + size - 1) != 0) {
+		printf("Filename lacks NULL-termination.\n");
+		exit(1);
+	}
+	raw_key = raw;
+
+	key->number = le32_to_cpu(raw_key->name_len_and_hash);
+	key->name = (char *)raw_key->name;
+
+	if (key->number != dentry_hash(key->name)) {
+		printf("Corrupted dentry hash.\n");
+		exit(1);
+	}
+
+	namelen = key->number & 0x3FF;
+	if (strlen(key->name) + 1 != namelen) {
+		/* APFS counts the NULL termination for the filename length */
+		printf("Wrong name length in dentry key.\n");
+		exit(1);
+	}
+	if (size != sizeof(struct apfs_drec_hashed_key) + namelen) {
+		printf("Size of dentry key doesn't match the name length.\n");
+		exit(1);
+	}
+}
+
+/**
  * read_cat_key - Parse an on-disk catalog key
  * @raw:	pointer to the raw key
  * @size:	size of the raw key
@@ -132,17 +203,7 @@ void read_cat_key(void *raw, int size, struct key *key)
 
 	switch (key->type) {
 	case APFS_TYPE_DIR_REC:
-		if (size < sizeof(struct apfs_drec_hashed_key) + 1) {
-			printf("Wrong size for directory record key.\n");
-			exit(1);
-		}
-		if (*((char *)raw + size - 1) != 0) {
-			printf("Filename lacks NULL-termination.\n");
-			exit(1);
-		}
-		key->number = le32_to_cpu(
-		       ((struct apfs_drec_hashed_key *)raw)->name_len_and_hash);
-		key->name = (char *)((struct apfs_drec_hashed_key *)raw)->name;
+		read_dir_rec_key(raw, size, key);
 		return;
 	case APFS_TYPE_XATTR:
 		if (size < sizeof(struct apfs_xattr_key) + 1) {
