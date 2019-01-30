@@ -187,6 +187,42 @@ static void read_dir_rec_key(void *raw, int size, struct key *key)
 }
 
 /**
+ * read_xattr_key - Parse an on-disk xattr key and check its consistency
+ * @raw:	pointer to the raw key
+ * @size:	size of the raw key
+ * @key:	key structure to store the result
+ */
+static void read_xattr_key(void *raw, int size, struct key *key)
+{
+	struct apfs_xattr_key *raw_key;
+	int namelen;
+
+	if (size < sizeof(struct apfs_xattr_key) + 1) {
+		printf("Wrong size for xattr record key.\n");
+		exit(1);
+	}
+	if (*((char *)raw + size - 1) != 0) {
+		printf("Xattr name lacks NULL-termination.\n");
+		exit(1);
+	}
+	raw_key = raw;
+
+	key->number = 0;
+	key->name = (char *)raw_key->name;
+
+	namelen = le16_to_cpu(raw_key->name_len);
+	if (strlen(key->name) + 1 != namelen) {
+		/* APFS counts the NULL termination in the string length */
+		printf("Wrong name length in xattr key.\n");
+		exit(1);
+	}
+	if (size != sizeof(struct apfs_xattr_key) + namelen) {
+		printf("Size of xattr key doesn't match the name length.\n");
+		exit(1);
+	}
+}
+
+/**
  * read_cat_key - Parse an on-disk catalog key
  * @raw:	pointer to the raw key
  * @size:	size of the raw key
@@ -206,16 +242,7 @@ void read_cat_key(void *raw, int size, struct key *key)
 		read_dir_rec_key(raw, size, key);
 		return;
 	case APFS_TYPE_XATTR:
-		if (size < sizeof(struct apfs_xattr_key) + 1) {
-			printf("Wrong size for xattr record key.\n");
-			exit(1);
-		}
-		if (*((char *)raw + size - 1) != 0) {
-			printf("Xattr name lacks NULL-termination.\n");
-			exit(1);
-		}
-		key->number = 0;
-		key->name = (char *)((struct apfs_xattr_key *)raw)->name;
+		read_xattr_key(raw, size, key);
 		return;
 	case APFS_TYPE_FILE_EXTENT:
 		if (size != sizeof(struct apfs_file_extent_key)) {
