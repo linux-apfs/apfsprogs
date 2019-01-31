@@ -282,6 +282,27 @@ static void read_file_extent_key(void *raw, int size, struct key *key)
 }
 
 /**
+ * read_sibling_link_key - Parse an on-disk sibling link key and check its
+ *			   consistency
+ * @raw:	pointer to the raw key
+ * @size:	size of the raw key
+ * @key:	key structure to store the result
+ */
+static void read_sibling_link_key(void *raw, int size, struct key *key)
+{
+	struct apfs_sibling_link_key *raw_key;
+
+	if (size != sizeof(struct apfs_sibling_link_key)) {
+		printf("Wrong size of key for sibling link record.\n");
+		exit(1);
+	}
+	raw_key = raw;
+
+	key->number = le64_to_cpu(raw_key->sibling_id); /* Only guessing */
+	key->name = NULL;
+}
+
+/**
  * read_cat_key - Parse an on-disk catalog key
  * @raw:	pointer to the raw key
  * @size:	size of the raw key
@@ -308,6 +329,9 @@ void read_cat_key(void *raw, int size, struct key *key)
 		return;
 	case APFS_TYPE_SNAP_NAME:
 		read_snap_name_key(raw, size, key);
+		return;
+	case APFS_TYPE_SIBLING_LINK:
+		read_sibling_link_key(raw, size, key);
 		return;
 	default:
 		key->number = 0;
