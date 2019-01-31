@@ -223,6 +223,45 @@ static void read_xattr_key(void *raw, int size, struct key *key)
 }
 
 /**
+ * read_snap_name_key - Parse an on-disk snapshot name key and check its
+ *			consistency
+ * @raw:	pointer to the raw key
+ * @size:	size of the raw key
+ * @key:	key structure to store the result
+ *
+ * TODO: this is the same as read_xattr_key(), maybe they could be merged.
+ */
+static void read_snap_name_key(void *raw, int size, struct key *key)
+{
+	struct apfs_snap_name_key *raw_key;
+	int namelen;
+
+	if (size < sizeof(struct apfs_snap_name_key) + 1) {
+		printf("Wrong size for snapshot name record key.\n");
+		exit(1);
+	}
+	if (*((char *)raw + size - 1) != 0) {
+		printf("Snapshot name lacks NULL-termination.\n");
+		exit(1);
+	}
+	raw_key = raw;
+
+	key->number = 0;
+	key->name = (char *)raw_key->name;
+
+	namelen = le16_to_cpu(raw_key->name_len);
+	if (strlen(key->name) + 1 != namelen) {
+		/* APFS counts the NULL termination in the string length */
+		printf("Wrong name length in snapshot name key.\n");
+		exit(1);
+	}
+	if (size != sizeof(struct apfs_snap_name_key) + namelen) {
+		printf("Size of snapshot name key doesn't match its length.\n");
+		exit(1);
+	}
+}
+
+/**
  * read_file_extent_key - Parse an on-disk extent key and check its consistency
  * @raw:	pointer to the raw key
  * @size:	size of the raw key
@@ -266,6 +305,9 @@ void read_cat_key(void *raw, int size, struct key *key)
 		return;
 	case APFS_TYPE_FILE_EXTENT:
 		read_file_extent_key(raw, size, key);
+		return;
+	case APFS_TYPE_SNAP_NAME:
+		read_snap_name_key(raw, size, key);
 		return;
 	default:
 		key->number = 0;

@@ -105,6 +105,15 @@ struct apfs_xattr_key {
 } __packed;
 
 /*
+ * Structure of the key for a snapshot name record
+ */
+struct apfs_snap_name_key {
+	struct apfs_key_header hdr;
+	__le16 name_len;
+	u8 name[0];
+} __packed;
+
+/*
  * In-memory representation of a key, as relevant for a b-tree query.
  */
 struct key {
@@ -176,7 +185,8 @@ static inline bool key_type_is_known(struct key *key)
 {
 	return key->type == 0 || key->type == APFS_TYPE_INODE ||
 	       key->type == APFS_TYPE_EXTENT || key->type == APFS_TYPE_XATTR ||
-	       key->type == APFS_TYPE_DIR_REC;
+	       key->type == APFS_TYPE_DIR_REC ||
+	       key->type == APFS_TYPE_SNAP_NAME;
 }
 
 extern int keycmp(struct super_block *sb, struct key *k1, struct key *k2);
