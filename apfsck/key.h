@@ -185,19 +185,6 @@ static inline void init_xattr_key(u64 ino, const char *name, struct key *key)
 	key->name = name;
 }
 
-/**
- * key_type_is_known - Check if we know what to do with this record type
- * @key: the record key
- */
-static inline bool key_type_is_known(struct key *key)
-{
-	return key->type == 0 || key->type == APFS_TYPE_INODE ||
-	       key->type == APFS_TYPE_EXTENT || key->type == APFS_TYPE_XATTR ||
-	       key->type == APFS_TYPE_DIR_REC ||
-	       key->type == APFS_TYPE_SNAP_NAME ||
-	       key->type == APFS_TYPE_SIBLING_LINK;
-}
-
 extern int keycmp(struct super_block *sb, struct key *k1, struct key *k2);
 extern void read_cat_key(void *raw, int size, struct key *key);
 extern void read_omap_key(void *raw, int size, struct key *key);

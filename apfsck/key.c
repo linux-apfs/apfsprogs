@@ -334,6 +334,11 @@ void read_cat_key(void *raw, int size, struct key *key)
 		read_sibling_link_key(raw, size, key);
 		return;
 	default:
+		/* All other key types are just the header */
+		if (size != sizeof(struct apfs_key_header)) {
+			printf("Wrong size of key for catalog record.\n");
+			exit(1);
+		}
 		key->number = 0;
 		key->name = NULL;
 		return;

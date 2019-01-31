@@ -251,10 +251,6 @@ static void parse_subtree(struct super_block *sb, struct node *root,
 			exit(1);
 		}
 
-		if (node_is_leaf(root) && !key_type_is_known(&curr_key))
-			/* TODO: support all record types */
-			continue;
-
 		if (i != 0 && node_is_leaf(root) &&
 		    !keycmp(sb, last_key, &curr_key)) {
 			printf("Leaf keys are repeated.\n");
