@@ -270,6 +270,14 @@ struct super_block {
 	struct volume_superblock *s_volumes[APFS_NX_MAX_FILE_SYSTEMS];
 };
 
+static inline bool apfs_is_case_insensitive(void)
+{
+	extern struct volume_superblock *vsb;
+
+	return (vsb->v_raw->apfs_incompatible_features &
+		cpu_to_le64(APFS_INCOMPAT_CASE_INSENSITIVE)) != 0;
+}
+
 extern void parse_super(void);
 
 #endif	/* _SUPER_H */

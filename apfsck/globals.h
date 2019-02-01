@@ -10,8 +10,10 @@
 #define _GLOBALS_H
 
 struct super_block;
+struct volume_superblock;
 
 extern struct super_block *sb;		/* Filesystem superblock */
+extern struct volume_superblock *vsb;	/* Volume superblock */
 extern int fd;				/* File descriptor for the device */
 
 #endif	/* _GLOBALS_H */

@@ -15,6 +15,7 @@
 #include "super.h"
 
 struct super_block *sb;
+struct volume_superblock *vsb;
 
 /**
  * read_super_copy - Read the copy of the container superblock in block 0
@@ -143,16 +144,16 @@ static struct apfs_superblock *map_volume_super(int vol)
 	struct apfs_nx_superblock *msb_raw = sb->s_raw;
 	struct apfs_superblock *vsb_raw;
 	u64 vol_id;
-	u64 vsb;
+	u64 vsb_bno;
 
 	vol_id = le64_to_cpu(msb_raw->nx_fs_oid[vol]);
 	if (vol_id == 0)
 		return NULL;
 
-	vsb = omap_lookup_block(sb->s_omap_root, vol_id);
+	vsb_bno = omap_lookup_block(sb->s_omap_root, vol_id);
 
 	vsb_raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-		       fd, vsb * sb->s_blocksize);
+		       fd, vsb_bno * sb->s_blocksize);
 	if (vsb_raw == MAP_FAILED) {
 		perror(NULL);
 		exit(1);
@@ -192,7 +193,6 @@ void parse_super(void)
 	sb->s_omap_root = parse_omap_btree(le64_to_cpu(sb->s_raw->nx_omap_oid));
 
 	for (vol = 0; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol) {
-		struct volume_superblock *vsb;
 		struct apfs_superblock *vsb_raw;
 
 		vsb_raw = map_volume_super(vol);

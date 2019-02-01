@@ -10,6 +10,7 @@
 #include "crc32c.h"
 #include "types.h"
 #include "key.h"
+#include "super.h"
 #include "unicode.h"
 
 /**
@@ -67,7 +68,7 @@ static inline u64 cat_cnid(struct apfs_key_header *key)
 static int filename_cmp(const char *name1, const char *name2)
 {
 	struct unicursor cursor1, cursor2;
-	bool case_fold = true; /* For now */
+	bool case_fold = apfs_is_case_insensitive();
 
 	init_unicursor(&cursor1, name1);
 	init_unicursor(&cursor2, name2);
@@ -120,7 +121,7 @@ int keycmp(struct key *k1, struct key *k2)
 static u32 dentry_hash(const char *name)
 {
 	struct unicursor cursor;
-	bool case_fold = true; /* For now */
+	bool case_fold = apfs_is_case_insensitive();
 	u32 hash = 0xFFFFFFFF;
 	int namelen;
 
