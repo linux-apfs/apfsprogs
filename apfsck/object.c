@@ -6,6 +6,7 @@
  * Checksum routines for an APFS object
  */
 
+#include "globals.h"
 #include "object.h"
 #include "super.h"
 
@@ -30,7 +31,7 @@ static u64 fletcher64(void *addr, unsigned long len)
 	return (c2 << 32) | c1;
 }
 
-int obj_verify_csum(struct super_block *sb, struct apfs_obj_phys *obj)
+int obj_verify_csum(struct apfs_obj_phys *obj)
 {
 	return  (le64_to_cpu(obj->o_cksum) ==
 		 fletcher64((char *) obj + APFS_MAX_CKSUM_SIZE,

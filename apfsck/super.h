@@ -255,8 +255,6 @@ struct apfs_superblock {
 } __packed;
 
 struct volume_superblock {
-	struct super_block *sb;
-
 	struct apfs_superblock *v_raw;
 	struct node *v_omap_root;
 	struct node *v_cat_root;
@@ -272,6 +270,6 @@ struct super_block {
 	struct volume_superblock *s_volumes[APFS_NX_MAX_FILE_SYSTEMS];
 };
 
-extern struct super_block *parse_super(int fd);
+extern void parse_super(int fd);
 
 #endif	/* _SUPER_H */

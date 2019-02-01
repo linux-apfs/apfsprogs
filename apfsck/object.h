@@ -75,13 +75,12 @@ struct apfs_obj_phys {
  * In-memory representation of an APFS object
  */
 struct object {
-	struct super_block *sb;
 	u64 block_nr;
 	u64 oid;	/* Often the same as the block number */
 };
 
 #define APFS_MAX_CKSUM_SIZE 8
 
-extern int obj_verify_csum(struct super_block *sb, struct apfs_obj_phys *obj);
+extern int obj_verify_csum(struct apfs_obj_phys *obj);
 
 #endif	/* _OBJECT_H */

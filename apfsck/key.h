@@ -185,7 +185,7 @@ static inline void init_xattr_key(u64 ino, const char *name, struct key *key)
 	key->name = name;
 }
 
-extern int keycmp(struct super_block *sb, struct key *k1, struct key *k2);
+extern int keycmp(struct key *k1, struct key *k2);
 extern void read_cat_key(void *raw, int size, struct key *key);
 extern void read_omap_key(void *raw, int size, struct key *key);
 

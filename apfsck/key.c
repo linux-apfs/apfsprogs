@@ -58,15 +58,13 @@ static inline u64 cat_cnid(struct apfs_key_header *key)
 
 /**
  * filename_cmp - Normalize and compare two APFS filenames
- * @sb:			filesystem superblock
  * @name1, @name2:	names to compare
  *
  * returns   0 if @name1 and @name2 are equal
  *	   < 0 if @name1 comes before @name2 in the btree
  *	   > 0 if @name1 comes after @name2 in the btree
  */
-static int filename_cmp(struct super_block *sb, const char *name1,
-						const char *name2)
+static int filename_cmp(const char *name1, const char *name2)
 {
 	struct unicursor cursor1, cursor2;
 	bool case_fold = true; /* For now */
@@ -89,14 +87,13 @@ static int filename_cmp(struct super_block *sb, const char *name1,
 
 /**
  * keycmp - Compare two keys
- * @sb:		filesystem superblock
  * @k1, @k2:	keys to compare
  *
  * returns   0 if @k1 and @k2 are equal
  *	   < 0 if @k1 comes before @k2 in the btree
  *	   > 0 if @k1 comes after @k2 in the btree
  */
-int keycmp(struct super_block *sb, struct key *k1, struct key *k2)
+int keycmp(struct key *k1, struct key *k2)
 {
 	if (k1->id != k2->id)
 		return k1->id < k2->id ? -1 : 1;
@@ -113,7 +110,7 @@ int keycmp(struct super_block *sb, struct key *k1, struct key *k2)
 	}
 
 	/* The assumption here is not the same as in the module... */
-	return filename_cmp(sb, k1->name, k2->name);
+	return filename_cmp(k1->name, k2->name);
 }
 
 /**

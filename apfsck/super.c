@@ -9,19 +9,20 @@
 #include <string.h>
 #include <sys/mman.h>
 #include "btree.h"
+#include "globals.h"
 #include "object.h"
 #include "types.h"
 #include "super.h"
 
+struct super_block *sb;
+
 /**
  * read_super_copy - Read the copy of the container superblock in block 0
- * @sb: superblock structure
  * @fd: file descriptor for the device
  *
- * Sets @sb->s_blocksize and returns a pointer to the raw superblock in memory.
+ * Sets sb->s_blocksize and returns a pointer to the raw superblock in memory.
  */
-static struct apfs_nx_superblock *read_super_copy(struct super_block *sb,
-						  int fd)
+static struct apfs_nx_superblock *read_super_copy(int fd)
 {
 	struct apfs_nx_superblock *msb_raw;
 	int bsize_tmp;
@@ -55,7 +56,7 @@ static struct apfs_nx_superblock *read_super_copy(struct super_block *sb,
 		printf("Wrong magic on block zero.\n");
 		exit(1);
 	}
-	if (!obj_verify_csum(sb, &msb_raw->nx_o)) {
+	if (!obj_verify_csum(&msb_raw->nx_o)) {
 		printf("Bad checksum for block zero.\n");
 		exit(1);
 	}
@@ -65,12 +66,11 @@ static struct apfs_nx_superblock *read_super_copy(struct super_block *sb,
 
 /**
  * map_main_super - Find the container superblock and map it into memory
- * @sb:	superblock structure
  * @fd: file descriptor for the device
  *
- * Sets @sb->s_raw to the in-memory location of the main superblock.
+ * Sets sb->s_raw to the in-memory location of the main superblock.
  */
-static void map_main_super(struct super_block *sb, int fd)
+static void map_main_super(int fd)
 {
 	struct apfs_nx_superblock *msb_raw;
 	struct apfs_nx_superblock *desc_raw = NULL;
@@ -80,7 +80,7 @@ static void map_main_super(struct super_block *sb, int fd)
 	int i;
 
 	/* Read the superblock from the last clean unmount */
-	msb_raw = read_super_copy(sb, fd);
+	msb_raw = read_super_copy(fd);
 
 	/* We want to mount the latest valid checkpoint among the descriptors */
 	desc_base = le64_to_cpu(msb_raw->nx_xp_desc_base);
@@ -113,7 +113,7 @@ static void map_main_super(struct super_block *sb, int fd)
 			continue; /* Not a superblock */
 		if (le64_to_cpu(desc_raw->nx_o.o_xid) < xid)
 			continue; /* Old */
-		if (!obj_verify_csum(sb, &desc_raw->nx_o))
+		if (!obj_verify_csum(&desc_raw->nx_o))
 			continue; /* Corrupted */
 
 		xid = le64_to_cpu(desc_raw->nx_o.o_xid);
@@ -135,15 +135,13 @@ static void map_main_super(struct super_block *sb, int fd)
 
 /**
  * map_volume_super - Find the volume superblock and map it into memory
- * @sb:		superblock structure
  * @vol:	volume number
  * @fd:		file descriptor for the device
  *
  * Returns the in-memory location of the volume superblock, or NULL if there
  * is no volume with this number.
  */
-static struct apfs_superblock *map_volume_super(struct super_block *sb,
-						int vol, int fd)
+static struct apfs_superblock *map_volume_super(int vol, int fd)
 {
 	struct apfs_nx_superblock *msb_raw = sb->s_raw;
 	struct apfs_superblock *vsb_raw;
@@ -154,7 +152,7 @@ static struct apfs_superblock *map_volume_super(struct super_block *sb,
 	if (vol_id == 0)
 		return NULL;
 
-	vsb = omap_lookup_block(sb, sb->s_omap_root, vol_id, fd);
+	vsb = omap_lookup_block(sb->s_omap_root, vol_id, fd);
 
 	vsb_raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
 		       fd, vsb * sb->s_blocksize);
@@ -171,7 +169,7 @@ static struct apfs_superblock *map_volume_super(struct super_block *sb,
 		printf("Wrong magic in volume superblock.\n");
 		exit(1);
 	}
-	if (!obj_verify_csum(sb, &vsb_raw->apfs_o)) {
+	if (!obj_verify_csum(&vsb_raw->apfs_o)) {
 		printf("Bad checksum for volume superblock.\n");
 		exit(1);
 	}
@@ -183,9 +181,8 @@ static struct apfs_superblock *map_volume_super(struct super_block *sb,
  * parse_super - Parse the on-disk superblock and check for corruption
  * @fd: file descriptor for the device
  */
-struct super_block *parse_super(int fd)
+void parse_super(int fd)
 {
-	struct super_block *sb;
 	int vol;
 
 	sb = malloc(sizeof(*sb));
@@ -194,16 +191,16 @@ struct super_block *parse_super(int fd)
 		exit(1);
 	}
 
-	map_main_super(sb, fd);
+	map_main_super(fd);
 	/* Check for corruption in the container object map */
-	sb->s_omap_root = parse_omap_btree(sb,
-		le64_to_cpu(sb->s_raw->nx_omap_oid), fd);
+	sb->s_omap_root = parse_omap_btree(le64_to_cpu(sb->s_raw->nx_omap_oid),
+					   fd);
 
 	for (vol = 0; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol) {
 		struct volume_superblock *vsb;
 		struct apfs_superblock *vsb_raw;
 
-		vsb_raw = map_volume_super(sb, vol, fd);
+		vsb_raw = map_volume_super(vol, fd);
 		if (!vsb_raw)
 			break;
 
@@ -212,19 +209,18 @@ struct super_block *parse_super(int fd)
 			perror(NULL);
 			exit(1);
 		}
-		vsb->sb = sb;
 		vsb->v_raw = vsb_raw;
 
 		/* Check for corruption in the volume object map... */
-		vsb->v_omap_root = parse_omap_btree(sb,
+		vsb->v_omap_root = parse_omap_btree(
 				le64_to_cpu(vsb_raw->apfs_omap_oid), fd);
 		/* ...and in the catalog tree */
-		vsb->v_cat_root = parse_cat_btree(sb,
+		vsb->v_cat_root = parse_cat_btree(
 				le64_to_cpu(vsb_raw->apfs_root_tree_oid), fd,
 				vsb->v_omap_root);
 
 		sb->s_volumes[vol] = vsb;
 	}
 
-	return sb;
+	return;
 }

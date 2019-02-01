@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include "btree.h"
+#include "globals.h"
 #include "key.h"
 #include "object.h"
 #include "super.h"
@@ -15,7 +16,6 @@
 
 /**
  * node_is_valid - Check basic sanity of the node index
- * @sb:		filesystem superblock
  * @node:	node to check
  *
  * Verifies that the node index fits in a single block, and that the number
@@ -23,7 +23,7 @@
  * pretend to have too many records, and calls to node_locate_key() and
  * node_locate_data() would read beyond the limits of the node.
  */
-static bool node_is_valid(struct super_block *sb, struct node *node)
+static bool node_is_valid(struct node *node)
 {
 	int records = node->records;
 	int index_size = node->key - sizeof(struct apfs_btree_node_phys);
@@ -43,13 +43,12 @@ static bool node_is_valid(struct super_block *sb, struct node *node)
 
 /**
  * read_node - Read a node header from disk
- * @sb:		filesystem superblock
  * @block:	number of the block where the node is stored
  * @fd:		file descriptor for the device
  *
  * Returns a pointer to the resulting node structure.
  */
-static struct node *read_node(struct super_block *sb, u64 block, int fd)
+static struct node *read_node(u64 block, int fd)
 {
 	struct apfs_btree_node_phys *raw;
 	struct node *node;
@@ -74,16 +73,15 @@ static struct node *read_node(struct super_block *sb, u64 block, int fd)
 	node->free = node->key + le16_to_cpu(raw->btn_free_space.off);
 	node->data = node->free + le16_to_cpu(raw->btn_free_space.len);
 
-	node->object.sb = sb;
 	node->object.block_nr = block;
 	node->object.oid = le64_to_cpu(raw->btn_o.o_oid);
 
-	if (!obj_verify_csum(sb, &raw->btn_o)) {
+	if (!obj_verify_csum(&raw->btn_o)) {
 		printf("Bad checksum for node in block 0x%llx\n",
 		       (unsigned long long)block);
 		exit(1);
 	}
-	if (!node_is_valid(sb, node)) {
+	if (!node_is_valid(node)) {
 		printf("Node in block 0x%llx is not sane\n",
 		       (unsigned long long)block);
 		exit(1);
@@ -102,8 +100,6 @@ static struct node *read_node(struct super_block *sb, u64 block, int fd)
  */
 static void node_free(struct node *node)
 {
-	struct super_block *sb = node->object.sb;
-
 	if (node_is_root(node))
 		return;	/* The root nodes are needed by the sb until the end */
 	munmap(node->raw, sb->s_blocksize);
@@ -122,7 +118,6 @@ static void node_free(struct node *node)
  */
 static int node_locate_key(struct node *node, int index, int *off)
 {
-	struct super_block *sb = node->object.sb;
 	struct apfs_btree_node_phys *raw;
 	int len;
 
@@ -168,7 +163,6 @@ static int node_locate_key(struct node *node, int index, int *off)
  */
 static int node_locate_data(struct node *node, int index, int *off)
 {
-	struct super_block *sb = node->object.sb;
 	struct apfs_btree_node_phys *raw;
 	int len;
 
@@ -220,7 +214,6 @@ static int node_locate_data(struct node *node, int index, int *off)
 
 /**
  * parse_subtree - Parse a subtree and check for corruption
- * @sb:		superblock structure
  * @root:	root node of the subtree
  * @last_key:	parent key, that must come before all the keys in this subtree;
  *		on return, this will hold the last key of this subtree, that
@@ -228,8 +221,8 @@ static int node_locate_data(struct node *node, int index, int *off)
  * @fd:		file descriptor for the device
  * @omap_root:	root of the omap for the b-tree (NULL if parsing an omap itself)
  */
-static void parse_subtree(struct super_block *sb, struct node *root,
-			  struct key *last_key, int fd, struct node *omap_root)
+static void parse_subtree(struct node *root, struct key *last_key,
+			  int fd, struct node *omap_root)
 {
 	struct key curr_key;
 	int i;
@@ -246,13 +239,13 @@ static void parse_subtree(struct super_block *sb, struct node *root,
 		else
 			read_omap_key(raw + off, len, &curr_key);
 
-		if (keycmp(sb, last_key, &curr_key) > 0) {
+		if (keycmp(last_key, &curr_key) > 0) {
 			printf("Node keys are out of order.\n");
 			exit(1);
 		}
 
 		if (i != 0 && node_is_leaf(root) &&
-		    !keycmp(sb, last_key, &curr_key)) {
+		    !keycmp(last_key, &curr_key)) {
 			printf("Leaf keys are repeated.\n");
 			exit(1);
 		}
@@ -269,53 +262,50 @@ static void parse_subtree(struct super_block *sb, struct node *root,
 		child_id = le64_to_cpu(*(__le64 *)(raw + off));
 
 		if (omap_root)
-			bno = omap_lookup_block(sb, omap_root, child_id, fd);
+			bno = omap_lookup_block(omap_root, child_id, fd);
 		else
 			bno = child_id;
 
-		child = read_node(sb, bno, fd);
+		child = read_node(bno, fd);
 		if (child_id != child->object.oid) {
 			printf("Wrong object id on b-tree node.\n");
 			exit(1);
 		}
 
-		parse_subtree(sb, child, last_key, fd, omap_root);
+		parse_subtree(child, last_key, fd, omap_root);
 		free(child);
 	}
 }
 
 /**
  * parse_cat_btree - Parse a catalog tree and check for corruption
- * @sb:		superblock structure
  * @oid:	object id for the catalog root
  * @fd:		file descriptor for the device
  * @omap_root:	root of the object map for the b-tree
  *
  * Returns a pointer to the root node of the catalog.
  */
-struct node *parse_cat_btree(struct super_block *sb, u64 oid, int fd,
-			     struct node *omap_root)
+struct node *parse_cat_btree(u64 oid, int fd, struct node *omap_root)
 {
 	struct node *root;
 	struct key last_key = {0};
 	u64 bno;
 
-	bno = omap_lookup_block(sb, omap_root, oid, fd);
-	root = read_node(sb, bno, fd);
+	bno = omap_lookup_block(omap_root, oid, fd);
+	root = read_node(bno, fd);
 
-	parse_subtree(sb, root, &last_key, fd, omap_root);
+	parse_subtree(root, &last_key, fd, omap_root);
 	return root;
 }
 
 /**
  * parse_omap_btree - Parse an object map and check for corruption
- * @sb:		superblock structure
  * @oid:	object id for the omap
  * @fd:		file descriptor for the device
  *
  * Returns a pointer to the root node of the omap.
  */
-struct node *parse_omap_btree(struct super_block *sb, u64 oid, int fd)
+struct node *parse_omap_btree(u64 oid, int fd)
 {
 	struct apfs_omap_phys *raw;
 	struct node *root;
@@ -329,7 +319,7 @@ struct node *parse_omap_btree(struct super_block *sb, u64 oid, int fd)
 	}
 
 	/* Many checks are missing, of course */
-	if (!obj_verify_csum(sb, &raw->om_o)) {
+	if (!obj_verify_csum(&raw->om_o)) {
 		printf("Bad checksum for object map\n");
 		exit(1);
 	}
@@ -338,8 +328,8 @@ struct node *parse_omap_btree(struct super_block *sb, u64 oid, int fd)
 		exit(1);
 	}
 
-	root = read_node(sb, le64_to_cpu(raw->om_tree_oid), fd);
-	parse_subtree(sb, root, &last_key, fd, NULL);
+	root = read_node(le64_to_cpu(raw->om_tree_oid), fd);
+	parse_subtree(root, &last_key, fd, NULL);
 	return root;
 }
 
@@ -385,14 +375,13 @@ static u64 bno_from_query(struct query *query)
 
 /**
  * omap_lookup_block - Find the block number of a b-tree node from its id
- * @sb:		filesystem superblock
  * @tbl:	Root of the object map to be searched
  * @id:		id of the node
  * @fd:		file descriptor for the device
  *
  * Returns the block number.
  */
-u64 omap_lookup_block(struct super_block *sb, struct node *tbl, u64 id, int fd)
+u64 omap_lookup_block(struct node *tbl, u64 id, int fd)
 {
 	struct query *query;
 	struct key key;
@@ -404,14 +393,14 @@ u64 omap_lookup_block(struct super_block *sb, struct node *tbl, u64 id, int fd)
 	query->key = &key;
 	query->flags |= QUERY_OMAP | QUERY_EXACT;
 
-	if (btree_query(sb, &query, fd)) { /* Omap queries shouldn't fail */
+	if (btree_query(&query, fd)) { /* Omap queries shouldn't fail */
 		printf("Omap record missing for id 0x%llx\n",
 		       (unsigned long long)id);
 		exit(1);
 	}
 
 	block = bno_from_query(query);
-	free_query(sb, query);
+	free_query(query);
 	return block;
 }
 
@@ -449,12 +438,11 @@ struct query *alloc_query(struct node *node, struct query *parent)
 
 /**
  * free_query - Free a query structure
- * @sb:		filesystem superblock
  * @query:	query to free
  *
  * Also frees the ancestor queries, if they are kept.
  */
-void free_query(struct super_block *sb, struct query *query)
+void free_query(struct query *query)
 {
 	while (query) {
 		struct query *parent = query->parent;
@@ -498,13 +486,12 @@ static void key_from_query(struct query *query, struct key *key)
 
 /**
  * node_next - Find the next matching record in the current node
- * @sb:		filesystem superblock
  * @query:	multiple query in execution
  *
  * Returns 0 on success, -EAGAIN if the next record is in another node, and
  * -ENODATA if no more matching records exist.
  */
-static int node_next(struct super_block *sb, struct query *query)
+static int node_next(struct query *query)
 {
 	struct node *node = query->node;
 	struct key curr_key;
@@ -522,7 +509,7 @@ static int node_next(struct super_block *sb, struct query *query)
 	query->key_len = node_locate_key(node, query->index, &query->key_off);
 	key_from_query(query, &curr_key);
 
-	cmp = keycmp(sb, &curr_key, query->key);
+	cmp = keycmp(&curr_key, query->key);
 
 	if (cmp > 0) {
 		printf("B-tree records are out of order.\n");
@@ -552,7 +539,6 @@ static int node_next(struct super_block *sb, struct query *query)
 
 /**
  * node_query - Execute a query on a single node
- * @sb:		filesystem superblock
  * @query:	the query to execute
  *
  * The search will start at index @query->index, looking for the key that comes
@@ -572,7 +558,7 @@ static int node_next(struct super_block *sb, struct query *query)
  *
  * -ENODATA will be returned if no appropriate entry was found.
  */
-static int node_query(struct super_block *sb, struct query *query)
+static int node_query(struct query *query)
 {
 	struct node *node = query->node;
 	int left, right;
@@ -580,7 +566,7 @@ static int node_query(struct super_block *sb, struct query *query)
 	u64 bno = node->object.block_nr;
 
 	if (query->flags & QUERY_NEXT)
-		return node_next(sb, query);
+		return node_next(query);
 
 	/* Search by bisection */
 	cmp = 1;
@@ -601,7 +587,7 @@ static int node_query(struct super_block *sb, struct query *query)
 						 &query->key_off);
 		key_from_query(query, &curr_key);
 
-		cmp = keycmp(sb, &curr_key, query->key);
+		cmp = keycmp(&curr_key, query->key);
 		if (cmp == 0 && !(query->flags & QUERY_MULTIPLE))
 			break;
 	} while (left != right);
@@ -629,7 +615,6 @@ static int node_query(struct super_block *sb, struct query *query)
 
 /**
  * btree_query - Execute a query on a b-tree
- * @sb:		filesystem superblock
  * @query:	the query to execute
  * @fd:		file descriptor for the device
  *
@@ -642,7 +627,7 @@ static int node_query(struct super_block *sb, struct query *query)
  *
  * In case of failure returns -ENODATA.
  */
-int btree_query(struct super_block *sb, struct query **query, int fd)
+int btree_query(struct query **query, int fd)
 {
 	struct node *node;
 	struct query *parent;
@@ -656,7 +641,7 @@ next_node:
 		exit(1);
 	}
 
-	err = node_query(sb, *query);
+	err = node_query(*query);
 	if (err == -EAGAIN) {
 		if (!(*query)->parent) /* We are at the root of the tree */
 			return -ENODATA;
@@ -664,7 +649,7 @@ next_node:
 		/* Move back up one level and continue the query */
 		parent = (*query)->parent;
 		(*query)->parent = NULL; /* Don't free the parent */
-		free_query(sb, *query);
+		free_query(*query);
 		*query = parent;
 		goto next_node;
 	}
@@ -682,11 +667,10 @@ next_node:
 	if ((*query)->flags & QUERY_OMAP)
 		child_blk = child_id;
 	else
-		child_blk = omap_lookup_block(sb, sb->s_omap_root,
-					      child_id, fd);
+		child_blk = omap_lookup_block(sb->s_omap_root, child_id, fd);
 
 	/* Now go a level deeper and search the child */
-	node = read_node(sb, child_blk, fd);
+	node = read_node(child_blk, fd);
 
 	if (node->object.oid != child_id) {
 		printf("Wrong object id on block number 0x%llx\n",
