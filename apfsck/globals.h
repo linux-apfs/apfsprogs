@@ -12,5 +12,6 @@
 struct super_block;
 
 extern struct super_block *sb;		/* Filesystem superblock */
+extern int fd;				/* File descriptor for the device */
 
 #endif	/* _GLOBALS_H */

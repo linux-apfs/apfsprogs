@@ -270,6 +270,6 @@ struct super_block {
 	struct volume_superblock *s_volumes[APFS_NX_MAX_FILE_SYSTEMS];
 };
 
-extern void parse_super(int fd);
+extern void parse_super(void);
 
 #endif	/* _SUPER_H */

@@ -9,7 +9,10 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include "globals.h"
 #include "super.h"
+
+int fd;
 
 /**
  * usage - Print usage information and exit
@@ -23,17 +26,15 @@ static void usage(char *path)
 
 /**
  * parse_filesystem - Parse the filesystem looking for corruption
- * @fd: file descriptor for the device to check
  */
-static void parse_filesystem(int fd)
+static void parse_filesystem(void)
 {
-	parse_super(fd);
+	parse_super();
 }
 
 int main(int argc, char *argv[])
 {
 	char *filename;
-	int fd;
 
 	if (argc != 2)
 		usage(argv[0]);
@@ -45,6 +46,6 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	parse_filesystem(fd);
+	parse_filesystem();
 	return 0;
 }

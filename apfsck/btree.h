@@ -182,12 +182,12 @@ struct query {
 	int depth;			/* Put a limit on recursion */
 };
 
-extern struct node *parse_omap_btree(u64 oid, int fd);
-extern struct node *parse_cat_btree(u64 oid, int fd, struct node *omap_root);
+extern struct node *parse_omap_btree(u64 oid);
+extern struct node *parse_cat_btree(u64 oid, struct node *omap_root);
 extern struct query *alloc_query(struct node *node, struct query *parent);
 extern void free_query(struct query *query);
-extern int btree_query(struct query **query, int fd);
+extern int btree_query(struct query **query);
 extern struct node *omap_read_node(u64 id);
-extern u64 omap_lookup_block(struct node *tbl, u64 id, int fd);
+extern u64 omap_lookup_block(struct node *tbl, u64 id);
 
 #endif	/* _BTREE_H */

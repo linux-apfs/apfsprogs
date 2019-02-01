@@ -44,11 +44,10 @@ static bool node_is_valid(struct node *node)
 /**
  * read_node - Read a node header from disk
  * @block:	number of the block where the node is stored
- * @fd:		file descriptor for the device
  *
  * Returns a pointer to the resulting node structure.
  */
-static struct node *read_node(u64 block, int fd)
+static struct node *read_node(u64 block)
 {
 	struct apfs_btree_node_phys *raw;
 	struct node *node;
@@ -218,11 +217,10 @@ static int node_locate_data(struct node *node, int index, int *off)
  * @last_key:	parent key, that must come before all the keys in this subtree;
  *		on return, this will hold the last key of this subtree, that
  *		must come before the next key of the parent node
- * @fd:		file descriptor for the device
  * @omap_root:	root of the omap for the b-tree (NULL if parsing an omap itself)
  */
 static void parse_subtree(struct node *root, struct key *last_key,
-			  int fd, struct node *omap_root)
+			  struct node *omap_root)
 {
 	struct key curr_key;
 	int i;
@@ -262,17 +260,17 @@ static void parse_subtree(struct node *root, struct key *last_key,
 		child_id = le64_to_cpu(*(__le64 *)(raw + off));
 
 		if (omap_root)
-			bno = omap_lookup_block(omap_root, child_id, fd);
+			bno = omap_lookup_block(omap_root, child_id);
 		else
 			bno = child_id;
 
-		child = read_node(bno, fd);
+		child = read_node(bno);
 		if (child_id != child->object.oid) {
 			printf("Wrong object id on b-tree node.\n");
 			exit(1);
 		}
 
-		parse_subtree(child, last_key, fd, omap_root);
+		parse_subtree(child, last_key, omap_root);
 		free(child);
 	}
 }
@@ -280,32 +278,30 @@ static void parse_subtree(struct node *root, struct key *last_key,
 /**
  * parse_cat_btree - Parse a catalog tree and check for corruption
  * @oid:	object id for the catalog root
- * @fd:		file descriptor for the device
  * @omap_root:	root of the object map for the b-tree
  *
  * Returns a pointer to the root node of the catalog.
  */
-struct node *parse_cat_btree(u64 oid, int fd, struct node *omap_root)
+struct node *parse_cat_btree(u64 oid, struct node *omap_root)
 {
 	struct node *root;
 	struct key last_key = {0};
 	u64 bno;
 
-	bno = omap_lookup_block(omap_root, oid, fd);
-	root = read_node(bno, fd);
+	bno = omap_lookup_block(omap_root, oid);
+	root = read_node(bno);
 
-	parse_subtree(root, &last_key, fd, omap_root);
+	parse_subtree(root, &last_key, omap_root);
 	return root;
 }
 
 /**
  * parse_omap_btree - Parse an object map and check for corruption
  * @oid:	object id for the omap
- * @fd:		file descriptor for the device
  *
  * Returns a pointer to the root node of the omap.
  */
-struct node *parse_omap_btree(u64 oid, int fd)
+struct node *parse_omap_btree(u64 oid)
 {
 	struct apfs_omap_phys *raw;
 	struct node *root;
@@ -328,8 +324,8 @@ struct node *parse_omap_btree(u64 oid, int fd)
 		exit(1);
 	}
 
-	root = read_node(le64_to_cpu(raw->om_tree_oid), fd);
-	parse_subtree(root, &last_key, fd, NULL);
+	root = read_node(le64_to_cpu(raw->om_tree_oid));
+	parse_subtree(root, &last_key, NULL);
 	return root;
 }
 
@@ -377,11 +373,10 @@ static u64 bno_from_query(struct query *query)
  * omap_lookup_block - Find the block number of a b-tree node from its id
  * @tbl:	Root of the object map to be searched
  * @id:		id of the node
- * @fd:		file descriptor for the device
  *
  * Returns the block number.
  */
-u64 omap_lookup_block(struct node *tbl, u64 id, int fd)
+u64 omap_lookup_block(struct node *tbl, u64 id)
 {
 	struct query *query;
 	struct key key;
@@ -393,7 +388,7 @@ u64 omap_lookup_block(struct node *tbl, u64 id, int fd)
 	query->key = &key;
 	query->flags |= QUERY_OMAP | QUERY_EXACT;
 
-	if (btree_query(&query, fd)) { /* Omap queries shouldn't fail */
+	if (btree_query(&query)) { /* Omap queries shouldn't fail */
 		printf("Omap record missing for id 0x%llx\n",
 		       (unsigned long long)id);
 		exit(1);
@@ -616,7 +611,6 @@ static int node_query(struct query *query)
 /**
  * btree_query - Execute a query on a b-tree
  * @query:	the query to execute
- * @fd:		file descriptor for the device
  *
  * Searches the b-tree starting at @query->index in @query->node, looking for
  * the record corresponding to @query->key.
@@ -627,7 +621,7 @@ static int node_query(struct query *query)
  *
  * In case of failure returns -ENODATA.
  */
-int btree_query(struct query **query, int fd)
+int btree_query(struct query **query)
 {
 	struct node *node;
 	struct query *parent;
@@ -667,10 +661,10 @@ next_node:
 	if ((*query)->flags & QUERY_OMAP)
 		child_blk = child_id;
 	else
-		child_blk = omap_lookup_block(sb->s_omap_root, child_id, fd);
+		child_blk = omap_lookup_block(sb->s_omap_root, child_id);
 
 	/* Now go a level deeper and search the child */
-	node = read_node(child_blk, fd);
+	node = read_node(child_blk);
 
 	if (node->object.oid != child_id) {
 		printf("Wrong object id on block number 0x%llx\n",
