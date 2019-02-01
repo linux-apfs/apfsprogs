@@ -12,10 +12,12 @@
 #include "globals.h"
 #include "object.h"
 #include "types.h"
+#include "stats.h"
 #include "super.h"
 
 struct super_block *sb;
 struct volume_superblock *vsb;
+struct vol_stats *vstats;
 
 /**
  * read_super_copy - Read the copy of the container superblock in block 0
@@ -192,6 +194,10 @@ void parse_super(void)
 	/* Check for corruption in the container object map */
 	sb->s_omap_root = parse_omap_btree(le64_to_cpu(sb->s_raw->nx_omap_oid));
 
+	/* TODO: this is excessive, better count the volumes first */
+	stats->vol_stats = calloc(APFS_NX_MAX_FILE_SYSTEMS,
+				  sizeof(*stats->vol_stats));
+
 	for (vol = 0; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol) {
 		struct apfs_superblock *vsb_raw;
 
@@ -206,6 +212,12 @@ void parse_super(void)
 		}
 		vsb->v_raw = vsb_raw;
 
+		vstats = calloc(1, sizeof(*vstats));
+		if (!vstats) {
+			perror(NULL);
+			exit(1);
+		}
+
 		/* Check for corruption in the volume object map... */
 		vsb->v_omap_root = parse_omap_btree(
 				le64_to_cpu(vsb_raw->apfs_omap_oid));
@@ -215,6 +227,7 @@ void parse_super(void)
 				vsb->v_omap_root);
 
 		sb->s_volumes[vol] = vsb;
+		stats->vol_stats[vol] = vstats;
 	}
 
 	return;

@@ -11,6 +11,7 @@
 #include "globals.h"
 #include "key.h"
 #include "object.h"
+#include "stats.h"
 #include "super.h"
 #include "types.h"
 
@@ -249,10 +250,14 @@ static void parse_subtree(struct node *root, struct key *last_key,
 		}
 		*last_key = curr_key;
 
-		if (node_is_leaf(root))
-			continue;
-
 		len = node_locate_data(root, i, &off);
+
+		if (node_is_leaf(root)) {
+			if (omap_root && len > vstats->cat_longest_val)
+				vstats->cat_longest_val = len;
+			continue;
+		}
+
 		if (len != 8) {
 			printf("Wrong size of nonleaf record value.\n");
 			exit(1);
@@ -276,6 +281,45 @@ static void parse_subtree(struct node *root, struct key *last_key,
 }
 
 /**
+ * check_btree_footer - Check that btree_info matches the collected stats
+ * @root: root node of the b-tree
+ */
+static void check_btree_footer(struct node *root)
+{
+	struct apfs_btree_info *info;
+	bool is_omap;
+
+	/* At least for now, use this flag to tell apart catalog and omap */
+	is_omap = node_has_fixed_kv_size(root);
+
+	info = (void *)root->raw + sb->s_blocksize - sizeof(*info);
+
+	if (is_omap) {
+		if (le32_to_cpu(info->bt_longest_key) !=
+					sizeof(struct apfs_omap_key)) {
+			printf("Wrong key size in omap info footer\n");
+			exit(1);
+		}
+		if (le32_to_cpu(info->bt_longest_val) !=
+					sizeof(struct apfs_omap_val)) {
+			printf("Wrong value size in omap info footer\n");
+			exit(1);
+		}
+		return;
+	}
+
+	/* This is a catalog tree */
+	if (le32_to_cpu(info->bt_longest_key) < vstats->cat_longest_key) {
+		printf("Wrong maximum key length in catalog info footer\n");
+		exit(1);
+	}
+	if (le32_to_cpu(info->bt_longest_val) < vstats->cat_longest_val) {
+		printf("Wrong maximum value length in catalog info footer\n");
+		exit(1);
+	}
+}
+
+/**
  * parse_cat_btree - Parse a catalog tree and check for corruption
  * @oid:	object id for the catalog root
  * @omap_root:	root of the object map for the b-tree
@@ -292,6 +336,8 @@ struct node *parse_cat_btree(u64 oid, struct node *omap_root)
 	root = read_node(bno);
 
 	parse_subtree(root, &last_key, omap_root);
+
+	check_btree_footer(root);
 	return root;
 }
 
@@ -326,6 +372,8 @@ struct node *parse_omap_btree(u64 oid)
 
 	root = read_node(le64_to_cpu(raw->om_tree_oid));
 	parse_subtree(root, &last_key, NULL);
+
+	check_btree_footer(root);
 	return root;
 }
 

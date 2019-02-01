@@ -103,8 +103,8 @@ struct apfs_btree_info_fixed {
  */
 struct apfs_btree_info {
 	struct apfs_btree_info_fixed bt_fixed;
-	__le32 bt_longest_key;
-	__le32 bt_longest_val;
+	__le32 bt_longest_key;			/* Longest key ever stored */
+	__le32 bt_longest_val;			/* Longest value ever stored */
 	__le64 bt_key_count;
 	__le64 bt_node_count;
 } __packed;

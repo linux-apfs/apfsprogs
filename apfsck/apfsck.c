@@ -10,9 +10,11 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include "globals.h"
+#include "stats.h"
 #include "super.h"
 
 int fd;
+struct stats *stats;
 
 /**
  * usage - Print usage information and exit
@@ -29,6 +31,12 @@ static void usage(char *path)
  */
 static void parse_filesystem(void)
 {
+	stats = calloc(1, sizeof(*stats));
+	if (!stats) {
+		perror(NULL);
+		exit(1);
+	}
+
 	parse_super();
 }
 
