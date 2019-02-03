@@ -313,18 +313,34 @@ static void check_btree_footer(struct node *root)
 
 	info = (void *)root->raw + sb->s_blocksize - sizeof(*info);
 
+	if (le32_to_cpu(info->bt_fixed.bt_node_size) != sb->s_blocksize) {
+		printf("Nodes with more than one block are not supported.\n");
+		exit(1);
+	}
+
 	if (is_omap) {
 		u64 counted_keys;
 		u64 counted_nodes;
 
-		if (le32_to_cpu(info->bt_longest_key) !=
+		if (le32_to_cpu(info->bt_fixed.bt_key_size) !=
 					sizeof(struct apfs_omap_key)) {
 			printf("Wrong key size in omap info footer\n");
 			exit(1);
 		}
-		if (le32_to_cpu(info->bt_longest_val) !=
+		if (le32_to_cpu(info->bt_fixed.bt_val_size) !=
 					sizeof(struct apfs_omap_val)) {
 			printf("Wrong value size in omap info footer\n");
+			exit(1);
+		}
+
+		if (le32_to_cpu(info->bt_longest_key) !=
+					sizeof(struct apfs_omap_key)) {
+			printf("Wrong maximum key size in omap info footer\n");
+			exit(1);
+		}
+		if (le32_to_cpu(info->bt_longest_val) !=
+					sizeof(struct apfs_omap_val)) {
+			printf("Wrong maximum value size in omap info\n");
 			exit(1);
 		}
 
@@ -345,6 +361,14 @@ static void check_btree_footer(struct node *root)
 	}
 
 	/* This is a catalog tree */
+	if (le32_to_cpu(info->bt_fixed.bt_key_size) != 0) {
+		printf("Key size should not be set in catalog info footer\n");
+		exit(1);
+	}
+	if (le32_to_cpu(info->bt_fixed.bt_val_size) != 0) {
+		printf("Value size should not be set in catalog info footer\n");
+		exit(1);
+	}
 	if (le32_to_cpu(info->bt_longest_key) < vstats->cat_longest_key) {
 		printf("Wrong maximum key length in catalog info footer\n");
 		exit(1);
