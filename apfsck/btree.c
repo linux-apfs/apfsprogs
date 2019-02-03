@@ -226,6 +226,15 @@ static void parse_subtree(struct node *root, struct key *last_key,
 	struct key curr_key;
 	int i;
 
+	if (node_is_leaf(root)) {
+		if (vsb && omap_root)	/* Parsing the volume catalog */
+			vstats->cat_key_count += root->records;
+		if (vsb && !omap_root)	/* Parsing the volume object map */
+			vstats->v_omap_key_count += root->records;
+		if (!vsb)		/* Parsing the container omap */
+			stats->s_omap_key_count += root->records;
+	}
+
 	for (i = 0; i < root->records; ++i) {
 		struct node *child;
 		void *raw = root->raw;
@@ -295,6 +304,8 @@ static void check_btree_footer(struct node *root)
 	info = (void *)root->raw + sb->s_blocksize - sizeof(*info);
 
 	if (is_omap) {
+		u64 counted_keys;
+
 		if (le32_to_cpu(info->bt_longest_key) !=
 					sizeof(struct apfs_omap_key)) {
 			printf("Wrong key size in omap info footer\n");
@@ -305,6 +316,14 @@ static void check_btree_footer(struct node *root)
 			printf("Wrong value size in omap info footer\n");
 			exit(1);
 		}
+
+		counted_keys = vsb ? vstats->v_omap_key_count :
+				     stats->s_omap_key_count;
+		if (le64_to_cpu(info->bt_key_count) != counted_keys) {
+			printf("Wrong key count in omap info footer\n");
+			exit(1);
+		}
+
 		return;
 	}
 
@@ -315,6 +334,10 @@ static void check_btree_footer(struct node *root)
 	}
 	if (le32_to_cpu(info->bt_longest_val) < vstats->cat_longest_val) {
 		printf("Wrong maximum value length in catalog info footer\n");
+		exit(1);
+	}
+	if (le64_to_cpu(info->bt_key_count) != vstats->cat_key_count) {
+		printf("Wrong key count in catalog info footer\n");
 		exit(1);
 	}
 }
