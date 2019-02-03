@@ -7,8 +7,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include "apfsck.h"
 #include "btree.h"
-#include "globals.h"
 #include "key.h"
 #include "object.h"
 #include "stats.h"

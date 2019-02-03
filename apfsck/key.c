@@ -7,9 +7,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "apfsck.h"
 #include "crc32c.h"
 #include "types.h"
-#include "globals.h"
 #include "key.h"
 #include "stats.h"
 #include "super.h"

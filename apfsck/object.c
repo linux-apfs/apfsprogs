@@ -6,7 +6,7 @@
  * Checksum routines for an APFS object
  */
 
-#include "globals.h"
+#include "apfsck.h"
 #include "object.h"
 #include "super.h"
 

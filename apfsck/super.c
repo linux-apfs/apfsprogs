@@ -8,8 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include "apfsck.h"
 #include "btree.h"
-#include "globals.h"
 #include "object.h"
 #include "types.h"
 #include "stats.h"
