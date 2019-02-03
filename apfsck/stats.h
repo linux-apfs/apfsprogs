@@ -14,6 +14,7 @@
  */
 struct stats {
 	u64 s_omap_key_count;		/* Number of keys in container omap */
+	u64 s_omap_node_count;		/* Number of nodes in container omap */
 	struct vol_stats **vol_stats;	/* Pointer to array of volume stats */
 };
 
@@ -22,7 +23,9 @@ struct stats {
  */
 struct vol_stats {
 	u64 v_omap_key_count;	/* Number of keys in the volume object map */
+	u64 v_omap_node_count;	/* Number of nodes in the volume object map */
 	u64 cat_key_count;	/* Number of keys in the volume catalog */
+	u64 cat_node_count;	/* Number of nodes in the volume catalog */
 	int cat_longest_key;	/* Length of longest key in catalog */
 	int cat_longest_val;	/* Length of longest value in catalog */
 };
