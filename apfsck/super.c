@@ -54,14 +54,10 @@ static struct apfs_nx_superblock *read_super_copy(void)
 		}
 	}
 
-	if (le32_to_cpu(msb_raw->nx_magic) != APFS_NX_MAGIC) {
-		printf("Wrong magic on block zero.\n");
-		exit(1);
-	}
-	if (!obj_verify_csum(&msb_raw->nx_o)) {
-		printf("Bad checksum for block zero.\n");
-		exit(1);
-	}
+	if (le32_to_cpu(msb_raw->nx_magic) != APFS_NX_MAGIC)
+		report("Block zero", "wrong magic.");
+	if (!obj_verify_csum(&msb_raw->nx_o))
+		report("Block zero", "bad checksum.");
 
 	return msb_raw;
 }
@@ -87,14 +83,12 @@ static void map_main_super(void)
 	desc_base = le64_to_cpu(msb_raw->nx_xp_desc_base);
 	if (desc_base >> 63 != 0) {
 		/* The highest bit is set when checkpoints are not contiguous */
-		printf("Checkpoint descriptor tree not yet supported.\n");
-		exit(1);
+		report("Block zero",
+		       "checkpoint descriptor tree not yet supported.");
 	}
 	desc_blocks = le32_to_cpu(msb_raw->nx_xp_desc_blocks);
-	if (desc_blocks > 10000) { /* Arbitrary loop limit, is it enough? */
-		printf("Too many checkpoint descriptors?\n");
-		exit(1);
-	}
+	if (desc_blocks > 10000) /* Arbitrary loop limit, is it enough? */
+		report("Block zero", "too many checkpoint descriptors?");
 
 	/* Now we go through the checkpoints one by one */
 	sb->s_raw = NULL;
@@ -124,13 +118,11 @@ static void map_main_super(void)
 		desc_raw = NULL;
 	}
 
-	if (!sb->s_raw) {
-		printf("Missing latest checkpoint superblock.\n");
-		exit(1);
-	}
+	if (!sb->s_raw)
+		report("Checkpoint descriptors", "latest is missing.");
 	/* TODO: the latest checkpoint and block zero are somehow different? */
 	if (xid != le64_to_cpu(msb_raw->nx_o.o_xid))
-		printf("The filesystem was not unmounted cleanly.\n");
+		report("Block zero", "filesystem was not unmounted cleanly.");
 	munmap(msb_raw, sb->s_blocksize);
 }
 
@@ -161,18 +153,12 @@ static struct apfs_superblock *map_volume_super(int vol)
 		exit(1);
 	}
 
-	if (le64_to_cpu(vsb_raw->apfs_o.o_oid) != vol_id) {
-		printf("Wrong object id for volume superblock.\n");
-		exit(1);
-	}
-	if (le32_to_cpu(vsb_raw->apfs_magic) != APFS_MAGIC) {
-		printf("Wrong magic in volume superblock.\n");
-		exit(1);
-	}
-	if (!obj_verify_csum(&vsb_raw->apfs_o)) {
-		printf("Bad checksum for volume superblock.\n");
-		exit(1);
-	}
+	if (le64_to_cpu(vsb_raw->apfs_o.o_oid) != vol_id)
+		report("Volume superblock", "wrong object id.");
+	if (le32_to_cpu(vsb_raw->apfs_magic) != APFS_MAGIC)
+		report("Volume superblock", "wrong magic.");
+	if (!obj_verify_csum(&vsb_raw->apfs_o))
+		report("Volume superblock", "bad checksum.");
 
 	return vsb_raw;
 }
