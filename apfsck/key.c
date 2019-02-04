@@ -23,10 +23,8 @@
  */
 void read_omap_key(void *raw, int size, struct key *key)
 {
-	if (size != sizeof(struct apfs_omap_key)) {
-		printf("Wrong size of key in object map.\n");
-		exit(1);
-	}
+	if (size != sizeof(struct apfs_omap_key))
+		report("Object map", "wrong size of key.");
 
 	key->id = le64_to_cpu(((struct apfs_omap_key *)raw)->ok_oid);
 	key->type = 0;
@@ -156,33 +154,26 @@ static void read_dir_rec_key(void *raw, int size, struct key *key)
 	struct apfs_drec_hashed_key *raw_key;
 	int namelen;
 
-	if (size < sizeof(struct apfs_drec_hashed_key) + 1) {
-		printf("Wrong size for directory record key.\n");
-		exit(1);
-	}
-	if (*((char *)raw + size - 1) != 0) {
-		printf("Filename lacks NULL-termination.\n");
-		exit(1);
-	}
+	if (size < sizeof(struct apfs_drec_hashed_key) + 1)
+		report("Directory record", "wrong size of key.");
+	if (*((char *)raw + size - 1) != 0)
+		report("Directory record", "filename lacks NULL-termination.");
 	raw_key = raw;
 
 	key->number = le32_to_cpu(raw_key->name_len_and_hash);
 	key->name = (char *)raw_key->name;
 
-	if (key->number != dentry_hash(key->name)) {
-		printf("Corrupted dentry hash.\n");
-		exit(1);
-	}
+	if (key->number != dentry_hash(key->name))
+		report("Directory record", "filename hash is corrupted.");
 
 	namelen = key->number & 0x3FF;
 	if (strlen(key->name) + 1 != namelen) {
 		/* APFS counts the NULL termination for the filename length */
-		printf("Wrong name length in dentry key.\n");
-		exit(1);
+		report("Directory record", "wrong name length in key.");
 	}
 	if (size != sizeof(struct apfs_drec_hashed_key) + namelen) {
-		printf("Size of dentry key doesn't match the name length.\n");
-		exit(1);
+		report("Directory record",
+		       "size of key doesn't match the name length.");
 	}
 }
 
@@ -197,14 +188,10 @@ static void read_xattr_key(void *raw, int size, struct key *key)
 	struct apfs_xattr_key *raw_key;
 	int namelen;
 
-	if (size < sizeof(struct apfs_xattr_key) + 1) {
-		printf("Wrong size for xattr record key.\n");
-		exit(1);
-	}
-	if (*((char *)raw + size - 1) != 0) {
-		printf("Xattr name lacks NULL-termination.\n");
-		exit(1);
-	}
+	if (size < sizeof(struct apfs_xattr_key) + 1)
+		report("Xattr record", "wrong size of key.");
+	if (*((char *)raw + size - 1) != 0)
+		report("Xattr record", "name lacks NULL-termination.");
 	raw_key = raw;
 
 	key->number = 0;
@@ -213,12 +200,11 @@ static void read_xattr_key(void *raw, int size, struct key *key)
 	namelen = le16_to_cpu(raw_key->name_len);
 	if (strlen(key->name) + 1 != namelen) {
 		/* APFS counts the NULL termination in the string length */
-		printf("Wrong name length in xattr key.\n");
-		exit(1);
+		report("Xattr record", "wrong name length.");
 	}
 	if (size != sizeof(struct apfs_xattr_key) + namelen) {
-		printf("Size of xattr key doesn't match the name length.\n");
-		exit(1);
+		report("Xattr record",
+		       "size of key doesn't match the name length.");
 	}
 }
 
@@ -236,14 +222,10 @@ static void read_snap_name_key(void *raw, int size, struct key *key)
 	struct apfs_snap_name_key *raw_key;
 	int namelen;
 
-	if (size < sizeof(struct apfs_snap_name_key) + 1) {
-		printf("Wrong size for snapshot name record key.\n");
-		exit(1);
-	}
-	if (*((char *)raw + size - 1) != 0) {
-		printf("Snapshot name lacks NULL-termination.\n");
-		exit(1);
-	}
+	if (size < sizeof(struct apfs_snap_name_key) + 1)
+		report("Snapshot name record", "wrong size of key.");
+	if (*((char *)raw + size - 1) != 0)
+		report("Snapshot name record", "name lacks NULL-termination.");
 	raw_key = raw;
 
 	key->number = 0;
@@ -252,12 +234,11 @@ static void read_snap_name_key(void *raw, int size, struct key *key)
 	namelen = le16_to_cpu(raw_key->name_len);
 	if (strlen(key->name) + 1 != namelen) {
 		/* APFS counts the NULL termination in the string length */
-		printf("Wrong name length in snapshot name key.\n");
-		exit(1);
+		report("Snapshot name record", "wrong name length.");
 	}
 	if (size != sizeof(struct apfs_snap_name_key) + namelen) {
-		printf("Size of snapshot name key doesn't match its length.\n");
-		exit(1);
+		report("Snapshot name record",
+		       "size of key doesn't match the name length.");
 	}
 }
 
@@ -271,10 +252,8 @@ static void read_file_extent_key(void *raw, int size, struct key *key)
 {
 	struct apfs_file_extent_key *raw_key;
 
-	if (size != sizeof(struct apfs_file_extent_key)) {
-		printf("Wrong size of key for extent record.\n");
-		exit(1);
-	}
+	if (size != sizeof(struct apfs_file_extent_key))
+		report("Extent record", "wrong size of key.");
 	raw_key = raw;
 
 	key->number = le64_to_cpu(raw_key->logical_addr);
@@ -292,10 +271,8 @@ static void read_sibling_link_key(void *raw, int size, struct key *key)
 {
 	struct apfs_sibling_link_key *raw_key;
 
-	if (size != sizeof(struct apfs_sibling_link_key)) {
-		printf("Wrong size of key for sibling link record.\n");
-		exit(1);
-	}
+	if (size != sizeof(struct apfs_sibling_link_key))
+		report("Siblink link record", "wrong size of key.");
 	raw_key = raw;
 
 	key->number = le64_to_cpu(raw_key->sibling_id); /* Only guessing */
@@ -310,10 +287,8 @@ static void read_sibling_link_key(void *raw, int size, struct key *key)
  */
 void read_cat_key(void *raw, int size, struct key *key)
 {
-	if (size < sizeof(struct apfs_key_header)) {
-		printf("Key too small in catalog tree.\n");
-		exit(1);
-	}
+	if (size < sizeof(struct apfs_key_header))
+		report("Catalog tree", "key is too small.");
 	key->id = cat_cnid((struct apfs_key_header *)raw);
 	key->type = cat_type((struct apfs_key_header *)raw);
 
@@ -338,10 +313,8 @@ void read_cat_key(void *raw, int size, struct key *key)
 		return;
 	default:
 		/* All other key types are just the header */
-		if (size != sizeof(struct apfs_key_header)) {
-			printf("Wrong size of key for catalog record.\n");
-			exit(1);
-		}
+		if (size != sizeof(struct apfs_key_header))
+			report("Catalog tree record", "wrong size of key.");
 		key->number = 0;
 		key->name = NULL;
 		return;
