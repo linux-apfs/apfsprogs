@@ -77,14 +77,12 @@ static struct node *read_node(u64 block)
 	node->object.oid = le64_to_cpu(raw->btn_o.o_oid);
 
 	if (!obj_verify_csum(&raw->btn_o)) {
-		printf("Bad checksum for node in block 0x%llx\n",
+		report("B-tree node", "bad checksum in block 0x%llx.",
 		       (unsigned long long)block);
-		exit(1);
 	}
 	if (!node_is_valid(node)) {
-		printf("Node in block 0x%llx is not sane\n",
+		report("B-tree node", "block 0x%llx is not sane.",
 		       (unsigned long long)block);
-		exit(1);
 	}
 
 	node->raw = raw;
@@ -121,10 +119,8 @@ static int node_locate_key(struct node *node, int index, int *off)
 	struct apfs_btree_node_phys *raw;
 	int len;
 
-	if (index >= node->records) {
-		printf("Requested index out-of-bounds\n");
-		exit(1);
-	}
+	if (index >= node->records)
+		report("B-tree node", "requested index out-of-bounds.");
 
 	raw = node->raw;
 	if (node_has_fixed_kv_size(node)) {
@@ -144,10 +140,8 @@ static int node_locate_key(struct node *node, int index, int *off)
 		*off = node->key + le16_to_cpu(entry->k.off);
 	}
 
-	if (*off + len > sb->s_blocksize) {
-		printf("B-tree key is out-of-bounds\n");
-		exit(1);
-	}
+	if (*off + len > sb->s_blocksize)
+		report("B-tree", "key is out-of-bounds.");
 	return len;
 }
 
@@ -166,10 +160,8 @@ static int node_locate_data(struct node *node, int index, int *off)
 	struct apfs_btree_node_phys *raw;
 	int len;
 
-	if (index >= node->records) {
-		printf("Requested index out-of-bounds\n");
-		exit(1);
-	}
+	if (index >= node->records)
+		report("B-tree", "requested index out-of-bounds.");
 
 	raw = node->raw;
 	if (node_has_fixed_kv_size(node)) {
@@ -205,10 +197,8 @@ static int node_locate_data(struct node *node, int index, int *off)
 			*off = sb->s_blocksize - le16_to_cpu(entry->v.off);
 	}
 
-	if (*off < 0 || *off + len > sb->s_blocksize) {
-		printf("B-tree value is out-of-bounds\n");
-		exit(1);
-	}
+	if (*off < 0 || *off + len > sb->s_blocksize)
+		report("B-tree", "value is out-of-bounds.");
 	return len;
 }
 
@@ -257,16 +247,12 @@ static void parse_subtree(struct node *root, struct key *last_key,
 		else
 			read_omap_key(raw + off, len, &curr_key);
 
-		if (keycmp(last_key, &curr_key) > 0) {
-			printf("Node keys are out of order.\n");
-			exit(1);
-		}
+		if (keycmp(last_key, &curr_key) > 0)
+			report("B-tree", "keys are out of order.");
 
 		if (i != 0 && node_is_leaf(root) &&
-		    !keycmp(last_key, &curr_key)) {
-			printf("Leaf keys are repeated.\n");
-			exit(1);
-		}
+		    !keycmp(last_key, &curr_key))
+			report("B-tree", "leaf keys are repeated.");
 		*last_key = curr_key;
 
 		len = node_locate_data(root, i, &off);
@@ -277,10 +263,8 @@ static void parse_subtree(struct node *root, struct key *last_key,
 			continue;
 		}
 
-		if (len != 8) {
-			printf("Wrong size of nonleaf record value.\n");
-			exit(1);
-		}
+		if (len != 8)
+			report("B-tree", "wrong size of nonleaf record value.");
 		child_id = le64_to_cpu(*(__le64 *)(raw + off));
 
 		if (omap_root)
@@ -289,10 +273,8 @@ static void parse_subtree(struct node *root, struct key *last_key,
 			bno = child_id;
 
 		child = read_node(bno);
-		if (child_id != child->object.oid) {
-			printf("Wrong object id on b-tree node.\n");
-			exit(1);
-		}
+		if (child_id != child->object.oid)
+			report("B-tree node", "wrong object id.");
 
 		parse_subtree(child, last_key, omap_root);
 		free(child);
@@ -314,8 +296,8 @@ static void check_btree_footer(struct node *root)
 	info = (void *)root->raw + sb->s_blocksize - sizeof(*info);
 
 	if (le32_to_cpu(info->bt_fixed.bt_node_size) != sb->s_blocksize) {
-		printf("Nodes with more than one block are not supported.\n");
-		exit(1);
+		report("B-tree",
+		       "nodes with more than one block are not supported.");
 	}
 
 	if (is_omap) {
@@ -324,67 +306,51 @@ static void check_btree_footer(struct node *root)
 
 		if (le32_to_cpu(info->bt_fixed.bt_key_size) !=
 					sizeof(struct apfs_omap_key)) {
-			printf("Wrong key size in omap info footer\n");
-			exit(1);
+			report("Object map", "wrong key size in info footer.");
 		}
 		if (le32_to_cpu(info->bt_fixed.bt_val_size) !=
 					sizeof(struct apfs_omap_val)) {
-			printf("Wrong value size in omap info footer\n");
-			exit(1);
+			report("Object map",
+			       "wrong value size in info footer.");
 		}
 
 		if (le32_to_cpu(info->bt_longest_key) !=
 					sizeof(struct apfs_omap_key)) {
-			printf("Wrong maximum key size in omap info footer\n");
-			exit(1);
+			report("Object map",
+			       "wrong maximum key size in info footer.");
 		}
 		if (le32_to_cpu(info->bt_longest_val) !=
 					sizeof(struct apfs_omap_val)) {
-			printf("Wrong maximum value size in omap info\n");
-			exit(1);
+			report("Object map",
+			       "wrong maximum value size in info footer.");
 		}
 
 		counted_keys = vsb ? vstats->v_omap_key_count :
 				     stats->s_omap_key_count;
-		if (le64_to_cpu(info->bt_key_count) != counted_keys) {
-			printf("Wrong key count in omap info footer\n");
-			exit(1);
-		}
+		if (le64_to_cpu(info->bt_key_count) != counted_keys)
+			report("Object map", "bad key count in info footer.");
+
 		counted_nodes = vsb ? vstats->v_omap_node_count :
 				      stats->s_omap_node_count;
-		if (le64_to_cpu(info->bt_node_count) != counted_nodes) {
-			printf("Wrong node count in omap info footer\n");
-			exit(1);
-		}
+		if (le64_to_cpu(info->bt_node_count) != counted_nodes)
+			report("Object map", "bad node count in info footer.");
 
 		return;
 	}
 
 	/* This is a catalog tree */
-	if (le32_to_cpu(info->bt_fixed.bt_key_size) != 0) {
-		printf("Key size should not be set in catalog info footer\n");
-		exit(1);
-	}
-	if (le32_to_cpu(info->bt_fixed.bt_val_size) != 0) {
-		printf("Value size should not be set in catalog info footer\n");
-		exit(1);
-	}
-	if (le32_to_cpu(info->bt_longest_key) < vstats->cat_longest_key) {
-		printf("Wrong maximum key length in catalog info footer\n");
-		exit(1);
-	}
-	if (le32_to_cpu(info->bt_longest_val) < vstats->cat_longest_val) {
-		printf("Wrong maximum value length in catalog info footer\n");
-		exit(1);
-	}
-	if (le64_to_cpu(info->bt_key_count) != vstats->cat_key_count) {
-		printf("Wrong key count in catalog info footer\n");
-		exit(1);
-	}
-	if (le64_to_cpu(info->bt_node_count) != vstats->cat_node_count) {
-		printf("Wrong node count in catalog info footer\n");
-		exit(1);
-	}
+	if (le32_to_cpu(info->bt_fixed.bt_key_size) != 0)
+		report("Catalog", "key size should not be set.");
+	if (le32_to_cpu(info->bt_fixed.bt_val_size) != 0)
+		report("Catalog", "value size should not be set.");
+	if (le32_to_cpu(info->bt_longest_key) < vstats->cat_longest_key)
+		report("Catalog", "wrong maximum key length in info footer.");
+	if (le32_to_cpu(info->bt_longest_val) < vstats->cat_longest_val)
+		report("Catalog", "wrong maximum value length in info footer.");
+	if (le64_to_cpu(info->bt_key_count) != vstats->cat_key_count)
+		report("Catalog", "wrong key count in catalog info footer.");
+	if (le64_to_cpu(info->bt_node_count) != vstats->cat_node_count)
+		report("Catalog", "wrong node count in catalog info footer.");
 }
 
 /**
@@ -429,14 +395,10 @@ struct node *parse_omap_btree(u64 oid)
 	}
 
 	/* Many checks are missing, of course */
-	if (!obj_verify_csum(&raw->om_o)) {
-		printf("Bad checksum for object map\n");
-		exit(1);
-	}
-	if (oid != le64_to_cpu(raw->om_o.o_oid)) {
-		printf("Wrong object id on object map\n");
-		exit(1);
-	}
+	if (!obj_verify_csum(&raw->om_o))
+		report("Object map", "bad checksum.");
+	if (oid != le64_to_cpu(raw->om_o.o_oid))
+		report("Object map", "wrong object id.");
 
 	root = read_node(le64_to_cpu(raw->om_tree_oid));
 	parse_subtree(root, &last_key, NULL);
@@ -456,10 +418,8 @@ static u64 child_from_query(struct query *query)
 	void *raw = query->node->raw;
 
 	/* This check is actually redundant, at least for now */
-	if (query->len != 8) { /* The data on a nonleaf node is the child id */
-		printf("Wrong size of nonleaf record value\n");
-		exit(1);
-	}
+	if (query->len != 8) /* The data on a nonleaf node is the child id */
+		report("B-tree", "wrong size of nonleaf record value.");
 
 	return le64_to_cpu(*(__le64 *)(raw + query->off));
 }
@@ -476,10 +436,8 @@ static u64 bno_from_query(struct query *query)
 	struct apfs_omap_val *omap_val;
 	void *raw = query->node->raw;
 
-	if (query->len != sizeof(*omap_val)) {
-		printf("Wrong size of omap leaf record value\n");
-		exit(1);
-	}
+	if (query->len != sizeof(*omap_val))
+		report("Object map record", "wrong size of value.");
 
 	omap_val = (struct apfs_omap_val *)(raw + query->off);
 	return le64_to_cpu(omap_val->ov_paddr);
@@ -505,9 +463,8 @@ u64 omap_lookup_block(struct node *tbl, u64 id)
 	query->flags |= QUERY_OMAP | QUERY_EXACT;
 
 	if (btree_query(&query)) { /* Omap queries shouldn't fail */
-		printf("Omap record missing for id 0x%llx\n",
+		report("Object map", "record missing for id 0x%llx.",
 		       (unsigned long long)id);
-		exit(1);
 	}
 
 	block = bno_from_query(query);
@@ -584,8 +541,7 @@ static void key_from_query(struct query *query, struct key *key)
 		read_omap_key(raw_key, query->key_len, key);
 		break;
 	default:
-		printf("Bug!\n");
-		exit(1);
+		report(NULL, "Bug!");
 	}
 
 	if (query->flags & QUERY_MULTIPLE) {
@@ -622,19 +578,16 @@ static int node_next(struct query *query)
 
 	cmp = keycmp(&curr_key, query->key);
 
-	if (cmp > 0) {
-		printf("B-tree records are out of order.\n");
-		exit(1);
-	}
+	if (cmp > 0)
+		report("B-tree", "records are out of order.");
 
 	if (cmp != 0 && node_is_leaf(node) && query->flags & QUERY_EXACT)
 		return -ENODATA;
 
 	query->len = node_locate_data(node, query->index, &query->off);
 	if (query->len == 0) {
-		printf("Corrupted record value in node 0x%llx.\n",
+		report("B-tree", "corrupted record value in node 0x%llx.",
 		       (unsigned long long)bno);
-		exit(1);
 	}
 
 	if (cmp != 0) {
@@ -717,9 +670,8 @@ static int node_query(struct query *query)
 
 	query->len = node_locate_data(node, query->index, &query->off);
 	if (query->len == 0) {
-		printf("Corrupted record value in node 0x%llx.\n",
+		report("B-tree", "corrupted record value in node 0x%llx.",
 		       (unsigned long long)bno);
-		exit(1);
 	}
 	return 0;
 }
@@ -747,8 +699,7 @@ int btree_query(struct query **query)
 next_node:
 	if ((*query)->depth >= 12) {
 		/* This is the maximum depth allowed by the module */
-		printf("Corrupted b-tree is too deep.\n");
-		exit(1);
+		report("B-tree", "is too deep.");
 	}
 
 	err = node_query(*query);
@@ -783,9 +734,8 @@ next_node:
 	node = read_node(child_blk);
 
 	if (node->object.oid != child_id) {
-		printf("Wrong object id on block number 0x%llx\n",
+		report("B-tree", "wrong object id on block number 0x%llx.",
 		       (unsigned long long)child_blk);
-		exit(1);
 	}
 
 	if ((*query)->flags & QUERY_MULTIPLE) {
