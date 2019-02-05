@@ -11,8 +11,6 @@
 extern struct super_block *sb;		/* Filesystem superblock */
 extern struct volume_superblock *vsb;	/* Volume superblock */
 extern int fd;				/* File descriptor for the device */
-extern struct stats *stats;		/* Filesystem statistics */
-extern struct vol_stats *vstats;	/* Volume statistics */
 
 extern __attribute__((noreturn, format(printf, 2, 3)))
 		void report(const char *context, const char *message, ...);

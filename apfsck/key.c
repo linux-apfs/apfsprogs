@@ -11,7 +11,6 @@
 #include "crc32c.h"
 #include "types.h"
 #include "key.h"
-#include "stats.h"
 #include "super.h"
 #include "unicode.h"
 
@@ -291,9 +290,6 @@ void read_cat_key(void *raw, int size, struct key *key)
 		report("Catalog tree", "key is too small.");
 	key->id = cat_cnid((struct apfs_key_header *)raw);
 	key->type = cat_type((struct apfs_key_header *)raw);
-
-	if (size > vstats->cat_longest_key)
-		vstats->cat_longest_key = size;
 
 	switch (key->type) {
 	case APFS_TYPE_DIR_REC:

@@ -11,7 +11,6 @@
 #include "btree.h"
 #include "key.h"
 #include "object.h"
-#include "stats.h"
 #include "super.h"
 #include "types.h"
 
@@ -208,32 +207,22 @@ static int node_locate_data(struct node *node, int index, int *off)
  * @last_key:	parent key, that must come before all the keys in this subtree;
  *		on return, this will hold the last key of this subtree, that
  *		must come before the next key of the parent node
- * @omap_root:	root of the omap for the b-tree (NULL if parsing an omap itself)
+ * @btree:	the entire b-tree that @root belongs to
  */
 static void parse_subtree(struct node *root, struct key *last_key,
-			  struct node *omap_root)
+			  struct btree *btree)
 {
 	struct key curr_key;
 	int i;
 
-	if (vsb && omap_root) {
-		/* Parsing the volume catalog */
-		if (node_is_leaf(root))
-			vstats->cat_key_count += root->records;
-		++vstats->cat_node_count;
-	}
-	if (vsb && !omap_root) {
-		/* Parsing the volume object map */
-		if (node_is_leaf(root))
-			vstats->v_omap_key_count += root->records;
-		++vstats->v_omap_node_count;
-	}
-	if (!vsb) {
-		/* Parsing the container omap */
-		if (node_is_leaf(root))
-			stats->s_omap_key_count += root->records;
-		++stats->s_omap_node_count;
-	}
+	if (node_is_leaf(root))
+		btree->key_count += root->records;
+	++btree->node_count;
+
+	if (btree_is_omap(btree) && !node_has_fixed_kv_size(root))
+		report("Object map", "key size should be fixed.");
+	if (!btree_is_omap(btree) && node_has_fixed_kv_size(root))
+		report("Catalog", "key size should not be fixed.");
 
 	for (i = 0; i < root->records; ++i) {
 		struct node *child;
@@ -242,10 +231,13 @@ static void parse_subtree(struct node *root, struct key *last_key,
 		u64 child_id, bno;
 
 		len = node_locate_key(root, i, &off);
-		if (omap_root)
-			read_cat_key(raw + off, len, &curr_key);
-		else
+		if (len > btree->longest_key)
+			btree->longest_key = len;
+
+		if (btree_is_omap(btree))
 			read_omap_key(raw + off, len, &curr_key);
+		else
+			read_cat_key(raw + off, len, &curr_key);
 
 		if (keycmp(last_key, &curr_key) > 0)
 			report("B-tree", "keys are out of order.");
@@ -258,8 +250,8 @@ static void parse_subtree(struct node *root, struct key *last_key,
 		len = node_locate_data(root, i, &off);
 
 		if (node_is_leaf(root)) {
-			if (omap_root && len > vstats->cat_longest_val)
-				vstats->cat_longest_val = len;
+			if (len > btree->longest_val)
+				btree->longest_val = len;
 			continue;
 		}
 
@@ -267,90 +259,68 @@ static void parse_subtree(struct node *root, struct key *last_key,
 			report("B-tree", "wrong size of nonleaf record value.");
 		child_id = le64_to_cpu(*(__le64 *)(raw + off));
 
-		if (omap_root)
-			bno = omap_lookup_block(omap_root, child_id);
-		else
+		if (btree_is_omap(btree))
 			bno = child_id;
+		else
+			bno = omap_lookup_block(btree->omap_root, child_id);
 
 		child = read_node(bno);
 		if (child_id != child->object.oid)
 			report("B-tree node", "wrong object id.");
 
-		parse_subtree(child, last_key, omap_root);
+		parse_subtree(child, last_key, btree);
 		free(child);
 	}
 }
 
 /**
  * check_btree_footer - Check that btree_info matches the collected stats
- * @root: root node of the b-tree
+ * @btree: b-tree to check
  */
-static void check_btree_footer(struct node *root)
+static void check_btree_footer(struct btree *btree)
 {
+	struct node *root = btree->root;
 	struct apfs_btree_info *info;
-	bool is_omap;
+	char *ctx;
 
-	/* At least for now, use this flag to tell apart catalog and omap */
-	is_omap = node_has_fixed_kv_size(root);
+	ctx = btree_is_omap(btree) ? "Object map" : "Catalog";
 
 	info = (void *)root->raw + sb->s_blocksize - sizeof(*info);
+	if (le32_to_cpu(info->bt_fixed.bt_node_size) != sb->s_blocksize)
+		report(ctx, "nodes with more than a block are not supported.");
 
-	if (le32_to_cpu(info->bt_fixed.bt_node_size) != sb->s_blocksize) {
-		report("B-tree",
-		       "nodes with more than one block are not supported.");
-	}
+	if (le64_to_cpu(info->bt_key_count) != btree->key_count)
+		report(ctx, "wrong key count in info footer.");
+	if (le64_to_cpu(info->bt_node_count) != btree->node_count)
+		report(ctx, "wrong node count in info footer.");
 
-	if (is_omap) {
-		u64 counted_keys;
-		u64 counted_nodes;
-
+	if (btree_is_omap(btree)) {
 		if (le32_to_cpu(info->bt_fixed.bt_key_size) !=
-					sizeof(struct apfs_omap_key)) {
-			report("Object map", "wrong key size in info footer.");
-		}
+					sizeof(struct apfs_omap_key))
+			report(ctx, "wrong key size in info footer.");
+
 		if (le32_to_cpu(info->bt_fixed.bt_val_size) !=
-					sizeof(struct apfs_omap_val)) {
-			report("Object map",
-			       "wrong value size in info footer.");
-		}
+					sizeof(struct apfs_omap_val))
+			report(ctx, "wrong value size in info footer.");
 
 		if (le32_to_cpu(info->bt_longest_key) !=
-					sizeof(struct apfs_omap_key)) {
-			report("Object map",
-			       "wrong maximum key size in info footer.");
-		}
+					sizeof(struct apfs_omap_key))
+			report(ctx, "wrong maximum key size in info footer.");
+
 		if (le32_to_cpu(info->bt_longest_val) !=
-					sizeof(struct apfs_omap_val)) {
-			report("Object map",
-			       "wrong maximum value size in info footer.");
-		}
-
-		counted_keys = vsb ? vstats->v_omap_key_count :
-				     stats->s_omap_key_count;
-		if (le64_to_cpu(info->bt_key_count) != counted_keys)
-			report("Object map", "bad key count in info footer.");
-
-		counted_nodes = vsb ? vstats->v_omap_node_count :
-				      stats->s_omap_node_count;
-		if (le64_to_cpu(info->bt_node_count) != counted_nodes)
-			report("Object map", "bad node count in info footer.");
-
-		return;
+					sizeof(struct apfs_omap_val))
+			report(ctx, "wrong maximum value size in info footer.");
+	} else {
+		/* This is a catalog tree */
+		if (le32_to_cpu(info->bt_fixed.bt_key_size) != 0)
+			report(ctx, "key size should not be set.");
+		if (le32_to_cpu(info->bt_fixed.bt_val_size) != 0)
+			report(ctx, "value size should not be set.");
+		if (le32_to_cpu(info->bt_longest_key) < btree->longest_key)
+			report(ctx, "wrong maximum key size in info footer.");
+		if (le32_to_cpu(info->bt_longest_val) < btree->longest_val)
+			report(ctx, "wrong maximum value size in info footer.");
 	}
-
-	/* This is a catalog tree */
-	if (le32_to_cpu(info->bt_fixed.bt_key_size) != 0)
-		report("Catalog", "key size should not be set.");
-	if (le32_to_cpu(info->bt_fixed.bt_val_size) != 0)
-		report("Catalog", "value size should not be set.");
-	if (le32_to_cpu(info->bt_longest_key) < vstats->cat_longest_key)
-		report("Catalog", "wrong maximum key length in info footer.");
-	if (le32_to_cpu(info->bt_longest_val) < vstats->cat_longest_val)
-		report("Catalog", "wrong maximum value length in info footer.");
-	if (le64_to_cpu(info->bt_key_count) != vstats->cat_key_count)
-		report("Catalog", "wrong key count in catalog info footer.");
-	if (le64_to_cpu(info->bt_node_count) != vstats->cat_node_count)
-		report("Catalog", "wrong node count in catalog info footer.");
 }
 
 /**
@@ -358,33 +328,40 @@ static void check_btree_footer(struct node *root)
  * @oid:	object id for the catalog root
  * @omap_root:	root of the object map for the b-tree
  *
- * Returns a pointer to the root node of the catalog.
+ * Returns a pointer to the btree struct for the catalog.
  */
-struct node *parse_cat_btree(u64 oid, struct node *omap_root)
+struct btree *parse_cat_btree(u64 oid, struct node *omap_root)
 {
-	struct node *root;
+	struct btree *cat;
 	struct key last_key = {0};
 	u64 bno;
 
+	cat = calloc(1, sizeof(*cat));
+	if (!cat) {
+		perror(NULL);
+		exit(1);
+	}
+
 	bno = omap_lookup_block(omap_root, oid);
-	root = read_node(bno);
+	cat->root = read_node(bno);
+	cat->omap_root = omap_root;
 
-	parse_subtree(root, &last_key, omap_root);
+	parse_subtree(cat->root, &last_key, cat);
 
-	check_btree_footer(root);
-	return root;
+	check_btree_footer(cat);
+	return cat;
 }
 
 /**
  * parse_omap_btree - Parse an object map and check for corruption
  * @oid:	object id for the omap
  *
- * Returns a pointer to the root node of the omap.
+ * Returns a pointer to the btree struct for the omap.
  */
-struct node *parse_omap_btree(u64 oid)
+struct btree *parse_omap_btree(u64 oid)
 {
 	struct apfs_omap_phys *raw;
-	struct node *root;
+	struct btree *omap;
 	struct key last_key = {0};
 
 	raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
@@ -400,11 +377,18 @@ struct node *parse_omap_btree(u64 oid)
 	if (oid != le64_to_cpu(raw->om_o.o_oid))
 		report("Object map", "wrong object id.");
 
-	root = read_node(le64_to_cpu(raw->om_tree_oid));
-	parse_subtree(root, &last_key, NULL);
+	omap = calloc(1, sizeof(*omap));
+	if (!omap) {
+		perror(NULL);
+		exit(1);
+	}
+	omap->root = read_node(le64_to_cpu(raw->om_tree_oid));
+	omap->omap_root = NULL; /* The omap doesn't have an omap of its own */
 
-	check_btree_footer(root);
-	return root;
+	parse_subtree(omap->root, &last_key, omap);
+
+	check_btree_footer(omap);
+	return omap;
 }
 
 /**
@@ -728,7 +712,7 @@ next_node:
 	if ((*query)->flags & QUERY_OMAP)
 		child_blk = child_id;
 	else
-		child_blk = omap_lookup_block(sb->s_omap_root, child_id);
+		child_blk = omap_lookup_block(sb->s_omap->root, child_id);
 
 	/* Now go a level deeper and search the child */
 	node = read_node(child_blk);

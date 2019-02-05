@@ -182,8 +182,29 @@ struct query {
 	int depth;			/* Put a limit on recursion */
 };
 
-extern struct node *parse_omap_btree(u64 oid);
-extern struct node *parse_cat_btree(u64 oid, struct node *omap_root);
+/* In-memory structure representing a b-tree */
+struct btree {
+	struct node *root;	/* Root of this b-tree */
+	struct node *omap_root;	/* Root of its object map (can be NULL) */
+
+	/* B-tree stats as measured by the fsck */
+	u64 key_count;		/* Number of keys */
+	u64 node_count;		/* Number of nodes */
+	int longest_key;	/* Length of longest key */
+	int longest_val;	/* Length of longest value */
+};
+
+/**
+ * btree_is_omap - Check if a b-tree is an object map
+ * @btree: the b-tree to check
+ */
+static inline bool btree_is_omap(struct btree *btree)
+{
+	return !btree->omap_root; /* The omap doesn't have an omap itself */
+}
+
+extern struct btree *parse_omap_btree(u64 oid);
+extern struct btree *parse_cat_btree(u64 oid, struct node *omap_root);
 extern struct query *alloc_query(struct node *node, struct query *parent);
 extern void free_query(struct query *query);
 extern int btree_query(struct query **query);

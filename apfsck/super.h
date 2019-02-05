@@ -256,14 +256,14 @@ struct apfs_superblock {
 
 struct volume_superblock {
 	struct apfs_superblock *v_raw;
-	struct node *v_omap_root;
-	struct node *v_cat_root;
+	struct btree *v_omap;
+	struct btree *v_cat;
 };
 
 /* Superblock data in memory */
 struct super_block {
 	struct apfs_nx_superblock *s_raw;
-	struct node *s_omap_root;
+	struct btree *s_omap;
 	unsigned long s_blocksize;
 
 	/* This is excessive in most cases.  TODO: switch to a linked list? */

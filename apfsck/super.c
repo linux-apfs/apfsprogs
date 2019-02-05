@@ -12,12 +12,10 @@
 #include "btree.h"
 #include "object.h"
 #include "types.h"
-#include "stats.h"
 #include "super.h"
 
 struct super_block *sb;
 struct volume_superblock *vsb;
-struct vol_stats *vstats;
 
 /**
  * read_super_copy - Read the copy of the container superblock in block 0
@@ -144,7 +142,7 @@ static struct apfs_superblock *map_volume_super(int vol)
 	if (vol_id == 0)
 		return NULL;
 
-	vsb_bno = omap_lookup_block(sb->s_omap_root, vol_id);
+	vsb_bno = omap_lookup_block(sb->s_omap->root, vol_id);
 
 	vsb_raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
 		       fd, vsb_bno * sb->s_blocksize);
@@ -178,11 +176,7 @@ void parse_super(void)
 
 	map_main_super();
 	/* Check for corruption in the container object map */
-	sb->s_omap_root = parse_omap_btree(le64_to_cpu(sb->s_raw->nx_omap_oid));
-
-	/* TODO: this is excessive, better count the volumes first */
-	stats->vol_stats = calloc(APFS_NX_MAX_FILE_SYSTEMS,
-				  sizeof(*stats->vol_stats));
+	sb->s_omap = parse_omap_btree(le64_to_cpu(sb->s_raw->nx_omap_oid));
 
 	for (vol = 0; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol) {
 		struct apfs_superblock *vsb_raw;
@@ -198,22 +192,15 @@ void parse_super(void)
 		}
 		vsb->v_raw = vsb_raw;
 
-		vstats = calloc(1, sizeof(*vstats));
-		if (!vstats) {
-			perror(NULL);
-			exit(1);
-		}
-
 		/* Check for corruption in the volume object map... */
-		vsb->v_omap_root = parse_omap_btree(
+		vsb->v_omap = parse_omap_btree(
 				le64_to_cpu(vsb_raw->apfs_omap_oid));
 		/* ...and in the catalog tree */
-		vsb->v_cat_root = parse_cat_btree(
+		vsb->v_cat = parse_cat_btree(
 				le64_to_cpu(vsb_raw->apfs_root_tree_oid),
-				vsb->v_omap_root);
+				vsb->v_omap->root);
 
 		sb->s_volumes[vol] = vsb;
-		stats->vol_stats[vol] = vstats;
 	}
 
 	return;
