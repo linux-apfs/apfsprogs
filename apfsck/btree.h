@@ -115,6 +115,7 @@ struct apfs_btree_info {
 struct node {
 	u16 flags;		/* Node flags */
 	u32 records;		/* Number of records in the node */
+	int level;		/* Number of child levels below this node */
 
 	int key;		/* Offset of the key area in the block */
 	int free;		/* Offset of the free area in the block */

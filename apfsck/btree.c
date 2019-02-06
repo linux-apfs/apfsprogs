@@ -73,6 +73,7 @@ static struct node *read_node(u64 oid, struct btree *btree)
 	}
 	node->btree = btree;
 
+	node->level = le16_to_cpu(raw->btn_level);
 	node->flags = le16_to_cpu(raw->btn_flags);
 	node->records = le32_to_cpu(raw->btn_nkeys);
 	node->key = sizeof(*raw) + le16_to_cpu(raw->btn_table_space.off)
@@ -226,8 +227,11 @@ static void parse_subtree(struct node *root, struct key *last_key)
 	struct key curr_key;
 	int i;
 
-	if (node_is_leaf(root))
+	if (node_is_leaf(root)) {
+		if (root->level != 0)
+			report("B-tree", "nonleaf node flagged as leaf.");
 		btree->key_count += root->records;
+	}
 	++btree->node_count;
 
 	if (btree_is_omap(btree) && !node_has_fixed_kv_size(root))
@@ -270,6 +274,11 @@ static void parse_subtree(struct node *root, struct key *last_key)
 			report("B-tree", "wrong size of nonleaf record value.");
 		child_id = le64_to_cpu(*(__le64 *)(raw + off));
 		child = read_node(child_id, btree);
+
+		if (child->level != root->level - 1)
+			report("B-tree", "node levels are corrupted.");
+		if (node_is_root(child))
+			report("B-tree", "nonroot node is flagged as root.");
 
 		parse_subtree(child, last_key);
 		free(child);
