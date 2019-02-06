@@ -288,6 +288,10 @@ static void check_btree_footer(struct btree *btree)
 
 	ctx = btree_is_omap(btree) ? "Object map" : "Catalog";
 
+	/* Flags are not part of the footer, but this check fits best here */
+	if (!node_is_root(root))
+		report(ctx, "wrong flag in root node.");
+
 	info = (void *)root->raw + sb->s_blocksize - sizeof(*info);
 	if (le32_to_cpu(info->bt_fixed.bt_node_size) != sb->s_blocksize)
 		report(ctx, "nodes with more than a block are not supported.");
