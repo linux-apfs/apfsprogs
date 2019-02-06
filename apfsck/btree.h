@@ -120,6 +120,7 @@ struct node {
 	int free;		/* Offset of the free area in the block */
 	int data;		/* Offset of the data area in the block */
 
+	struct btree *btree;			/* Btree the node belongs to */
 	struct apfs_btree_node_phys *raw;	/* Raw node in memory */
 	struct object object;			/* Object holding the node */
 };

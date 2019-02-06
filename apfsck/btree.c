@@ -43,17 +43,24 @@ static bool node_is_valid(struct node *node)
 
 /**
  * read_node - Read a node header from disk
- * @block:	number of the block where the node is stored
+ * @oid:	object id for the node
+ * @btree:	tree structure, with the omap_root already set
  *
  * Returns a pointer to the resulting node structure.
  */
-static struct node *read_node(u64 block)
+static struct node *read_node(u64 oid, struct btree *btree)
 {
 	struct apfs_btree_node_phys *raw;
 	struct node *node;
+	u64 bno;
+
+	if (btree_is_omap(btree))
+		bno = oid;
+	else
+		bno = omap_lookup_block(btree->omap_root, oid);
 
 	raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-		   fd, block * sb->s_blocksize);
+		   fd, bno * sb->s_blocksize);
 	if (raw == MAP_FAILED) {
 		perror(NULL);
 		exit(1);
@@ -64,6 +71,7 @@ static struct node *read_node(u64 block)
 		perror(NULL);
 		exit(1);
 	}
+	node->btree = btree;
 
 	node->flags = le16_to_cpu(raw->btn_flags);
 	node->records = le32_to_cpu(raw->btn_nkeys);
@@ -72,16 +80,20 @@ static struct node *read_node(u64 block)
 	node->free = node->key + le16_to_cpu(raw->btn_free_space.off);
 	node->data = node->free + le16_to_cpu(raw->btn_free_space.len);
 
-	node->object.block_nr = block;
-	node->object.oid = le64_to_cpu(raw->btn_o.o_oid);
+	if (oid != le64_to_cpu(raw->btn_o.o_oid))
+		report("B-tree node", "wrong object id in block 0x%llx.",
+		       (unsigned long long)bno);
+
+	node->object.oid = oid;
+	node->object.block_nr = bno;
 
 	if (!obj_verify_csum(&raw->btn_o)) {
 		report("B-tree node", "bad checksum in block 0x%llx.",
-		       (unsigned long long)block);
+		       (unsigned long long)bno);
 	}
 	if (!node_is_valid(node)) {
 		report("B-tree node", "block 0x%llx is not sane.",
-		       (unsigned long long)block);
+		       (unsigned long long)bno);
 	}
 
 	node->raw = raw;
@@ -207,11 +219,10 @@ static int node_locate_data(struct node *node, int index, int *off)
  * @last_key:	parent key, that must come before all the keys in this subtree;
  *		on return, this will hold the last key of this subtree, that
  *		must come before the next key of the parent node
- * @btree:	the entire b-tree that @root belongs to
  */
-static void parse_subtree(struct node *root, struct key *last_key,
-			  struct btree *btree)
+static void parse_subtree(struct node *root, struct key *last_key)
 {
+	struct btree *btree = root->btree;
 	struct key curr_key;
 	int i;
 
@@ -228,7 +239,7 @@ static void parse_subtree(struct node *root, struct key *last_key,
 		struct node *child;
 		void *raw = root->raw;
 		int off, len;
-		u64 child_id, bno;
+		u64 child_id;
 
 		len = node_locate_key(root, i, &off);
 		if (len > btree->longest_key)
@@ -258,17 +269,9 @@ static void parse_subtree(struct node *root, struct key *last_key,
 		if (len != 8)
 			report("B-tree", "wrong size of nonleaf record value.");
 		child_id = le64_to_cpu(*(__le64 *)(raw + off));
+		child = read_node(child_id, btree);
 
-		if (btree_is_omap(btree))
-			bno = child_id;
-		else
-			bno = omap_lookup_block(btree->omap_root, child_id);
-
-		child = read_node(bno);
-		if (child_id != child->object.oid)
-			report("B-tree node", "wrong object id.");
-
-		parse_subtree(child, last_key, btree);
+		parse_subtree(child, last_key);
 		free(child);
 	}
 }
@@ -334,7 +337,6 @@ struct btree *parse_cat_btree(u64 oid, struct node *omap_root)
 {
 	struct btree *cat;
 	struct key last_key = {0};
-	u64 bno;
 
 	cat = calloc(1, sizeof(*cat));
 	if (!cat) {
@@ -342,11 +344,10 @@ struct btree *parse_cat_btree(u64 oid, struct node *omap_root)
 		exit(1);
 	}
 
-	bno = omap_lookup_block(omap_root, oid);
-	cat->root = read_node(bno);
 	cat->omap_root = omap_root;
+	cat->root = read_node(oid, cat);
 
-	parse_subtree(cat->root, &last_key, cat);
+	parse_subtree(cat->root, &last_key);
 
 	check_btree_footer(cat);
 	return cat;
@@ -382,10 +383,10 @@ struct btree *parse_omap_btree(u64 oid)
 		perror(NULL);
 		exit(1);
 	}
-	omap->root = read_node(le64_to_cpu(raw->om_tree_oid));
 	omap->omap_root = NULL; /* The omap doesn't have an omap of its own */
+	omap->root = read_node(le64_to_cpu(raw->om_tree_oid), omap);
 
-	parse_subtree(omap->root, &last_key, omap);
+	parse_subtree(omap->root, &last_key);
 
 	check_btree_footer(omap);
 	return omap;
@@ -675,9 +676,10 @@ static int node_query(struct query *query)
  */
 int btree_query(struct query **query)
 {
-	struct node *node;
+	struct node *node = (*query)->node;
 	struct query *parent;
-	u64 child_id, child_blk;
+	struct btree *btree = node->btree;
+	u64 child_id;
 	int err;
 
 next_node:
@@ -703,24 +705,9 @@ next_node:
 	if (node_is_leaf((*query)->node)) /* All done */
 		return 0;
 
-	child_id = child_from_query(*query);
-
-	/*
-	 * The omap maps a node id into a block number. The nodes
-	 * of the omap itself do not need this translation.
-	 */
-	if ((*query)->flags & QUERY_OMAP)
-		child_blk = child_id;
-	else
-		child_blk = omap_lookup_block(sb->s_omap->root, child_id);
-
 	/* Now go a level deeper and search the child */
-	node = read_node(child_blk);
-
-	if (node->object.oid != child_id) {
-		report("B-tree", "wrong object id on block number 0x%llx.",
-		       (unsigned long long)child_blk);
-	}
+	child_id = child_from_query(*query);
+	node = read_node(child_id, btree);
 
 	if ((*query)->flags & QUERY_MULTIPLE) {
 		/*
