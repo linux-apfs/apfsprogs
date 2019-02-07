@@ -121,6 +121,9 @@ struct node {
 	int free;		/* Offset of the free area in the block */
 	int data;		/* Offset of the data area in the block */
 
+	u8 *free_key_bmap;	/* Free space bitmap for the key area */
+	u8 *free_val_bmap;	/* Free space bitmap for the value area */
+
 	struct btree *btree;			/* Btree the node belongs to */
 	struct apfs_btree_node_phys *raw;	/* Raw node in memory */
 	struct object object;			/* Object holding the node */

@@ -4,8 +4,10 @@
  * Copyright (C) 2018 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/mman.h>
 #include "apfsck.h"
 #include "btree.h"
@@ -42,6 +44,148 @@ static bool node_is_valid(struct node *node)
 }
 
 /**
+ * node_parse_key_free_list - Parse a node's free key list into a bitmap
+ * @node: the node to parse
+ *
+ * The bitmap will be set in @node->free_key_bmap.
+ */
+static void node_parse_key_free_list(struct node *node)
+{
+	struct apfs_nloc *free = &node->raw->btn_key_free_list;
+	void *area_raw = (void *)node->raw + node->key;
+	int area_len = node->free - node->key;
+	int total = le16_to_cpu(free->len);
+	int off;
+
+	/* Each bit represents a byte in the key area */
+	node->free_key_bmap = malloc((area_len + 7) / 8);
+	if (!node->free_key_bmap) {
+		perror(NULL);
+		exit(1);
+	}
+	memset(node->free_key_bmap, 0xFF, (area_len + 7) / 8);
+
+	off = le16_to_cpu(free->off);
+	while (total > 0) {
+		int len, i;
+
+		/* Tiny free areas may not be in the list */
+		if (off == APFS_BTOFF_INVALID)
+			break;
+
+		if (off + sizeof(*free) > area_len)
+			report("B-tree node",
+			       "no room for free list entry in key area.");
+
+		free = area_raw + off;
+		len = le16_to_cpu(free->len);
+		if (len < sizeof(*free))
+			report("B-tree node", "free key is too small.");
+
+		if (off + len > area_len)
+			report("B-tree node", "free key is out-of-bounds.");
+
+		for (i = off; i < off + len; ++i) {
+			u8 *byte = node->free_key_bmap + i / 8;
+			u8 flag = 1 << i % 8;
+
+			if (!(*byte & flag))
+				report("B-tree node",
+				       "byte listed twice in free key list.");
+			*byte ^= flag;
+		}
+		total -= len;
+
+		off = le16_to_cpu(free->off);
+	}
+
+	if (off != APFS_BTOFF_INVALID)
+		report("B-tree node", "bad last key in free list.");
+}
+
+/**
+ * node_parse_val_free_list - Parse a node's free value list into a bitmap
+ * @node: the node to parse
+ *
+ * The bitmap will be set in @node->free_val_bmap.
+ */
+static void node_parse_val_free_list(struct node *node)
+{
+	struct apfs_nloc *free = &node->raw->btn_val_free_list;
+	void *end_raw = node->raw;
+	int area_len;
+	int total = le16_to_cpu(free->len);
+	int off;
+
+	/* Only the root has a footer */
+	area_len = sb->s_blocksize - node->data -
+		   (node_is_root(node) ? sizeof(struct apfs_btree_info) : 0);
+	end_raw = (void *)node->raw + node->data + area_len;
+
+	/* Each bit represents a byte in the value area */
+	node->free_val_bmap = malloc((area_len + 7) / 8);
+	if (!node->free_val_bmap) {
+		perror(NULL);
+		exit(1);
+	}
+	memset(node->free_val_bmap, 0xFF, (area_len + 7) / 8);
+
+	off = le16_to_cpu(free->off);
+	while (total > 0) {
+		int len, i;
+
+		/* Tiny free areas may not be in the list */
+		if (off == APFS_BTOFF_INVALID)
+			break;
+
+		if (off < sizeof(*free))
+			report("B-tree node",
+			       "no room for free list entry in value area.");
+
+		free = end_raw - off;
+		len = le16_to_cpu(free->len);
+		if (len < sizeof(*free))
+			report("B-tree node", "free value is too small.");
+
+		if (area_len < off || len > off)
+			report("B-tree node", "free value is out-of-bounds.");
+
+		for (i = area_len - off; i < area_len - off + len; ++i) {
+			u8 *byte = node->free_val_bmap + i / 8;
+			u8 flag = 1 << i % 8;
+
+			if (!(*byte & flag))
+				report("B-tree node",
+				       "byte listed twice in free value list.");
+			*byte ^= flag;
+		}
+		total -= len;
+
+		off = le16_to_cpu(free->off);
+	}
+
+	if (off != APFS_BTOFF_INVALID)
+		report("B-tree node", "bad last value in free list.");
+}
+
+/**
+ * node_parse_free_lists - Parse a node's free space linked lists into bitmaps
+ * @node: the node to parse
+ *
+ * The bitmaps will be set in @node->free_key_bmap and @free_val_bmap.
+ * TODO: should we check that the free space in the node is zeroed?
+ */
+static void node_parse_free_lists(struct node *node)
+{
+	assert(node->raw);
+	assert(!node->free_key_bmap);
+	assert(!node->free_val_bmap);
+
+	node_parse_key_free_list(node);
+	node_parse_val_free_list(node);
+}
+
+/**
  * read_node - Read a node header from disk
  * @oid:	object id for the node
  * @btree:	tree structure, with the omap_root already set
@@ -66,12 +210,13 @@ static struct node *read_node(u64 oid, struct btree *btree)
 		exit(1);
 	}
 
-	node = malloc(sizeof(*node));
+	node = calloc(1, sizeof(*node));
 	if (!node) {
 		perror(NULL);
 		exit(1);
 	}
 	node->btree = btree;
+	node->raw = raw;
 
 	node->level = le16_to_cpu(raw->btn_level);
 	node->flags = le16_to_cpu(raw->btn_flags);
@@ -97,7 +242,8 @@ static struct node *read_node(u64 oid, struct btree *btree)
 		       (unsigned long long)bno);
 	}
 
-	node->raw = raw;
+	node_parse_free_lists(node);
+
 	return node;
 }
 
@@ -113,6 +259,8 @@ static void node_free(struct node *node)
 	if (node_is_root(node))
 		return;	/* The root nodes are needed by the sb until the end */
 	munmap(node->raw, sb->s_blocksize);
+	free(node->free_key_bmap);
+	free(node->free_val_bmap);
 	free(node);
 }
 
