@@ -169,17 +169,44 @@ static void node_parse_val_free_list(struct node *node)
 }
 
 /**
- * node_parse_free_lists - Parse a node's free space linked lists into bitmaps
+ * node_prepare_bitmaps - Do the basic setup of the nodes allocation bitmaps
  * @node: the node to parse
  *
- * The bitmaps will be set in @node->free_key_bmap and @free_val_bmap.
+ * The @node->free_key_bmap and @free_val_bmap bitmaps will be set entirely
+ * from the information in the linked lists.  The @node->used_key_bmap and
+ * @node->used_val_bmap will only be allocated, to be set later when parsing
+ * the keys.
+ *
  * TODO: should we check that the free space in the node is zeroed?
  */
-static void node_parse_free_lists(struct node *node)
+static void node_prepare_bitmaps(struct node *node)
 {
+	int keys_len;
+	int values_len;
+
 	assert(node->raw);
 	assert(!node->free_key_bmap);
 	assert(!node->free_val_bmap);
+
+	keys_len = node->free - node->key;
+
+	/* Each bit represents a byte in the key area */
+	node->used_key_bmap = calloc(1, (keys_len + 7) / 8);
+	if (!node->used_key_bmap) {
+		perror(NULL);
+		exit(1);
+	}
+
+	/* Only the root has a footer */
+	values_len = sb->s_blocksize - node->data -
+		     (node_is_root(node) ? sizeof(struct apfs_btree_info) : 0);
+
+	/* Each bit represents a byte in the value area */
+	node->used_val_bmap = calloc(1, (values_len + 7) / 8);
+	if (!node->used_val_bmap) {
+		perror(NULL);
+		exit(1);
+	}
 
 	node_parse_key_free_list(node);
 	node_parse_val_free_list(node);
@@ -242,7 +269,7 @@ static struct node *read_node(u64 oid, struct btree *btree)
 		       (unsigned long long)bno);
 	}
 
-	node_parse_free_lists(node);
+	node_prepare_bitmaps(node);
 
 	return node;
 }
@@ -261,6 +288,8 @@ static void node_free(struct node *node)
 	munmap(node->raw, sb->s_blocksize);
 	free(node->free_key_bmap);
 	free(node->free_val_bmap);
+	free(node->used_key_bmap);
+	free(node->used_val_bmap);
 	free(node);
 }
 
@@ -358,6 +387,28 @@ static int node_locate_data(struct node *node, int index, int *off)
 }
 
 /**
+ * bmap_mark_as_used - Mark a region of a node as used in the allocation bitmap
+ * @bitmap:	bitmap to update
+ * @off:	offset of the region, relative to its area in the node
+ * @len:	length of the region in the node
+ */
+static void bmap_mark_as_used(u8 *bitmap, int off, int len)
+{
+	u8 *byte;
+	u8 flag;
+	int i;
+
+	for (i = off; i < off + len; ++i) {
+		byte = bitmap + i / 8;
+		flag = 1 << i % 8;
+
+		if (*byte & flag)
+			report("B-tree node", "overlapping record data.");
+		*byte |= flag;
+	}
+}
+
+/**
  * parse_subtree - Parse a subtree and check for corruption
  * @root:	root node of the subtree
  * @last_key:	parent key, that must come before all the keys in this subtree;
@@ -391,6 +442,7 @@ static void parse_subtree(struct node *root, struct key *last_key)
 		len = node_locate_key(root, i, &off);
 		if (len > btree->longest_key)
 			btree->longest_key = len;
+		bmap_mark_as_used(root->used_key_bmap, off - root->key, len);
 
 		if (btree_is_omap(btree))
 			read_omap_key(raw + off, len, &curr_key);
@@ -406,6 +458,7 @@ static void parse_subtree(struct node *root, struct key *last_key)
 		*last_key = curr_key;
 
 		len = node_locate_data(root, i, &off);
+		bmap_mark_as_used(root->used_val_bmap, off - root->data, len);
 
 		if (node_is_leaf(root)) {
 			if (len > btree->longest_val)

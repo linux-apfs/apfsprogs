@@ -123,6 +123,8 @@ struct node {
 
 	u8 *free_key_bmap;	/* Free space bitmap for the key area */
 	u8 *free_val_bmap;	/* Free space bitmap for the value area */
+	u8 *used_key_bmap;	/* Used space bitmap for the key area */
+	u8 *used_val_bmap;	/* Used space bitmap for the value area */
 
 	struct btree *btree;			/* Btree the node belongs to */
 	struct apfs_btree_node_phys *raw;	/* Raw node in memory */
