@@ -271,13 +271,13 @@ static void node_free(struct node *node)
  * @off:	on return will hold the offset in the block
  *
  * Returns the length of the key. The function checks that this length fits
- * within the block; callers must use the returned value to make sure they
+ * within the key area; callers must use the returned value to make sure they
  * never operate outside its bounds.
  */
 static int node_locate_key(struct node *node, int index, int *off)
 {
 	struct apfs_btree_node_phys *raw;
-	int len;
+	int len, off_in_area;
 
 	if (index >= node->records)
 		report("B-tree node", "requested index out-of-bounds.");
@@ -288,20 +288,21 @@ static int node_locate_key(struct node *node, int index, int *off)
 
 		entry = (struct apfs_kvoff *)raw->btn_data + index;
 		len = 16;
-		/* Translate offset in key area to offset in block */
-		*off = node->key + le16_to_cpu(entry->k);
+		off_in_area = le16_to_cpu(entry->k);
 	} else {
 		/* These node types have variable length keys and data */
 		struct apfs_kvloc *entry;
 
 		entry = (struct apfs_kvloc *)raw->btn_data + index;
 		len = le16_to_cpu(entry->k.len);
-		/* Translate offset in key area to offset in block */
-		*off = node->key + le16_to_cpu(entry->k.off);
+		off_in_area = le16_to_cpu(entry->k.off);
 	}
 
-	if (*off + len > sb->s_blocksize)
+	/* Translate offset in key area to offset in block */
+	*off = node->key + off_in_area;
+	if (*off + len > node->free)
 		report("B-tree", "key is out-of-bounds.");
+
 	return len;
 }
 
@@ -312,16 +313,20 @@ static int node_locate_key(struct node *node, int index, int *off)
  * @off:	on return will hold the offset in the block
  *
  * Returns the length of the data. The function checks that this length fits
- * within the block; callers must use the returned value to make sure they
+ * within the value area; callers must use the returned value to make sure they
  * never operate outside its bounds.
  */
 static int node_locate_data(struct node *node, int index, int *off)
 {
 	struct apfs_btree_node_phys *raw;
-	int len;
+	int len, off_in_area, area_len;
 
 	if (index >= node->records)
 		report("B-tree", "requested index out-of-bounds.");
+
+	/* Only the root has a footer */
+	area_len = sb->s_blocksize - node->data -
+		   (node_is_root(node) ? sizeof(struct apfs_btree_info) : 0);
 
 	raw = node->raw;
 	if (node_has_fixed_kv_size(node)) {
@@ -331,34 +336,24 @@ static int node_locate_data(struct node *node, int index, int *off)
 		entry = (struct apfs_kvoff *)raw->btn_data + index;
 		/* Node type decides length */
 		len = node_is_leaf(node) ? 16 : 8;
-		/*
-		 * Data offsets are counted backwards from the end of the
-		 * block, or from the beginning of the footer when it exists
-		 */
-		if (node_is_root(node)) /* has footer */
-			*off = sb->s_blocksize - sizeof(struct apfs_btree_info)
-					- le16_to_cpu(entry->v);
-		else
-			*off = sb->s_blocksize - le16_to_cpu(entry->v);
+
+		/* Value offsets are backwards from the end of the value area */
+		off_in_area = area_len - le16_to_cpu(entry->v);
 	} else {
 		/* These node types have variable length keys and data */
 		struct apfs_kvloc *entry;
 
 		entry = (struct apfs_kvloc *)raw->btn_data + index;
 		len = le16_to_cpu(entry->v.len);
-		/*
-		 * Data offsets are counted backwards from the end of the
-		 * block, or from the beginning of the footer when it exists
-		 */
-		if (node_is_root(node)) /* has footer */
-			*off = sb->s_blocksize - sizeof(struct apfs_btree_info)
-					- le16_to_cpu(entry->v.off);
-		else
-			*off = sb->s_blocksize - le16_to_cpu(entry->v.off);
+
+		/* Value offsets are backwards from the end of the value area */
+		off_in_area = area_len - le16_to_cpu(entry->v.off);
 	}
 
-	if (*off < 0 || *off + len > sb->s_blocksize)
+	*off = node->data + off_in_area;
+	if (*off < node->data || off_in_area >= area_len)
 		report("B-tree", "value is out-of-bounds.");
+
 	return len;
 }
 
