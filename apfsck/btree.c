@@ -409,6 +409,90 @@ static void bmap_mark_as_used(u8 *bitmap, int off, int len)
 }
 
 /**
+ * compare_bmaps - Compare record allocation bitmaps for free and used space
+ * @free_bmap:	bitmap compiled from the free space linked list
+ * @used_bmap:	bitmap compiled from the table of contents
+ * @area_len:	length of the area to check in the node
+ *
+ * Verifies that @free_bmap and @used_bmap are consistent, and returns the
+ * total number of free bytes (including those not counted in @free_bmap due
+ * to fragmentation).
+ */
+static int compare_bmaps(u8 *free_bmap, u8 *used_bmap, int area_len)
+{
+	int unused = 0;
+	int i, j;
+
+	for (i = 0; i < area_len / 8; ++i) {
+		for (j = 0; j < 8; ++j) {
+			u8 mask = 1 << j;
+
+			if (!(used_bmap[i] & mask))
+				++unused;
+		}
+
+		if ((free_bmap[i] | used_bmap[i]) != free_bmap[i])
+			report("B-tree node",
+			       "used record space listed as free.");
+	}
+
+	/* Last byte has some undefined bits by the end, so be careful */
+	for (j = 0; j < area_len % 8; ++j) {
+		u8 mask = 1 << j;
+
+		if (!(used_bmap[area_len / 8] & mask))
+			++unused;
+		if (used_bmap[area_len / 8] & mask &&
+		    !(free_bmap[area_len / 8] & mask))
+			report("B-tree node",
+			       "used record space listed as free.");
+	}
+
+	return unused;
+}
+
+/**
+ * node_compare_bmaps - Check consistency of the allocation bitmaps for a node
+ * @node: node to check
+ *
+ * Verifies that the bitmaps built from the free lists match the actual unused
+ * space bitmaps, built from the table of contents.  This function shouldn't be
+ * called, of course, until all the bitmaps are assembled.
+ */
+static void node_compare_bmaps(struct node *node)
+{
+	struct apfs_nloc *free_head;
+	int area_len;
+	int free_count;
+
+	/*
+	 * First check the key area.
+	 */
+	free_head = &node->raw->btn_key_free_list;
+
+	area_len = node->free - node->key;
+	free_count = compare_bmaps(node->free_key_bmap, node->used_key_bmap,
+				   area_len);
+
+	if (free_count != le16_to_cpu(free_head->len))
+		report("B-tree", "wrong free space total for key area.");
+
+	/*
+	 * Now check the value area.
+	 */
+	free_head = &node->raw->btn_val_free_list;
+
+	/* Only the root has a footer */
+	area_len = sb->s_blocksize - node->data -
+		   (node_is_root(node) ? sizeof(struct apfs_btree_info) : 0);
+	free_count = compare_bmaps(node->free_val_bmap, node->used_val_bmap,
+				   area_len);
+
+	if (free_count != le16_to_cpu(free_head->len))
+		report("B-tree", "wrong free space total for value area.");
+}
+
+/**
  * parse_subtree - Parse a subtree and check for corruption
  * @root:	root node of the subtree
  * @last_key:	parent key, that must come before all the keys in this subtree;
@@ -479,6 +563,9 @@ static void parse_subtree(struct node *root, struct key *last_key)
 		parse_subtree(child, last_key);
 		free(child);
 	}
+
+	/* All records of @root are processed, so it's a good time for this */
+	node_compare_bmaps(root);
 }
 
 /**
