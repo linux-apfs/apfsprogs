@@ -117,6 +117,7 @@ struct node {
 	u32 records;		/* Number of records in the node */
 	int level;		/* Number of child levels below this node */
 
+	int toc;		/* Offset of the TOC in the block */
 	int key;		/* Offset of the key area in the block */
 	int free;		/* Offset of the free area in the block */
 	int data;		/* Offset of the data area in the block */

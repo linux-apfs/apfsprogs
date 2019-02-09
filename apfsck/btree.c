@@ -19,27 +19,27 @@
 /**
  * node_is_valid - Check basic sanity of the node index
  * @node:	node to check
- *
- * Verifies that the node index fits in a single block, and that the number
- * of records fits in the index. Without this check a crafted filesystem could
- * pretend to have too many records, and calls to node_locate_key() and
- * node_locate_data() would read beyond the limits of the node.
  */
 static bool node_is_valid(struct node *node)
 {
 	int records = node->records;
-	int index_size = node->key - sizeof(struct apfs_btree_node_phys);
+	int index_size = node->key - node->toc;
 	int entry_size;
 
 	if (!records) /* Empty nodes could keep a multiple query spinning */
 		return false;
 
-	if (node->key > sb->s_blocksize)
-		return false;
+	if (node->toc != sizeof(struct apfs_btree_node_phys))
+		return false; /* The table of contents follows the header */
+
+	if (node->data >= sb->s_blocksize -
+		(node_is_root(node) ? sizeof(struct apfs_btree_info) : 0))
+		return false; /* The value area must start before it ends... */
 
 	entry_size = (node_has_fixed_kv_size(node)) ?
 		sizeof(struct apfs_kvoff) : sizeof(struct apfs_kvloc);
 
+	/* All records must have an entry in the table of contents */
 	return records * entry_size <= index_size;
 }
 
@@ -248,8 +248,8 @@ static struct node *read_node(u64 oid, struct btree *btree)
 	node->level = le16_to_cpu(raw->btn_level);
 	node->flags = le16_to_cpu(raw->btn_flags);
 	node->records = le32_to_cpu(raw->btn_nkeys);
-	node->key = sizeof(*raw) + le16_to_cpu(raw->btn_table_space.off)
-				+ le16_to_cpu(raw->btn_table_space.len);
+	node->toc = sizeof(*raw) + le16_to_cpu(raw->btn_table_space.off);
+	node->key = node->toc + le16_to_cpu(raw->btn_table_space.len);
 	node->free = node->key + le16_to_cpu(raw->btn_free_space.off);
 	node->data = node->free + le16_to_cpu(raw->btn_free_space.len);
 
