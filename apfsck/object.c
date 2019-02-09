@@ -6,7 +6,11 @@
  * Checksum routines for an APFS object
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/mman.h>
 #include "apfsck.h"
+#include "btree.h"
 #include "object.h"
 #include "super.h"
 
@@ -36,4 +40,40 @@ int obj_verify_csum(struct apfs_obj_phys *obj)
 	return  (le64_to_cpu(obj->o_cksum) ==
 		 fletcher64((char *) obj + APFS_MAX_CKSUM_SIZE,
 			    sb->s_blocksize - APFS_MAX_CKSUM_SIZE));
+}
+
+/**
+ * read_object - Read an object header from disk
+ * @oid:	object id
+ * @omap:	root of the object map (NULL if no translation is needed)
+ * @obj:	object struct to receive the results (NULL to discard them)
+ *
+ * Returns a pointer to the raw data of the object in memory.
+ */
+void *read_object(u64 oid, struct node *omap, struct object *obj)
+{
+	struct apfs_obj_phys *raw;
+	u64 bno = omap ? omap_lookup_block(omap, oid) : oid;
+
+	raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
+		   fd, bno * sb->s_blocksize);
+	if (raw == MAP_FAILED) {
+		perror(NULL);
+		exit(1);
+	}
+
+	if (oid != le64_to_cpu(raw->o_oid))
+		report("Object header", "wrong object id in block 0x%llx.",
+		       (unsigned long long)bno);
+
+	if (obj) {
+		obj->oid = oid;
+		obj->block_nr = bno;
+	}
+
+	if (!obj_verify_csum(raw)) {
+		report("Object header", "bad checksum in block 0x%llx.",
+		       (unsigned long long)bno);
+	}
+	return raw;
 }

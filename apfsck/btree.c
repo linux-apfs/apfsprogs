@@ -227,19 +227,6 @@ static struct node *read_node(u64 oid, struct btree *btree)
 {
 	struct apfs_btree_node_phys *raw;
 	struct node *node;
-	u64 bno;
-
-	if (btree_is_omap(btree))
-		bno = oid;
-	else
-		bno = omap_lookup_block(btree->omap_root, oid);
-
-	raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-		   fd, bno * sb->s_blocksize);
-	if (raw == MAP_FAILED) {
-		perror(NULL);
-		exit(1);
-	}
 
 	node = calloc(1, sizeof(*node));
 	if (!node) {
@@ -247,7 +234,8 @@ static struct node *read_node(u64 oid, struct btree *btree)
 		exit(1);
 	}
 	node->btree = btree;
-	node->raw = raw;
+
+	raw = node->raw = read_object(oid, btree->omap_root, &node->object);
 
 	node->level = le16_to_cpu(raw->btn_level);
 	node->flags = le16_to_cpu(raw->btn_flags);
@@ -257,20 +245,9 @@ static struct node *read_node(u64 oid, struct btree *btree)
 	node->free = node->key + le16_to_cpu(raw->btn_free_space.off);
 	node->data = node->free + le16_to_cpu(raw->btn_free_space.len);
 
-	if (oid != le64_to_cpu(raw->btn_o.o_oid))
-		report("B-tree node", "wrong object id in block 0x%llx.",
-		       (unsigned long long)bno);
-
-	node->object.oid = oid;
-	node->object.block_nr = bno;
-
-	if (!obj_verify_csum(&raw->btn_o)) {
-		report("B-tree node", "bad checksum in block 0x%llx.",
-		       (unsigned long long)bno);
-	}
 	if (!node_is_valid(node)) {
 		report("B-tree node", "block 0x%llx is not sane.",
-		       (unsigned long long)bno);
+		       (unsigned long long)node->object.block_nr);
 	}
 
 	node_prepare_bitmaps(node);
@@ -665,18 +642,8 @@ struct btree *parse_omap_btree(u64 oid)
 	struct btree *omap;
 	struct key last_key = {0};
 
-	raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-		   fd, oid * sb->s_blocksize);
-	if (raw == MAP_FAILED) {
-		perror(NULL);
-		exit(1);
-	}
-
 	/* Many checks are missing, of course */
-	if (!obj_verify_csum(&raw->om_o))
-		report("Object map", "bad checksum.");
-	if (oid != le64_to_cpu(raw->om_o.o_oid))
-		report("Object map", "wrong object id.");
+	raw = read_object(oid, NULL /* omap */, NULL /* obj */);
 
 	omap = calloc(1, sizeof(*omap));
 	if (!omap) {

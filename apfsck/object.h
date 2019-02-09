@@ -10,6 +10,7 @@
 #include "types.h"
 
 struct super_block;
+struct node;
 
 /* Object identifiers constants */
 #define APFS_OID_NX_SUPERBLOCK			1
@@ -82,5 +83,6 @@ struct object {
 #define APFS_MAX_CKSUM_SIZE 8
 
 extern int obj_verify_csum(struct apfs_obj_phys *obj);
+extern void *read_object(u64 oid, struct node *omap, struct object *obj);
 
 #endif	/* _OBJECT_H */

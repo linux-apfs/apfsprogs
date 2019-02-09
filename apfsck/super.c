@@ -136,28 +136,15 @@ static struct apfs_superblock *map_volume_super(int vol)
 	struct apfs_nx_superblock *msb_raw = sb->s_raw;
 	struct apfs_superblock *vsb_raw;
 	u64 vol_id;
-	u64 vsb_bno;
 
 	vol_id = le64_to_cpu(msb_raw->nx_fs_oid[vol]);
 	if (vol_id == 0)
 		return NULL;
 
-	vsb_bno = omap_lookup_block(sb->s_omap->root, vol_id);
+	vsb_raw = read_object(vol_id, sb->s_omap->root, NULL /* obj */);
 
-	vsb_raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-		       fd, vsb_bno * sb->s_blocksize);
-	if (vsb_raw == MAP_FAILED) {
-		perror(NULL);
-		exit(1);
-	}
-
-	if (le64_to_cpu(vsb_raw->apfs_o.o_oid) != vol_id)
-		report("Volume superblock", "wrong object id.");
 	if (le32_to_cpu(vsb_raw->apfs_magic) != APFS_MAGIC)
 		report("Volume superblock", "wrong magic.");
-	if (!obj_verify_csum(&vsb_raw->apfs_o))
-		report("Volume superblock", "bad checksum.");
-
 	return vsb_raw;
 }
 
