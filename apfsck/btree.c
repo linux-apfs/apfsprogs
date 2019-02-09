@@ -22,9 +22,13 @@
  */
 static bool node_is_valid(struct node *node)
 {
+	u16 flags = node->flags;
 	int records = node->records;
 	int index_size = node->key - node->toc;
 	int entry_size;
+
+	if ((flags & APFS_BTNODE_MASK) != flags)
+		return false;
 
 	if (!records) /* Empty nodes could keep a multiple query spinning */
 		return false;
