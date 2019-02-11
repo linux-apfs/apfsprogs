@@ -46,7 +46,7 @@ int obj_verify_csum(struct apfs_obj_phys *obj)
  * read_object - Read an object header from disk
  * @oid:	object id
  * @omap:	root of the object map (NULL if no translation is needed)
- * @obj:	object struct to receive the results (NULL to discard them)
+ * @obj:	object struct to receive the results
  *
  * Returns a pointer to the raw data of the object in memory.
  */
@@ -75,10 +75,9 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 		report("Object header", "bad transaction id in block 0x%llx.",
 		       (unsigned long long)bno);
 
-	if (obj) {
-		obj->oid = oid;
-		obj->block_nr = bno;
-	}
+	obj->oid = oid;
+	obj->block_nr = bno;
+	obj->type = le32_to_cpu(raw->o_type) & APFS_OBJECT_TYPE_MASK;
 
 	if (!obj_verify_csum(raw)) {
 		report("Object header", "bad checksum in block 0x%llx.",

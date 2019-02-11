@@ -136,13 +136,16 @@ static struct apfs_superblock *map_volume_super(int vol)
 {
 	struct apfs_nx_superblock *msb_raw = sb->s_raw;
 	struct apfs_superblock *vsb_raw;
+	struct object obj;
 	u64 vol_id;
 
 	vol_id = le64_to_cpu(msb_raw->nx_fs_oid[vol]);
 	if (vol_id == 0)
 		return NULL;
 
-	vsb_raw = read_object(vol_id, sb->s_omap->root, NULL /* obj */);
+	vsb_raw = read_object(vol_id, sb->s_omap->root, &obj);
+	if (obj.type != APFS_OBJECT_TYPE_FS)
+		report("Volume superblock", "wrong object type.");
 
 	if (le32_to_cpu(vsb_raw->apfs_magic) != APFS_MAGIC)
 		report("Volume superblock", "wrong magic.");
