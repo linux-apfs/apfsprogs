@@ -56,6 +56,8 @@ static struct apfs_nx_superblock *read_super_copy(void)
 		report("Block zero", "wrong magic.");
 	if (!obj_verify_csum(&msb_raw->nx_o))
 		report("Block zero", "bad checksum.");
+	if (le64_to_cpu(msb_raw->nx_o.o_oid) != APFS_OID_NX_SUPERBLOCK)
+		report("Block zero", "bad object id.");
 
 	return msb_raw;
 }
