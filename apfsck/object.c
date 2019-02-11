@@ -54,6 +54,7 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 {
 	struct apfs_obj_phys *raw;
 	u64 bno = omap ? omap_lookup_block(omap, oid) : oid;
+	u64 xid;
 
 	raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
 		   fd, bno * sb->s_blocksize);
@@ -64,6 +65,11 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 
 	if (oid != le64_to_cpu(raw->o_oid))
 		report("Object header", "wrong object id in block 0x%llx.",
+		       (unsigned long long)bno);
+
+	xid = le64_to_cpu(raw->o_xid);
+	if (!xid || sb->s_xid < xid)
+		report("Object header", "bad transaction id in block 0x%llx.",
 		       (unsigned long long)bno);
 
 	if (obj) {

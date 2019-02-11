@@ -69,7 +69,6 @@ static void map_main_super(void)
 {
 	struct apfs_nx_superblock *msb_raw;
 	struct apfs_nx_superblock *desc_raw = NULL;
-	u64 xid;
 	u64 desc_base;
 	u32 desc_blocks;
 	int i;
@@ -90,7 +89,7 @@ static void map_main_super(void)
 
 	/* Now we go through the checkpoints one by one */
 	sb->s_raw = NULL;
-	xid = le64_to_cpu(msb_raw->nx_o.o_xid);
+	sb->s_xid = le64_to_cpu(msb_raw->nx_o.o_xid);
 	for (i = 0; i < desc_blocks; ++i) {
 		if (desc_raw)
 			munmap(desc_raw, sb->s_blocksize);
@@ -104,12 +103,12 @@ static void map_main_super(void)
 
 		if (le32_to_cpu(desc_raw->nx_magic) != APFS_NX_MAGIC)
 			continue; /* Not a superblock */
-		if (le64_to_cpu(desc_raw->nx_o.o_xid) < xid)
+		if (le64_to_cpu(desc_raw->nx_o.o_xid) < sb->s_xid)
 			continue; /* Old */
 		if (!obj_verify_csum(&desc_raw->nx_o))
 			continue; /* Corrupted */
 
-		xid = le64_to_cpu(desc_raw->nx_o.o_xid);
+		sb->s_xid = le64_to_cpu(desc_raw->nx_o.o_xid);
 		if (sb->s_raw)
 			munmap(sb->s_raw, sb->s_blocksize);
 		sb->s_raw = desc_raw;
@@ -119,7 +118,7 @@ static void map_main_super(void)
 	if (!sb->s_raw)
 		report("Checkpoint descriptors", "latest is missing.");
 	/* TODO: the latest checkpoint and block zero are somehow different? */
-	if (xid != le64_to_cpu(msb_raw->nx_o.o_xid))
+	if (sb->s_xid != le64_to_cpu(msb_raw->nx_o.o_xid))
 		report("Block zero", "filesystem was not unmounted cleanly.");
 	munmap(msb_raw, sb->s_blocksize);
 }
