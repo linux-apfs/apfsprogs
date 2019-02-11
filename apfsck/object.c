@@ -55,6 +55,7 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 	struct apfs_obj_phys *raw;
 	u64 bno = omap ? omap_lookup_block(omap, oid) : oid;
 	u64 xid;
+	u32 storage_type;
 
 	raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
 		   fd, bno * sb->s_blocksize);
@@ -78,6 +79,20 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 	obj->oid = oid;
 	obj->block_nr = bno;
 	obj->type = le32_to_cpu(raw->o_type) & APFS_OBJECT_TYPE_MASK;
+	obj->flags = le32_to_cpu(raw->o_type) & APFS_OBJECT_TYPE_FLAGS_MASK;
+
+	/* TODO: OBJ_ENCRYPTED, OBJ_NOHEADER */
+	if ((obj->flags & APFS_OBJECT_TYPE_FLAGS_DEFINED_MASK) != obj->flags)
+		report("Object header", "undefined flag in use.");
+	if (obj->flags & APFS_OBJ_NONPERSISTENT)
+		report("Object header", "nonpersistent flag is set.");
+
+	/* TODO: ephemeral objects? */
+	storage_type = obj->flags & APFS_OBJ_STORAGETYPE_MASK;
+	if (omap && storage_type != APFS_OBJ_VIRTUAL)
+		report("Object header", "wrong flag for virtual object.");
+	if (!omap && storage_type != APFS_OBJ_PHYSICAL)
+		report("Object header", "wrong flag for physical object.");
 
 	if (!obj_verify_csum(raw)) {
 		report("Object header", "bad checksum in block 0x%llx.",

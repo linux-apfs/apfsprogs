@@ -79,6 +79,7 @@ struct object {
 	u64 block_nr;
 	u64 oid;	/* Often the same as the block number */
 	u32 type;
+	u32 flags;
 };
 
 #define APFS_MAX_CKSUM_SIZE 8
