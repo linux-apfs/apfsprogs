@@ -258,6 +258,7 @@ struct volume_superblock {
 	struct apfs_superblock *v_raw;
 	struct btree *v_omap;
 	struct btree *v_cat;
+	struct object v_obj;		/* Object holding the volume sb */
 };
 
 /* Superblock data in memory */

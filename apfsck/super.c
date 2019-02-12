@@ -128,30 +128,30 @@ static void map_main_super(void)
 /**
  * map_volume_super - Find the volume superblock and map it into memory
  * @vol:	volume number
+ * @vsb:	volume superblock struct to receive the results
  *
  * Returns the in-memory location of the volume superblock, or NULL if there
  * is no volume with this number.
  */
-static struct apfs_superblock *map_volume_super(int vol)
+static struct apfs_superblock *map_volume_super(int vol,
+						struct volume_superblock *vsb)
 {
 	struct apfs_nx_superblock *msb_raw = sb->s_raw;
-	struct apfs_superblock *vsb_raw;
-	struct object obj;
 	u64 vol_id;
 
 	vol_id = le64_to_cpu(msb_raw->nx_fs_oid[vol]);
 	if (vol_id == 0)
 		return NULL;
 
-	vsb_raw = read_object(vol_id, sb->s_omap->root, &obj);
-	if (obj.type != APFS_OBJECT_TYPE_FS)
+	vsb->v_raw = read_object(vol_id, sb->s_omap->root, &vsb->v_obj);
+	if (vsb->v_obj.type != APFS_OBJECT_TYPE_FS)
 		report("Volume superblock", "wrong object type.");
-	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
+	if (vsb->v_obj.subtype != APFS_OBJECT_TYPE_INVALID)
 		report("Volume superblock", "wrong object subtype.");
 
-	if (le32_to_cpu(vsb_raw->apfs_magic) != APFS_MAGIC)
+	if (le32_to_cpu(vsb->v_raw->apfs_magic) != APFS_MAGIC)
 		report("Volume superblock", "wrong magic.");
-	return vsb_raw;
+	return vsb->v_raw;
 }
 
 /**
@@ -174,16 +174,17 @@ void parse_super(void)
 	for (vol = 0; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol) {
 		struct apfs_superblock *vsb_raw;
 
-		vsb_raw = map_volume_super(vol);
-		if (!vsb_raw)
-			break;
-
 		vsb = malloc(sizeof(*vsb));
 		if (!vsb) {
 			perror(NULL);
 			exit(1);
 		}
-		vsb->v_raw = vsb_raw;
+
+		vsb_raw = map_volume_super(vol, vsb);
+		if (!vsb_raw) {
+			free(vsb);
+			break;
+		}
 
 		/* Check for corruption in the volume object map... */
 		vsb->v_omap = parse_omap_btree(
