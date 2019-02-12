@@ -146,6 +146,8 @@ static struct apfs_superblock *map_volume_super(int vol)
 	vsb_raw = read_object(vol_id, sb->s_omap->root, &obj);
 	if (obj.type != APFS_OBJECT_TYPE_FS)
 		report("Volume superblock", "wrong object type.");
+	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
+		report("Volume superblock", "wrong object subtype.");
 
 	if (le32_to_cpu(vsb_raw->apfs_magic) != APFS_MAGIC)
 		report("Volume superblock", "wrong magic.");

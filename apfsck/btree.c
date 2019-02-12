@@ -227,7 +227,7 @@ static struct node *read_node(u64 oid, struct btree *btree)
 {
 	struct apfs_btree_node_phys *raw;
 	struct node *node;
-	u32 obj_type;
+	u32 obj_type, obj_subtype;
 
 	node = calloc(1, sizeof(*node));
 	if (!node) {
@@ -256,6 +256,12 @@ static struct node *read_node(u64 oid, struct btree *btree)
 		report("B-tree node", "wrong object type for root.");
 	if (!node_is_root(node) && obj_type != APFS_OBJECT_TYPE_BTREE_NODE)
 		report("B-tree node", "wrong object type for nonroot.");
+
+	obj_subtype = node->object.subtype;
+	if (btree_is_omap(btree) && obj_subtype != APFS_OBJECT_TYPE_OMAP)
+		report("Object map node", "wrong object subtype.");
+	if (!btree_is_omap(btree) && obj_subtype != APFS_OBJECT_TYPE_FSTREE)
+		report("Catalog node", "wrong object subtype.");
 
 	node_prepare_bitmaps(node);
 
@@ -654,6 +660,8 @@ struct btree *parse_omap_btree(u64 oid)
 	raw = read_object(oid, NULL /* omap */, &obj);
 	if (obj.type != APFS_OBJECT_TYPE_OMAP)
 		report("Object map", "wrong object type.");
+	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
+		report("Object map", "wrong object subtype.");
 
 	omap = calloc(1, sizeof(*omap));
 	if (!omap) {

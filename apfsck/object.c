@@ -80,6 +80,7 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 	obj->block_nr = bno;
 	obj->type = le32_to_cpu(raw->o_type) & APFS_OBJECT_TYPE_MASK;
 	obj->flags = le32_to_cpu(raw->o_type) & APFS_OBJECT_TYPE_FLAGS_MASK;
+	obj->subtype = le32_to_cpu(raw->o_subtype);
 
 	/* TODO: OBJ_ENCRYPTED, OBJ_NOHEADER */
 	if ((obj->flags & APFS_OBJECT_TYPE_FLAGS_DEFINED_MASK) != obj->flags)
