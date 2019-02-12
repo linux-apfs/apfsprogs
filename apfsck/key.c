@@ -22,12 +22,18 @@
  */
 void read_omap_key(void *raw, int size, struct key *key)
 {
+	u64 xid;
+
 	if (size != sizeof(struct apfs_omap_key))
 		report("Object map", "wrong size of key.");
 
+	xid = le64_to_cpu(((struct apfs_omap_key *)raw)->ok_xid);
+	if (!xid)
+		report("Object map", "transaction id for key is zero.");
+
 	key->id = le64_to_cpu(((struct apfs_omap_key *)raw)->ok_oid);
 	key->type = 0;
-	key->number = 0;
+	key->number = xid;
 	key->name = NULL;
 }
 

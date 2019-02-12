@@ -134,13 +134,14 @@ struct key {
 /**
  * init_omap_key - Initialize an in-memory key for an omap query
  * @oid:	object id
+ * @xid:	current transaction id
  * @key:	apfs_key structure to initialize
  */
-static inline void init_omap_key(u64 oid, struct key *key)
+static inline void init_omap_key(u64 oid, u64 xid, struct key *key)
 {
 	key->id = oid;
 	key->type = 0;
-	key->number = 0;
+	key->number = xid;
 	key->name = NULL;
 }
 

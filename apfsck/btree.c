@@ -728,9 +728,9 @@ u64 omap_lookup_block(struct node *tbl, u64 id)
 
 	query = alloc_query(tbl, NULL /* parent */);
 
-	init_omap_key(id, &key);
+	init_omap_key(id, sb->s_xid, &key);
 	query->key = &key;
-	query->flags |= QUERY_OMAP | QUERY_EXACT;
+	query->flags |= QUERY_OMAP;
 
 	if (btree_query(&query)) { /* Omap queries shouldn't fail */
 		report("Object map", "record missing for id 0x%llx.",
