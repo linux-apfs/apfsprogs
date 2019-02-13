@@ -53,9 +53,17 @@ int obj_verify_csum(struct apfs_obj_phys *obj)
 void *read_object(u64 oid, struct node *omap, struct object *obj)
 {
 	struct apfs_obj_phys *raw;
-	u64 bno = omap ? omap_lookup_block(omap, oid) : oid;
+	struct omap_record omap_rec;
+	u64 bno;
 	u64 xid;
 	u32 storage_type;
+
+	if (omap) {
+		omap_lookup(omap, oid, &omap_rec);
+		bno = omap_rec.bno;
+	} else {
+		bno = oid;
+	}
 
 	raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
 		   fd, bno * sb->s_blocksize);
@@ -74,6 +82,10 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 	xid = le64_to_cpu(raw->o_xid);
 	if (!xid || sb->s_xid < xid)
 		report("Object header", "bad transaction id in block 0x%llx.",
+		       (unsigned long long)bno);
+	if (omap && xid != omap_rec.xid)
+		report("Object header",
+		       "transaction id in omap key doesn't match block 0x%llx.",
 		       (unsigned long long)bno);
 
 	obj->oid = oid;

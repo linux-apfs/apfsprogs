@@ -695,36 +695,37 @@ static u64 child_from_query(struct query *query)
 }
 
 /**
- * bno_from_query - Read the block number found by a successful omap query
- * @query:	the query that found the record
- *
- * Returns the block number in the omap record after performing a basic
- * sanity check.
+ * omap_rec_from_query - Read the omap information found by a successful query
+ * @query:	the query for the omap record
+ * @omap_rec:	omap record struct to receive the result
  */
-static u64 bno_from_query(struct query *query)
+static void omap_rec_from_query(struct query *query,
+				struct omap_record *omap_rec)
 {
 	struct apfs_omap_val *omap_val;
+	struct apfs_omap_key *omap_key;
 	void *raw = query->node->raw;
 
 	if (query->len != sizeof(*omap_val))
 		report("Object map record", "wrong size of value.");
 
 	omap_val = (struct apfs_omap_val *)(raw + query->off);
-	return le64_to_cpu(omap_val->ov_paddr);
+	omap_key = (struct apfs_omap_key *)(raw + query->key_off);
+
+	omap_rec->bno = le64_to_cpu(omap_val->ov_paddr);
+	omap_rec->xid = le64_to_cpu(omap_key->ok_xid);
 }
 
 /**
- * omap_lookup_block - Find the block number of a b-tree node from its id
+ * omap_lookup - Find the object map record for an object id
  * @tbl:	Root of the object map to be searched
  * @id:		id of the node
- *
- * Returns the block number.
+ * @omap_rec:	omap record struct to receive the result
  */
-u64 omap_lookup_block(struct node *tbl, u64 id)
+void omap_lookup(struct node *tbl, u64 id, struct omap_record *omap_rec)
 {
 	struct query *query;
 	struct key key;
-	u64 block;
 
 	query = alloc_query(tbl, NULL /* parent */);
 
@@ -737,9 +738,8 @@ u64 omap_lookup_block(struct node *tbl, u64 id)
 		       (unsigned long long)id);
 	}
 
-	block = bno_from_query(query);
+	omap_rec_from_query(query, omap_rec);
 	free_query(query);
-	return block;
 }
 
 /**

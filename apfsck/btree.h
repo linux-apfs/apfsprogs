@@ -37,6 +37,14 @@ struct apfs_omap_val {
 	__le64 ov_paddr;
 } __packed;
 
+/*
+ * Object map record data in memory
+ */
+struct omap_record {
+	u64 bno;
+	u64 xid;
+};
+
 /* B-tree node flags */
 #define APFS_BTNODE_ROOT		0x0001
 #define APFS_BTNODE_LEAF		0x0002
@@ -218,6 +226,6 @@ extern struct query *alloc_query(struct node *node, struct query *parent);
 extern void free_query(struct query *query);
 extern int btree_query(struct query **query);
 extern struct node *omap_read_node(u64 id);
-extern u64 omap_lookup_block(struct node *tbl, u64 id);
+extern void omap_lookup(struct node *tbl, u64 id, struct omap_record *omap_rec);
 
 #endif	/* _BTREE_H */
