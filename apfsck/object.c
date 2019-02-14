@@ -89,6 +89,7 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 		       (unsigned long long)bno);
 
 	obj->oid = oid;
+	obj->xid = xid;
 	obj->block_nr = bno;
 	obj->type = le32_to_cpu(raw->o_type) & APFS_OBJECT_TYPE_MASK;
 	obj->flags = le32_to_cpu(raw->o_type) & APFS_OBJECT_TYPE_FLAGS_MASK;

@@ -522,10 +522,16 @@ static void parse_subtree(struct node *root, struct key *last_key)
 			btree->longest_key = len;
 		bmap_mark_as_used(root->used_key_bmap, off - root->key, len);
 
-		if (btree_is_omap(btree))
+		if (btree_is_omap(btree)) {
 			read_omap_key(raw + off, len, &curr_key);
-		else
+
+			/* When a key is added, the node is updated */
+			if (curr_key.number > root->object.xid)
+				report("Object map",
+				       "node xid is older than key xid.");
+		} else {
 			read_cat_key(raw + off, len, &curr_key);
+		}
 
 		if (keycmp(last_key, &curr_key) > 0)
 			report("B-tree", "keys are out of order.");
