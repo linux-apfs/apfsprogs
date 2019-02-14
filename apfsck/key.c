@@ -63,35 +63,6 @@ static inline u64 cat_cnid(struct apfs_key_header *key)
 }
 
 /**
- * filename_cmp - Normalize and compare two APFS filenames
- * @name1, @name2:	names to compare
- *
- * returns   0 if @name1 and @name2 are equal
- *	   < 0 if @name1 comes before @name2 in the btree
- *	   > 0 if @name1 comes after @name2 in the btree
- */
-static int filename_cmp(const char *name1, const char *name2)
-{
-	struct unicursor cursor1, cursor2;
-	bool case_fold = apfs_is_case_insensitive();
-
-	init_unicursor(&cursor1, name1);
-	init_unicursor(&cursor2, name2);
-
-	while (1) {
-		unicode_t uni1, uni2;
-
-		uni1 = normalize_next(&cursor1, case_fold);
-		uni2 = normalize_next(&cursor2, case_fold);
-
-		if (uni1 != uni2)
-			return uni1 < uni2 ? -1 : 1;
-		if (!uni1)
-			return 0;
-	}
-}
-
-/**
  * keycmp - Compare two keys
  * @k1, @k2:	keys to compare
  *
@@ -110,13 +81,8 @@ int keycmp(struct key *k1, struct key *k2)
 	if (!k1->name) /* Keys of this type have no name */
 		return 0;
 
-	if (k1->type == APFS_TYPE_XATTR) {
-		/* xattr names seem to be always case sensitive */
-		return strcmp(k1->name, k2->name);
-	}
-
-	/* The assumption here is not the same as in the module... */
-	return filename_cmp(k1->name, k2->name);
+	/* Normalization seems to be ignored here, even for directory records */
+	return strcmp(k1->name, k2->name);
 }
 
 /**
