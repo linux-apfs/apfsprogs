@@ -94,7 +94,6 @@ static u32 dentry_hash(const char *name)
 	struct unicursor cursor;
 	bool case_fold = apfs_is_case_insensitive();
 	u32 hash = 0xFFFFFFFF;
-	int namelen;
 
 	init_unicursor(&cursor, name);
 
@@ -108,10 +107,8 @@ static u32 dentry_hash(const char *name)
 		hash = crc32c(hash, &utf32, sizeof(utf32));
 	}
 
-	/* APFS counts the NULL termination for the filename length */
-	namelen = cursor.utf8curr - name;
-
-	return ((hash & 0x3FFFFF) << 10) | (namelen & 0x3FF);
+	/* Leave room for the filename length */
+	return (hash & 0x3FFFFF) << 10;
 }
 
 /**
@@ -131,13 +128,14 @@ static void read_dir_rec_key(void *raw, int size, struct key *key)
 		report("Directory record", "filename lacks NULL-termination.");
 	raw_key = raw;
 
-	key->number = le32_to_cpu(raw_key->name_len_and_hash);
+	/* The filename length is ignored for the ordering, so mask it away */
+	key->number = le32_to_cpu(raw_key->name_len_and_hash) & ~0x3FFU;
 	key->name = (char *)raw_key->name;
 
 	if (key->number != dentry_hash(key->name))
 		report("Directory record", "filename hash is corrupted.");
 
-	namelen = key->number & 0x3FF;
+	namelen = le32_to_cpu(raw_key->name_len_and_hash) & 0x3FFU;
 	if (strlen(key->name) + 1 != namelen) {
 		/* APFS counts the NULL termination for the filename length */
 		report("Directory record", "wrong name length in key.");
