@@ -560,6 +560,12 @@ static void parse_subtree(struct node *root, struct key *last_key)
 		if (node_is_root(child))
 			report("B-tree", "nonroot node is flagged as root.");
 
+		/* When an omap node changes, the parent must update the bno */
+		if (btree_is_omap(btree) &&
+		    root->object.xid < child->object.xid)
+			report("Object map",
+			       "xid of node is older than xid of its child.");
+
 		parse_subtree(child, last_key);
 		free(child);
 	}
