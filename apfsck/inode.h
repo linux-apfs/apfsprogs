@@ -1,0 +1,122 @@
+/*
+ *  apfsprogs/apfsck/inode.h
+ *
+ * Copyright (C) 2018 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
+ */
+
+#ifndef _INODE_H
+#define _INODE_H
+
+#include "types.h"
+
+struct apfs_inode_key;
+
+/* Inode numbers for special inodes */
+#define APFS_INVALID_INO_NUM		0
+
+#define APFS_ROOT_DIR_PARENT		1	/* Root directory parent */
+#define APFS_ROOT_DIR_INO_NUM		2	/* Root directory */
+#define APFS_PRIV_DIR_INO_NUM		3	/* Private directory */
+#define APFS_SNAP_DIR_INO_NUM		6	/* Snapshots metadata */
+
+/* Smallest inode number available for user content */
+#define APFS_MIN_USER_INO_NUM		16
+
+/*
+ * Structure of an inode as stored as a B-tree value
+ */
+struct apfs_inode_val {
+/*00*/	__le64 parent_id;
+	__le64 private_id;
+/*10*/	__le64 create_time;
+	__le64 mod_time;
+	__le64 change_time;
+	__le64 access_time;
+/*30*/	__le64 internal_flags;
+	union {
+		__le32 nchildren;
+		__le32 nlink;
+	};
+	__le32 default_protection_class;
+/*40*/	__le32 write_generation_counter;
+	__le32 bsd_flags;
+	__le32 owner;
+	__le32 group;
+/*50*/	__le16 mode;
+	__le16 pad1;
+	__le64 pad2;
+/*5C*/	u8 xfields[];
+} __packed;
+
+/* Extended field types */
+#define APFS_DREC_EXT_TYPE_SIBLING_ID 1
+
+#define APFS_INO_EXT_TYPE_SNAP_XID 1
+#define APFS_INO_EXT_TYPE_DELTA_TREE_OID 2
+#define APFS_INO_EXT_TYPE_DOCUMENT_ID 3
+#define APFS_INO_EXT_TYPE_NAME 4
+#define APFS_INO_EXT_TYPE_PREV_FSIZE 5
+#define APFS_INO_EXT_TYPE_RESERVED_6 6
+#define APFS_INO_EXT_TYPE_FINDER_INFO 7
+#define APFS_INO_EXT_TYPE_DSTREAM 8
+#define APFS_INO_EXT_TYPE_RESERVED_9 9
+#define APFS_INO_EXT_TYPE_DIR_STATS_KEY 10
+#define APFS_INO_EXT_TYPE_FS_UUID 11
+#define APFS_INO_EXT_TYPE_RESERVED_12 12
+#define APFS_INO_EXT_TYPE_SPARSE_BYTES 13
+#define APFS_INO_EXT_TYPE_RDEV 14
+
+/*
+ * Structure used to store the number and size of extended fields of an inode
+ */
+struct apfs_xf_blob {
+	__le16 xf_num_exts;
+	__le16 xf_used_data;
+	u8 xf_data[];
+} __packed;
+
+/*
+ * Structure used to store an inode's extended field
+ */
+struct apfs_x_field {
+	u8 x_type;
+	u8 x_flags;
+	__le16 x_size;
+} __packed;
+
+/*
+ * Structure of a data stream record
+ */
+struct apfs_dstream_id_val {
+	__le32 refcnt;
+} __packed;
+
+/*
+ * Structure used to store information about a data stream
+ */
+struct apfs_dstream {
+	__le64 size;
+	__le64 alloced_size;
+	__le64 default_crypto_id;
+	__le64 total_bytes_written;
+	__le64 total_bytes_read;
+} __packed;
+
+#define INODE_TABLE_BUCKETS	512	/* So the hash table array fits in 4k */
+
+/*
+ * Inode data in memory
+ */
+struct inode {
+	u64		i_ino;		/* Inode number */
+	bool		i_seen;		/* Has this inode been seen? */
+
+	struct inode	*i_next;	/* Next inode in linked list */
+};
+
+extern struct inode **alloc_inode_table();
+extern void free_inode_table(struct inode **table);
+extern void parse_inode_record(struct apfs_inode_key *key,
+			       struct apfs_inode_val *val, int len);
+
+#endif	/* _INODE_H */

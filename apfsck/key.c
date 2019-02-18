@@ -38,31 +38,6 @@ void read_omap_key(void *raw, int size, struct key *key)
 }
 
 /**
- * cat_type - Read the record type of a catalog key
- * @key: the raw catalog key
- *
- * The record type is stored in the last byte of the cnid field; this function
- * returns that value.
- */
-static inline int cat_type(struct apfs_key_header *key)
-{
-	return (le64_to_cpu(key->obj_id_and_type) & APFS_OBJ_TYPE_MASK)
-			>> APFS_OBJ_TYPE_SHIFT;
-}
-
-/**
- * cat_cnid - Read the cnid value on a catalog key
- * @key: the raw catalog key
- *
- * The cnid value shares the its field with the record type. This function
- * masks that part away and returns the result.
- */
-static inline u64 cat_cnid(struct apfs_key_header *key)
-{
-	return le64_to_cpu(key->obj_id_and_type) & APFS_OBJ_ID_MASK;
-}
-
-/**
  * keycmp - Compare two keys
  * @k1, @k2:	keys to compare
  *

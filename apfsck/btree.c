@@ -11,6 +11,7 @@
 #include <sys/mman.h>
 #include "apfsck.h"
 #include "btree.h"
+#include "inode.h"
 #include "key.h"
 #include "object.h"
 #include "super.h"
@@ -487,6 +488,25 @@ static void node_compare_bmaps(struct node *node)
 }
 
 /**
+ * parse_cat_record - Parse a catalog record value and check for corruption
+ * @key:	pointer to the raw key
+ * @val:	pointer to the raw value
+ * @len:	length of the raw value
+ *
+ * Internal consistency of @key must be checked before calling this function.
+ */
+static void parse_cat_record(void *key, void *val, int len)
+{
+	switch (cat_type(key)) {
+	case APFS_TYPE_INODE:
+		parse_inode_record(key, val, len);
+		break;
+	default:
+		break;
+	}
+}
+
+/**
  * parse_subtree - Parse a subtree and check for corruption
  * @root:	root node of the subtree
  * @last_key:	parent key, that must come before all the keys in this subtree;
@@ -514,6 +534,7 @@ static void parse_subtree(struct node *root, struct key *last_key)
 	for (i = 0; i < root->records; ++i) {
 		struct node *child;
 		void *raw = root->raw;
+		void *raw_key, *raw_val;
 		int off, len;
 		u64 child_id;
 
@@ -521,16 +542,17 @@ static void parse_subtree(struct node *root, struct key *last_key)
 		if (len > btree->longest_key)
 			btree->longest_key = len;
 		bmap_mark_as_used(root->used_key_bmap, off - root->key, len);
+		raw_key = raw + off;
 
 		if (btree_is_omap(btree)) {
-			read_omap_key(raw + off, len, &curr_key);
+			read_omap_key(raw_key, len, &curr_key);
 
 			/* When a key is added, the node is updated */
 			if (curr_key.number > root->object.xid)
 				report("Object map",
 				       "node xid is older than key xid.");
 		} else {
-			read_cat_key(raw + off, len, &curr_key);
+			read_cat_key(raw_key, len, &curr_key);
 		}
 
 		if (keycmp(last_key, &curr_key) > 0)
@@ -543,16 +565,19 @@ static void parse_subtree(struct node *root, struct key *last_key)
 
 		len = node_locate_data(root, i, &off);
 		bmap_mark_as_used(root->used_val_bmap, off - root->data, len);
+		raw_val = raw + off;
 
 		if (node_is_leaf(root)) {
 			if (len > btree->longest_val)
 				btree->longest_val = len;
+			if (!btree_is_omap(btree))
+				parse_cat_record(raw_key, raw_val, len);
 			continue;
 		}
 
 		if (len != 8)
 			report("B-tree", "wrong size of nonleaf record value.");
-		child_id = le64_to_cpu(*(__le64 *)(raw + off));
+		child_id = le64_to_cpu(*(__le64 *)(raw_val));
 		child = read_node(child_id, btree);
 
 		if (child->level != root->level - 1)

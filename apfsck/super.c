@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include "apfsck.h"
 #include "btree.h"
+#include "inode.h"
 #include "object.h"
 #include "types.h"
 #include "super.h"
@@ -179,6 +180,7 @@ void parse_super(void)
 			perror(NULL);
 			exit(1);
 		}
+		vsb->v_inode_table = alloc_inode_table();
 
 		vsb_raw = map_volume_super(vol, vsb);
 		if (!vsb_raw) {
@@ -193,6 +195,9 @@ void parse_super(void)
 		vsb->v_cat = parse_cat_btree(
 				le64_to_cpu(vsb_raw->apfs_root_tree_oid),
 				vsb->v_omap->root);
+
+		free_inode_table(vsb->v_inode_table);
+		vsb->v_inode_table = NULL;
 
 		sb->s_volumes[vol] = vsb;
 	}
