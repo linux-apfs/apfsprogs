@@ -106,4 +106,21 @@ void parse_inode_record(struct apfs_inode_key *key,
 	if (inode->i_seen)
 		report("Catalog", "inode numbers are repeated.");
 	inode->i_seen = true;
+
+	if (inode->i_ino < APFS_MIN_USER_INO_NUM) {
+		switch (inode->i_ino) {
+		case APFS_INVALID_INO_NUM:
+		case APFS_ROOT_DIR_PARENT:
+			report("Inode record", "invalid inode number.");
+		case APFS_ROOT_DIR_INO_NUM:
+		case APFS_PRIV_DIR_INO_NUM:
+		case APFS_SNAP_DIR_INO_NUM:
+			/* All children of this fake parent? TODO: check this */
+			if (le64_to_cpu(val->parent_id) != APFS_ROOT_DIR_PARENT)
+				report("Root inode record", "bad parent id");
+			break;
+		default:
+			report("Inode record", "reserved inode number.");
+		}
+	}
 }
