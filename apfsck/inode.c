@@ -145,4 +145,7 @@ void parse_inode_record(struct apfs_inode_key *key,
 	default:
 		report("Inode record", "invalid file mode.");
 	}
+
+	if (le16_to_cpu(val->pad1) || le64_to_cpu(val->pad2))
+		report("Inode record", "padding should be zeroes.");
 }
