@@ -175,7 +175,7 @@ void parse_super(void)
 	for (vol = 0; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol) {
 		struct apfs_superblock *vsb_raw;
 
-		vsb = malloc(sizeof(*vsb));
+		vsb = calloc(1, sizeof(*vsb));
 		if (!vsb) {
 			perror(NULL);
 			exit(1);
@@ -198,6 +198,20 @@ void parse_super(void)
 
 		free_inode_table(vsb->v_inode_table);
 		vsb->v_inode_table = NULL;
+
+		if (le64_to_cpu(vsb_raw->apfs_num_files) !=
+							vsb->v_file_count)
+			/* Sometimes this is off by one.  TODO: why? */
+			printf("Bad file count, may not be corruption.\n");
+		if (le64_to_cpu(vsb_raw->apfs_num_directories) !=
+							vsb->v_dir_count)
+			report("Volume superblock", "bad directory count.");
+		if (le64_to_cpu(vsb_raw->apfs_num_symlinks) !=
+							vsb->v_symlink_count)
+			report("Volume superblock", "bad symlink count.");
+		if (le64_to_cpu(vsb_raw->apfs_num_other_fsobjects) !=
+							vsb->v_special_count)
+			report("Volume superblock", "bad special file count.");
 
 		sb->s_volumes[vol] = vsb;
 	}

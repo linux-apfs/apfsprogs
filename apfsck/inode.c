@@ -123,4 +123,26 @@ void parse_inode_record(struct apfs_inode_key *key,
 			report("Inode record", "reserved inode number.");
 		}
 	}
+
+	inode->i_mode = le16_to_cpu(val->mode);
+	switch (inode->i_mode & S_IFMT) {
+	case S_IFREG:
+		vsb->v_file_count++;
+		break;
+	case S_IFDIR:
+		if (inode->i_ino >= APFS_MIN_USER_INO_NUM)
+			vsb->v_dir_count++;
+		break;
+	case S_IFLNK:
+		vsb->v_symlink_count++;
+		break;
+	case S_IFSOCK:
+	case S_IFBLK:
+	case S_IFCHR:
+	case S_IFIFO:
+		vsb->v_special_count++;
+		break;
+	default:
+		report("Inode record", "invalid file mode.");
+	}
 }

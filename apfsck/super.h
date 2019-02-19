@@ -259,6 +259,13 @@ struct volume_superblock {
 	struct btree *v_omap;
 	struct btree *v_cat;
 	struct inode **v_inode_table;	/* Hash table listing the inodes */
+
+	/* Volume stats as measured by the fsck */
+	u64 v_file_count;	/* Number of files */
+	u64 v_dir_count;	/* Number of directories */
+	u64 v_symlink_count;	/* Number of symlinks */
+	u64 v_special_count;	/* Number of other filesystem objects */
+
 	struct object v_obj;		/* Object holding the volume sb */
 };
 
