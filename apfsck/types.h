@@ -46,6 +46,8 @@ typedef uint64_t __bitwise __le64;
 #define le64_to_cpu(x)	((__force u64)(__le64)(x))
 
 #define DIV_ROUND_UP(n, d) (((n) + (d) - 1) / (d))
+#define __ROUND_MASK(x, y) ((__typeof__(x))((y)-1))
+#define ROUND_UP(x, y) ((((x)-1) | __ROUND_MASK(x, y))+1)
 
 typedef u32 unicode_t;
 

@@ -6,6 +6,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "apfsck.h"
 #include "inode.h"
 #include "key.h"
@@ -87,6 +88,97 @@ static struct inode *get_inode(u64 ino, struct inode **table)
 }
 
 /**
+ * parse_xfields - Parse and check an inode extended fields
+ * @xblob:	pointer to the beginning of the xfields in the inode value
+ * @len:	length of the xfields
+ *
+ * Internal consistency of @key must be checked before calling this function.
+ */
+static void parse_xfields(struct apfs_xf_blob *xblob, int len)
+{
+	struct apfs_x_field *xfield;
+	char *xval;
+	int xcount;
+	int i;
+
+	if (len == 0) /* No extended fields */
+		return;
+
+	len -= sizeof(*xblob);
+	if (len < 0)
+		report("Inode records", "no room for extended fields.");
+	xcount = le16_to_cpu(xblob->xf_num_exts);
+
+	xfield = (struct apfs_x_field *)xblob->xf_data;
+	xval = (char *)xfield + xcount * sizeof(xfield[0]);
+	len -= xcount * sizeof(xfield[0]);
+	if (len < 0)
+		report("Inode record", "number of xfields cannot fit.");
+
+	/* The official reference seems to be wrong here */
+	if (le16_to_cpu(xblob->xf_used_data) != len)
+		report("Inode record", "value size incompatible with xfields.");
+
+	for (i = 0; i < le16_to_cpu(xblob->xf_num_exts); ++i) {
+		int xlen, xpad_len;
+
+		switch (xfield[i].x_type) {
+		case APFS_INO_EXT_TYPE_FS_UUID:
+			xlen = 16;
+			break;
+		case APFS_INO_EXT_TYPE_SNAP_XID:
+		case APFS_INO_EXT_TYPE_DELTA_TREE_OID:
+		case APFS_INO_EXT_TYPE_PREV_FSIZE:
+		case APFS_INO_EXT_TYPE_SPARSE_BYTES:
+			xlen = 8;
+			break;
+		case APFS_INO_EXT_TYPE_DOCUMENT_ID:
+		case APFS_INO_EXT_TYPE_FINDER_INFO:
+		case APFS_INO_EXT_TYPE_RDEV:
+			xlen = 4;
+			break;
+		case APFS_INO_EXT_TYPE_NAME:
+			xlen = strnlen(xval, len - 1) + 1;
+			if (xval[xlen - 1] != 0)
+				report("Inode xfield",
+				       "name with no null termination");
+			break;
+		case APFS_INO_EXT_TYPE_DSTREAM:
+			xlen = sizeof(struct apfs_dstream);
+			break;
+		case APFS_INO_EXT_TYPE_DIR_STATS_KEY:
+			xlen = sizeof(struct apfs_dir_stats_val);
+			break;
+		case APFS_INO_EXT_TYPE_RESERVED_6:
+		case APFS_INO_EXT_TYPE_RESERVED_9:
+		case APFS_INO_EXT_TYPE_RESERVED_12:
+			report("Inode xfield", "reserved type in use.");
+			break;
+		default:
+			report("Inode xfield", "invalid type.");
+		}
+
+		if (xlen != le16_to_cpu(xfield[i].x_size))
+			report("Inode xfield", "wrong size");
+		len -= xlen;
+		xval += xlen;
+
+		/* Attribute length is padded with zeroes to a multiple of 8 */
+		xpad_len = ROUND_UP(xlen, 8) - xlen;
+		len -= xpad_len;
+		if (len < 0)
+			report("Inode xfield", "does not fit in record value.");
+
+		for (; xpad_len; ++xval, --xpad_len)
+			if (*xval)
+				report("Inode xfield", "non-zero padding.");
+	}
+
+	if (len)
+		report("Inode record", "length of xfields does not add up.");
+}
+
+/**
  * parse_inode_record - Parse an inode record value and check for corruption
  * @key:	pointer to the raw key
  * @val:	pointer to the raw value
@@ -148,4 +240,6 @@ void parse_inode_record(struct apfs_inode_key *key,
 
 	if (le16_to_cpu(val->pad1) || le64_to_cpu(val->pad2))
 		report("Inode record", "padding should be zeroes.");
+
+	parse_xfields((struct apfs_xf_blob *)val->xfields, len - sizeof(*val));
 }

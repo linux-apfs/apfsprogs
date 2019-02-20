@@ -115,6 +115,16 @@ struct apfs_dstream {
 	__le64 total_bytes_read;
 } __packed;
 
+/*
+ * Structure used to store directory information
+ */
+struct apfs_dir_stats_val {
+	__le64 num_children;
+	__le64 total_size;
+	__le64 chained_key;
+	__le64 gen_count;
+} __packed;
+
 #define INODE_TABLE_BUCKETS	512	/* So the hash table array fits in 4k */
 
 /*
