@@ -14,6 +14,23 @@
 #include "types.h"
 
 /**
+ * check_inode_stats - Verify the stats gathered by the fsck vs the metadata
+ * @inode: inode structure to check
+ */
+static void check_inode_stats(struct inode *inode)
+{
+	if ((inode->i_mode & S_IFMT) == S_IFDIR) {
+		if (inode->i_link_count != 1)
+			report("Inode record", "directory has hard links.");
+		if (inode->i_nchildren != inode->i_child_count)
+			report("Inode record", "wrong directory child count.");
+	} else {
+		if (inode->i_nlink != inode->i_link_count)
+			report("Inode record", "wrong link count.");
+	}
+}
+
+/**
  * alloc_inode_table - Allocates and returns an empty inode hash table
  */
 struct inode **alloc_inode_table(void)
@@ -31,6 +48,9 @@ struct inode **alloc_inode_table(void)
 /**
  * free_inode_table - Free the inode hash table and all its inodes
  * @table: table to free
+ *
+ * Also performs some consistency checks that can only be done after the whole
+ * catalog has been parsed.
  */
 void free_inode_table(struct inode **table)
 {
@@ -41,6 +61,8 @@ void free_inode_table(struct inode **table)
 	for (i = 0; i < INODE_TABLE_BUCKETS; ++i) {
 		current = table[i];
 		while (current) {
+			check_inode_stats(current);
+
 			next = current->i_next;
 			free(current);
 			current = next;
@@ -56,7 +78,7 @@ void free_inode_table(struct inode **table)
  *
  * Returns the inode structure, after creating it if necessary.
  */
-static struct inode *get_inode(u64 ino, struct inode **table)
+struct inode *get_inode(u64 ino, struct inode **table)
 {
 	int index = ino % INODE_TABLE_BUCKETS; /* Trivial hash function */
 	struct inode **entry_p = table + index;
@@ -74,7 +96,7 @@ static struct inode *get_inode(u64 ino, struct inode **table)
 		entry = *entry_p;
 	}
 
-	new = malloc(sizeof(*new));
+	new = calloc(1, sizeof(*new));
 	if (!new) {
 		perror(NULL);
 		exit(1);
@@ -237,6 +259,8 @@ void parse_inode_record(struct apfs_inode_key *key,
 	default:
 		report("Inode record", "invalid file mode.");
 	}
+
+	inode->i_nlink = le32_to_cpu(val->nlink);
 
 	if (le16_to_cpu(val->pad1) || le64_to_cpu(val->pad2))
 		report("Inode record", "padding should be zeroes.");

@@ -11,6 +11,7 @@
 #include <sys/mman.h>
 #include "apfsck.h"
 #include "btree.h"
+#include "dir.h"
 #include "inode.h"
 #include "key.h"
 #include "object.h"
@@ -500,6 +501,9 @@ static void parse_cat_record(void *key, void *val, int len)
 	switch (cat_type(key)) {
 	case APFS_TYPE_INODE:
 		parse_inode_record(key, val, len);
+		break;
+	case APFS_TYPE_DIR_REC:
+		parse_dentry_record(key, val, len);
 		break;
 	default:
 		break;

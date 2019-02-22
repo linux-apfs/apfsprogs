@@ -134,13 +134,23 @@ struct inode {
 	u64		i_ino;		/* Inode number */
 	bool		i_seen;		/* Has this inode been seen? */
 
+	/* Inode information read from its record */
 	u16		i_mode;		/* File mode */
+	union {
+		u32	i_nchildren;	/* Number of children of directory */
+		u32	i_nlink;	/* Number of hard links to file */
+	};
+
+	/* Inode stats measured by the fsck */
+	u32	i_child_count;		/* Number of children of directory */
+	u32	i_link_count;		/* Number of dentries for file */
 
 	struct inode	*i_next;	/* Next inode in linked list */
 };
 
 extern struct inode **alloc_inode_table();
 extern void free_inode_table(struct inode **table);
+extern struct inode *get_inode(u64 ino, struct inode **table);
 extern void parse_inode_record(struct apfs_inode_key *key,
 			       struct apfs_inode_val *val, int len);
 
