@@ -212,6 +212,7 @@ void parse_inode_record(struct apfs_inode_key *key,
 			struct apfs_inode_val *val, int len)
 {
 	struct inode *inode;
+	u16 mode, filetype;
 
 	if (len < sizeof(*val))
 		report("Inode record", "value is too small.");
@@ -238,8 +239,15 @@ void parse_inode_record(struct apfs_inode_key *key,
 		}
 	}
 
-	inode->i_mode = le16_to_cpu(val->mode);
-	switch (inode->i_mode & S_IFMT) {
+	mode = le16_to_cpu(val->mode);
+	filetype = mode & S_IFMT;
+
+	/* A dentry may have already set the mode, but only the type bits */
+	if (inode->i_mode && inode->i_mode != filetype)
+		report("Inode record", "file mode doesn't match dentry type.");
+	inode->i_mode = mode;
+
+	switch (filetype) {
 	case S_IFREG:
 		vsb->v_file_count++;
 		break;

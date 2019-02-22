@@ -23,6 +23,7 @@ void parse_dentry_record(struct apfs_drec_hashed_key *key,
 {
 	u64 ino, parent_ino;
 	struct inode *inode, *parent;
+	u16 filetype, dtype;
 
 	if (len < sizeof(*val))
 		report("Dentry record", "value is too small.");
@@ -40,4 +41,16 @@ void parse_dentry_record(struct apfs_drec_hashed_key *key,
 			report("Dentry record", "parent inode not directory.");
 		parent->i_child_count++;
 	}
+
+	dtype = le16_to_cpu(val->flags) & APFS_DREC_TYPE_MASK;
+	if (dtype != le16_to_cpu(val->flags))
+		report("Dentry record", "reserved flags in use.");
+
+	/* The mode may have already been set by the inode or another dentry */
+	filetype = inode->i_mode >> 12;
+	if (filetype && filetype != dtype)
+		report("Dentry record", "file mode doesn't match dentry type.");
+	if (dtype == 0) /* Don't save a 0, that means the mode is not set */
+		report("Dentry record", "invalid dentry type.");
+	inode->i_mode |= dtype << 12;
 }

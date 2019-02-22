@@ -134,7 +134,7 @@ struct inode {
 	u64		i_ino;		/* Inode number */
 	bool		i_seen;		/* Has this inode been seen? */
 
-	/* Inode information read from its record */
+	/* Inode information read from its record (or from its dentries) */
 	u16		i_mode;		/* File mode */
 	union {
 		u32	i_nchildren;	/* Number of children of directory */
