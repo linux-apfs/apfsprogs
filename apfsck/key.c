@@ -236,6 +236,9 @@ void read_cat_key(void *raw, int size, struct key *key)
 	key->id = cat_cnid((struct apfs_key_header *)raw);
 	key->type = cat_type((struct apfs_key_header *)raw);
 
+	if (!key->type || key->type > APFS_TYPE_MAX_VALID)
+		report("Catalog tree", "invalid key type.");
+
 	switch (key->type) {
 	case APFS_TYPE_DIR_REC:
 		read_dir_rec_key(raw, size, key);
