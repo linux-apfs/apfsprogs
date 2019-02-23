@@ -62,8 +62,6 @@ struct apfs_inode_val {
 } __packed;
 
 /* Extended field types */
-#define APFS_DREC_EXT_TYPE_SIBLING_ID 1
-
 #define APFS_INO_EXT_TYPE_SNAP_XID 1
 #define APFS_INO_EXT_TYPE_DELTA_TREE_OID 2
 #define APFS_INO_EXT_TYPE_DOCUMENT_ID 3

@@ -22,6 +22,9 @@ struct apfs_drec_val {
 	u8 xfields[];
 } __packed;
 
+/* Extended field types */
+#define APFS_DREC_EXT_TYPE_SIBLING_ID 1
+
 extern void parse_dentry_record(struct apfs_drec_hashed_key *key,
 				struct apfs_drec_val *val, int len);
 

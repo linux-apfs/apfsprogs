@@ -110,13 +110,13 @@ struct inode *get_inode(u64 ino, struct inode **table)
 }
 
 /**
- * parse_xfields - Parse and check an inode extended fields
+ * parse_inode_xfields - Parse and check an inode extended fields
  * @xblob:	pointer to the beginning of the xfields in the inode value
  * @len:	length of the xfields
  *
  * Internal consistency of @key must be checked before calling this function.
  */
-static void parse_xfields(struct apfs_xf_blob *xblob, int len)
+static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len)
 {
 	struct apfs_x_field *xfield;
 	char *xval;
@@ -273,5 +273,6 @@ void parse_inode_record(struct apfs_inode_key *key,
 	if (le16_to_cpu(val->pad1) || le64_to_cpu(val->pad2))
 		report("Inode record", "padding should be zeroes.");
 
-	parse_xfields((struct apfs_xf_blob *)val->xfields, len - sizeof(*val));
+	parse_inode_xfields((struct apfs_xf_blob *)val->xfields,
+			    len - sizeof(*val));
 }
