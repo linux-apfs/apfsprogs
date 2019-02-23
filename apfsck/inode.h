@@ -149,6 +149,7 @@ struct inode {
 extern struct inode **alloc_inode_table();
 extern void free_inode_table(struct inode **table);
 extern struct inode *get_inode(u64 ino, struct inode **table);
+extern void check_inode_ids(u64 ino, u64 parent_ino);
 extern void parse_inode_record(struct apfs_inode_key *key,
 			       struct apfs_inode_val *val, int len);
 

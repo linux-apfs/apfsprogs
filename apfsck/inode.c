@@ -201,6 +201,48 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len)
 }
 
 /**
+ * check_inode_ids - Check that an inode id is consistent with its parent id
+ * @ino:	inode number
+ * @parent_ino:	parent inode number
+ */
+void check_inode_ids(u64 ino, u64 parent_ino)
+{
+	if (ino < APFS_MIN_USER_INO_NUM) {
+		switch (ino) {
+		case APFS_INVALID_INO_NUM:
+		case APFS_ROOT_DIR_PARENT:
+			report("Inode record", "invalid inode number.");
+		case APFS_ROOT_DIR_INO_NUM:
+		case APFS_PRIV_DIR_INO_NUM:
+		case APFS_SNAP_DIR_INO_NUM:
+			/* All children of this fake parent? TODO: check this */
+			if (parent_ino != APFS_ROOT_DIR_PARENT)
+				report("Root inode record", "bad parent id");
+			break;
+		default:
+			report("Inode record", "reserved inode number.");
+		}
+		return;
+	}
+
+	if (parent_ino < APFS_MIN_USER_INO_NUM) {
+		switch (parent_ino) {
+		case APFS_INVALID_INO_NUM:
+			report("Inode record", "invalid parent inode number.");
+		case APFS_ROOT_DIR_PARENT:
+			report("Inode record", "root parent id for nonroot.");
+		case APFS_ROOT_DIR_INO_NUM:
+		case APFS_PRIV_DIR_INO_NUM:
+		case APFS_SNAP_DIR_INO_NUM:
+			/* These are fine */
+			break;
+		default:
+			report("Inode record", "reserved parent inode number.");
+		}
+	}
+}
+
+/**
  * parse_inode_record - Parse an inode record value and check for corruption
  * @key:	pointer to the raw key
  * @val:	pointer to the raw value
@@ -222,22 +264,7 @@ void parse_inode_record(struct apfs_inode_key *key,
 		report("Catalog", "inode numbers are repeated.");
 	inode->i_seen = true;
 
-	if (inode->i_ino < APFS_MIN_USER_INO_NUM) {
-		switch (inode->i_ino) {
-		case APFS_INVALID_INO_NUM:
-		case APFS_ROOT_DIR_PARENT:
-			report("Inode record", "invalid inode number.");
-		case APFS_ROOT_DIR_INO_NUM:
-		case APFS_PRIV_DIR_INO_NUM:
-		case APFS_SNAP_DIR_INO_NUM:
-			/* All children of this fake parent? TODO: check this */
-			if (le64_to_cpu(val->parent_id) != APFS_ROOT_DIR_PARENT)
-				report("Root inode record", "bad parent id");
-			break;
-		default:
-			report("Inode record", "reserved inode number.");
-		}
-	}
+	check_inode_ids(inode->i_ino, le64_to_cpu(val->parent_id));
 
 	mode = le16_to_cpu(val->mode);
 	filetype = mode & S_IFMT;

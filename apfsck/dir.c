@@ -98,6 +98,7 @@ void parse_dentry_record(struct apfs_drec_hashed_key *key,
 	inode->i_link_count++;
 
 	parent_ino = cat_cnid(&key->hdr);
+	check_inode_ids(ino, parent_ino);
 	if (parent_ino != APFS_ROOT_DIR_PARENT) {
 		parent = get_inode(parent_ino, vsb->v_inode_table);
 		if (!parent->i_seen) /* The b-tree keys are in order */
