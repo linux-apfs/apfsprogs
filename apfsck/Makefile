@@ -1,4 +1,5 @@
-SRCS = apfsck.c btree.c crc32c.c dir.c inode.c key.c object.c super.c unicode.c
+SRCS = apfsck.c btree.c crc32c.c dir.c extents.c \
+       inode.c key.c object.c super.c unicode.c
 OBJS = $(SRCS:.c=.o)
 DEPS = $(SRCS:.c=.d)
 

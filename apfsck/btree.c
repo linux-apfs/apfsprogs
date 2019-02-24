@@ -12,6 +12,7 @@
 #include "apfsck.h"
 #include "btree.h"
 #include "dir.h"
+#include "extents.h"
 #include "inode.h"
 #include "key.h"
 #include "object.h"
@@ -504,6 +505,9 @@ static void parse_cat_record(void *key, void *val, int len)
 		break;
 	case APFS_TYPE_DIR_REC:
 		parse_dentry_record(key, val, len);
+		break;
+	case APFS_TYPE_FILE_EXTENT:
+		parse_extent_record(key, val, len);
 		break;
 	default:
 		break;
