@@ -202,6 +202,9 @@ static void read_file_extent_key(void *raw, int size, struct key *key)
 
 	key->number = le64_to_cpu(raw_key->logical_addr);
 	key->name = NULL;
+
+	if (key->number & (sb->s_blocksize - 1))
+		report("Extent record", "offset isn't multiple of block size.");
 }
 
 /**
