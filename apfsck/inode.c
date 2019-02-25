@@ -39,6 +39,8 @@ static void check_inode_stats(struct inode *inode)
 	dstream = get_dstream(inode->i_private_id, vsb->v_dstream_table);
 	if (dstream->d_size < inode->i_size)
 		report("Inode record", "some extents are missing.");
+	if (dstream->d_size != inode->i_alloced_size)
+		report("Inode record", "wrong allocated space for dstream.");
 }
 
 /**
@@ -137,6 +139,7 @@ static int read_dstream_xfield(char *xval, int len, struct inode *inode)
 	dstream = (struct apfs_dstream *)xval;
 
 	inode->i_size = le64_to_cpu(dstream->size);
+	inode->i_alloced_size = le64_to_cpu(dstream->alloced_size);
 
 	return sizeof(*dstream);
 }

@@ -140,6 +140,7 @@ struct inode {
 		u32	i_nlink;	/* Number of hard links to file */
 	};
 	u64		i_size;		/* Inode size */
+	u64		i_alloced_size;	/* Inode size, including unused */
 
 	/* Inode stats measured by the fsck */
 	u32	i_child_count;		/* Number of children of directory */
