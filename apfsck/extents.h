@@ -25,6 +25,21 @@ struct apfs_file_extent_val {
 	__le64 crypto_id;
 } __packed;
 
+#define DSTREAM_TABLE_BUCKETS	512	/* So the hash table array fits in 4k */
+
+/*
+ * Dstream data in memory
+ */
+struct dstream {
+	u64		d_id;		/* Id of the dstream */
+	u64		d_size;		/* Size of the extents read so far */
+
+	struct dstream	*d_next;	/* Next dstream in linked list */
+};
+
+extern struct dstream **alloc_dstream_table();
+extern void free_dstream_table(struct dstream **table);
+extern struct dstream *get_dstream(u64 ino, struct dstream **table);
 extern void parse_extent_record(struct apfs_file_extent_key *key,
 				struct apfs_file_extent_val *val, int len);
 

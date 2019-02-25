@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include "apfsck.h"
 #include "btree.h"
+#include "extents.h"
 #include "inode.h"
 #include "object.h"
 #include "types.h"
@@ -180,6 +181,7 @@ void parse_super(void)
 			perror(NULL);
 			exit(1);
 		}
+		vsb->v_dstream_table = alloc_dstream_table();
 		vsb->v_inode_table = alloc_inode_table();
 
 		vsb_raw = map_volume_super(vol, vsb);
@@ -198,6 +200,8 @@ void parse_super(void)
 
 		free_inode_table(vsb->v_inode_table);
 		vsb->v_inode_table = NULL;
+		free_dstream_table(vsb->v_dstream_table);
+		vsb->v_dstream_table = NULL;
 
 		if (le64_to_cpu(vsb_raw->apfs_num_files) !=
 							vsb->v_file_count)
