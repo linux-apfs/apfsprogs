@@ -113,4 +113,7 @@ void parse_extent_record(struct apfs_file_extent_key *key,
 	if (dstream->d_size != le64_to_cpu(key->logical_addr))
 		report("Data stream", "extents are not consecutive.");
 	dstream->d_size += length;
+
+	if (!le64_to_cpu(val->phys_block_num)) /* This is a hole */
+		dstream->d_sparse_bytes += length;
 }

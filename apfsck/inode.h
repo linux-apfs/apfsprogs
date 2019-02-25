@@ -141,6 +141,7 @@ struct inode {
 	};
 	u64		i_size;		/* Inode size */
 	u64		i_alloced_size;	/* Inode size, including unused */
+	u64		i_sparse_bytes;	/* Number of sparse bytes */
 
 	/* Inode stats measured by the fsck */
 	u32	i_child_count;		/* Number of children of directory */

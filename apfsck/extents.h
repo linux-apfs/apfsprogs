@@ -33,6 +33,7 @@ struct apfs_file_extent_val {
 struct dstream {
 	u64		d_id;		/* Id of the dstream */
 	u64		d_size;		/* Size of the extents read so far */
+	u64		d_sparse_bytes;	/* Size of the holes read so far */
 
 	struct dstream	*d_next;	/* Next dstream in linked list */
 };

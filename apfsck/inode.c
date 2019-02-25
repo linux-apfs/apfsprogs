@@ -41,6 +41,8 @@ static void check_inode_stats(struct inode *inode)
 		report("Inode record", "some extents are missing.");
 	if (dstream->d_size != inode->i_alloced_size)
 		report("Inode record", "wrong allocated space for dstream.");
+	if (dstream->d_sparse_bytes != inode->i_sparse_bytes)
+		report("Inode record", "wrong count of sparse bytes.");
 }
 
 /**
@@ -123,6 +125,27 @@ struct inode *get_inode(u64 ino, struct inode **table)
 }
 
 /**
+ * read_sparse_bytes_xfield - Parse and check an xfield that counts sparse bytes
+ * @xval:	pointer to the xfield value
+ * @len:	remaining length of the inode value
+ * @inode:	struct to receive the results
+ *
+ * Returns the length of the xfield value.
+ */
+static int read_sparse_bytes_xfield(char *xval, int len, struct inode *inode)
+{
+	__le64 *sbytes;
+
+	if (len < 8)
+		report("Sparse bytes xfield", "doesn't fit in inode record.");
+	sbytes = (__le64 *)xval;
+
+	inode->i_sparse_bytes = le64_to_cpu(*sbytes);
+
+	return sizeof(*sbytes);
+}
+
+/**
  * read_dstream_xfield - Parse a dstream xfield and check its consistency
  * @xval:	pointer to the xfield value
  * @len:	remaining length of the inode value
@@ -188,8 +211,10 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 		case APFS_INO_EXT_TYPE_SNAP_XID:
 		case APFS_INO_EXT_TYPE_DELTA_TREE_OID:
 		case APFS_INO_EXT_TYPE_PREV_FSIZE:
-		case APFS_INO_EXT_TYPE_SPARSE_BYTES:
 			xlen = 8;
+			break;
+		case APFS_INO_EXT_TYPE_SPARSE_BYTES:
+			xlen = read_sparse_bytes_xfield(xval, len, inode);
 			break;
 		case APFS_INO_EXT_TYPE_DOCUMENT_ID:
 		case APFS_INO_EXT_TYPE_FINDER_INFO:
