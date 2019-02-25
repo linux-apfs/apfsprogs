@@ -4,10 +4,12 @@
  * Copyright (C) 2018 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */
 
+#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "apfsck.h"
+#include "extents.h"
 #include "inode.h"
 #include "key.h"
 #include "super.h"
@@ -19,6 +21,11 @@
  */
 static void check_inode_stats(struct inode *inode)
 {
+	struct dstream *dstream;
+
+	/* The inodes must be freed before the dstreams */
+	assert(vsb->v_dstream_table);
+
 	if ((inode->i_mode & S_IFMT) == S_IFDIR) {
 		if (inode->i_link_count != 1)
 			report("Inode record", "directory has hard links.");
@@ -28,6 +35,10 @@ static void check_inode_stats(struct inode *inode)
 		if (inode->i_nlink != inode->i_link_count)
 			report("Inode record", "wrong link count.");
 	}
+
+	dstream = get_dstream(inode->i_private_id, vsb->v_dstream_table);
+	if (dstream->d_size < inode->i_size)
+		report("Inode record", "some extents are missing.");
 }
 
 /**
@@ -110,13 +121,36 @@ struct inode *get_inode(u64 ino, struct inode **table)
 }
 
 /**
+ * read_dstream_xfield - Parse a dstream xfield and check its consistency
+ * @xval:	pointer to the xfield value
+ * @len:	remaining length of the inode value
+ * @inode:	struct to receive the results
+ *
+ * Returns the length of the xfield value.
+ */
+static int read_dstream_xfield(char *xval, int len, struct inode *inode)
+{
+	struct apfs_dstream *dstream;
+
+	if (len < sizeof(*dstream))
+		report("Dstream xfield", "doesn't fit in inode record.");
+	dstream = (struct apfs_dstream *)xval;
+
+	inode->i_size = le64_to_cpu(dstream->size);
+
+	return sizeof(*dstream);
+}
+
+/**
  * parse_inode_xfields - Parse and check an inode extended fields
  * @xblob:	pointer to the beginning of the xfields in the inode value
  * @len:	length of the xfields
+ * @inode:	struct to receive the results
  *
  * Internal consistency of @key must be checked before calling this function.
  */
-static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len)
+static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
+				struct inode *inode)
 {
 	struct apfs_x_field *xfield;
 	char *xval;
@@ -166,7 +200,7 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len)
 				       "name with no null termination");
 			break;
 		case APFS_INO_EXT_TYPE_DSTREAM:
-			xlen = sizeof(struct apfs_dstream);
+			xlen = read_dstream_xfield(xval, len, inode);
 			break;
 		case APFS_INO_EXT_TYPE_DIR_STATS_KEY:
 			xlen = sizeof(struct apfs_dir_stats_val);
@@ -263,6 +297,7 @@ void parse_inode_record(struct apfs_inode_key *key,
 	if (inode->i_seen)
 		report("Catalog", "inode numbers are repeated.");
 	inode->i_seen = true;
+	inode->i_private_id = le64_to_cpu(val->private_id);
 
 	check_inode_ids(inode->i_ino, le64_to_cpu(val->parent_id));
 
@@ -301,5 +336,5 @@ void parse_inode_record(struct apfs_inode_key *key,
 		report("Inode record", "padding should be zeroes.");
 
 	parse_inode_xfields((struct apfs_xf_blob *)val->xfields,
-			    len - sizeof(*val));
+			    len - sizeof(*val), inode);
 }

@@ -130,6 +130,7 @@ struct apfs_dir_stats_val {
  */
 struct inode {
 	u64		i_ino;		/* Inode number */
+	u64		i_private_id;	/* Id of the inode's data stream */
 	bool		i_seen;		/* Has this inode been seen? */
 
 	/* Inode information read from its record (or from its dentries) */
@@ -138,6 +139,7 @@ struct inode {
 		u32	i_nchildren;	/* Number of children of directory */
 		u32	i_nlink;	/* Number of hard links to file */
 	};
+	u64		i_size;		/* Inode size */
 
 	/* Inode stats measured by the fsck */
 	u32	i_child_count;		/* Number of children of directory */
