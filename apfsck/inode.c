@@ -146,6 +146,34 @@ static int read_sparse_bytes_xfield(char *xval, int len, struct inode *inode)
 }
 
 /**
+ * read_rdev_xfield - Parse and check a device identifier xfield
+ * @xval:	pointer to the xfield value
+ * @len:	remaining length of the inode value
+ * @inode:	struct to receive the results
+ *
+ * Returns the length of the xfield value.
+ */
+static int read_rdev_xfield(char *xval, int len, struct inode *inode)
+{
+	u16 filetype = inode->i_mode & S_IFMT;
+	__le32 *rdev;
+
+	assert(filetype); /* Mode must be set before parsing xfields */
+	if (filetype != S_IFCHR && filetype != S_IFBLK)
+		report("Inode record", "not device but has device identifier.");
+
+	if (len < 4)
+		report("Device ID xfield", "doesn't fit in inode record.");
+	rdev = (__le32 *)xval;
+
+	inode->i_rdev = le32_to_cpu(*rdev);
+	if (!inode->i_rdev)
+		report("Device ID xfield", "null ID in use.");
+
+	return sizeof(*rdev);
+}
+
+/**
  * read_dstream_xfield - Parse a dstream xfield and check its consistency
  * @xval:	pointer to the xfield value
  * @len:	remaining length of the inode value
@@ -218,8 +246,10 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 			break;
 		case APFS_INO_EXT_TYPE_DOCUMENT_ID:
 		case APFS_INO_EXT_TYPE_FINDER_INFO:
-		case APFS_INO_EXT_TYPE_RDEV:
 			xlen = 4;
+			break;
+		case APFS_INO_EXT_TYPE_RDEV:
+			xlen = read_rdev_xfield(xval, len, inode);
 			break;
 		case APFS_INO_EXT_TYPE_NAME:
 			xlen = strnlen(xval, len - 1) + 1;
@@ -365,4 +395,7 @@ void parse_inode_record(struct apfs_inode_key *key,
 
 	parse_inode_xfields((struct apfs_xf_blob *)val->xfields,
 			    len - sizeof(*val), inode);
+
+	if ((filetype == S_IFCHR || filetype == S_IFBLK) && !inode->i_rdev)
+		report("Inode record", "device file with no device ID.");
 }
