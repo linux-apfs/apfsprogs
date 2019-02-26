@@ -153,6 +153,8 @@ static struct apfs_superblock *map_volume_super(int vol,
 
 	if (le32_to_cpu(vsb->v_raw->apfs_magic) != APFS_MAGIC)
 		report("Volume superblock", "wrong magic.");
+
+	vsb->v_next_doc_id = le32_to_cpu(vsb->v_raw->apfs_next_doc_id);
 	return vsb->v_raw;
 }
 

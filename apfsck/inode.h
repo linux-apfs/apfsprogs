@@ -77,6 +77,9 @@ struct apfs_inode_val {
 #define APFS_INO_EXT_TYPE_SPARSE_BYTES 13
 #define APFS_INO_EXT_TYPE_RDEV 14
 
+/* Constants for extended fields */
+#define APFS_MIN_DOC_ID 3	/* Smallest not reserved document id */
+
 /*
  * Structure used to store the number and size of extended fields of an inode
  */

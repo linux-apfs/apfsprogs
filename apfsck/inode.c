@@ -146,6 +146,32 @@ static int read_sparse_bytes_xfield(char *xval, int len, struct inode *inode)
 }
 
 /**
+ * read_document_id_xfield - Parse and check a document id xfield
+ * @xval:	pointer to the xfield value
+ * @len:	remaining length of the inode value
+ * @inode:	inode structure
+ *
+ * Returns the length of the xfield value.
+ */
+static int read_document_id_xfield(char *xval, int len, struct inode *inode)
+{
+	__le32 *id_raw;
+	u32 id;
+
+	if (len < 4)
+		report("Document id xfield", "doesn't fit in inode record.");
+	id_raw = (__le32 *)xval;
+	id = le32_to_cpu(*id_raw);
+
+	if (id < APFS_MIN_DOC_ID)
+		report("Document id xfield", "invalid id in use.");
+	if (id >= vsb->v_next_doc_id)
+		report("Document id xfield", "free id in use.");
+
+	return sizeof(*id_raw);
+}
+
+/**
  * read_rdev_xfield - Parse and check a device identifier xfield
  * @xval:	pointer to the xfield value
  * @len:	remaining length of the inode value
@@ -245,6 +271,8 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 			xlen = read_sparse_bytes_xfield(xval, len, inode);
 			break;
 		case APFS_INO_EXT_TYPE_DOCUMENT_ID:
+			xlen = read_document_id_xfield(xval, len, inode);
+			break;
 		case APFS_INO_EXT_TYPE_FINDER_INFO:
 			xlen = 4;
 			break;
