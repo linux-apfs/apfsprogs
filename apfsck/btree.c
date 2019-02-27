@@ -509,6 +509,9 @@ static void parse_cat_record(void *key, void *val, int len)
 	case APFS_TYPE_FILE_EXTENT:
 		parse_extent_record(key, val, len);
 		break;
+	case APFS_TYPE_SIBLING_LINK:
+		parse_sibling_record(key, val, len);
+		break;
 	default:
 		break;
 	}

@@ -11,19 +11,43 @@
 #include "super.h"
 
 /**
+ * read_sibling_id_xfield - Parse a sibling id xfield and check its consistency
+ * @xval:	pointer to the xfield value
+ * @len:	remaining length of the dentry value
+ * @sibling_id:	on return, the sibling id
+ *
+ * Returns the length of the xfield value.
+ */
+static int read_sibling_id_xfield(char *xval, int len, u64 *sibling_id)
+{
+	__le64 *id_raw;
+
+	if (len < 8)
+		report("Sibling link xfield", "doesn't fit in dentry record.");
+	id_raw = (__le64 *)xval;
+
+	*sibling_id = le64_to_cpu(*id_raw);
+
+	return sizeof(*id_raw);
+}
+
+/**
  * parse_dentry_xfields - Parse and check a dentry extended fields
  * @xblob:	pointer to the beginning of the xfields in the dentry value
  * @len:	length of the xfields
+ * @sibling_id: on return, the sibling id (0 if none)
  *
  * Internal consistency of @key must be checked before calling this function.
  */
-static void parse_dentry_xfields(struct apfs_xf_blob *xblob, int len)
+static void parse_dentry_xfields(struct apfs_xf_blob *xblob, int len,
+				 u64 *sibling_id)
 {
 	struct apfs_x_field *xfield;
 	char *xval;
 	int xcount;
 	int i;
 
+	*sibling_id = 0;
 	if (len == 0) /* No extended fields */
 		return;
 
@@ -49,7 +73,7 @@ static void parse_dentry_xfields(struct apfs_xf_blob *xblob, int len)
 
 		switch (xfield[i].x_type) {
 		case APFS_DREC_EXT_TYPE_SIBLING_ID:
-			xlen = 8;
+			xlen = read_sibling_id_xfield(xval, len, sibling_id);
 			break;
 		default:
 			report("Dentry xfield", "invalid type.");
@@ -88,7 +112,10 @@ void parse_dentry_record(struct apfs_drec_hashed_key *key,
 {
 	u64 ino, parent_ino;
 	struct inode *inode, *parent;
+	int namelen = le32_to_cpu(key->name_len_and_hash) & 0x3FFU;
 	u16 filetype, dtype;
+	u64 sibling_id;
+	struct sibling *sibling;
 
 	if (len < sizeof(*val))
 		report("Dentry record", "value is too small.");
@@ -121,5 +148,10 @@ void parse_dentry_record(struct apfs_drec_hashed_key *key,
 	inode->i_mode |= dtype << 12;
 
 	parse_dentry_xfields((struct apfs_xf_blob *)val->xfields,
-			     len - sizeof(*val));
+			     len - sizeof(*val), &sibling_id);
+
+	if (!sibling_id) /* No sibling record for this dentry */
+		return;
+	sibling = get_sibling(sibling_id, namelen, inode);
+	set_or_check_sibling(parent_ino, namelen, key->name, sibling);
 }

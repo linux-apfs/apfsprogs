@@ -10,6 +10,7 @@
 #include "types.h"
 
 struct apfs_inode_key;
+struct apfs_sibling_link_key;
 
 /* Inode numbers for special inodes */
 #define APFS_INVALID_INO_NUM		0
@@ -126,6 +127,16 @@ struct apfs_dir_stats_val {
 	__le64 gen_count;
 } __packed;
 
+/*
+ * Structure of the value for a sibling link record.  These are used to
+ * list the hard links for a given inode.
+ */
+struct apfs_sibling_val {
+	__le64 parent_id;
+	__le16 name_len;
+	u8 name[0];
+} __packed;
+
 #define INODE_TABLE_BUCKETS	512	/* So the hash table array fits in 4k */
 
 /*
@@ -148,10 +159,24 @@ struct inode {
 	u32		i_rdev;		/* Device ID */
 
 	/* Inode stats measured by the fsck */
-	u32	i_child_count;		/* Number of children of directory */
-	u32	i_link_count;		/* Number of dentries for file */
+	u32		i_child_count;	/* Number of children of directory */
+	u32		i_link_count;	/* Number of dentries for file */
+	struct sibling	*i_siblings;	/* Linked list of siblings for inode */
 
 	struct inode	*i_next;	/* Next inode in linked list */
+};
+
+/*
+ * Sibling link data in memory
+ */
+struct sibling {
+	struct sibling	*s_next;	/* Next sibling in linked list */
+	u64		s_id;		/* Sibling id */
+	bool		s_checked;	/* Has this sibling been checked? */
+
+	u64		s_parent_ino;	/* Inode number for parent */
+	u16		s_name_len;	/* Name length */
+	u8		s_name[0];	/* Name */
 };
 
 extern struct inode **alloc_inode_table();
@@ -160,5 +185,10 @@ extern struct inode *get_inode(u64 ino, struct inode **table);
 extern void check_inode_ids(u64 ino, u64 parent_ino);
 extern void parse_inode_record(struct apfs_inode_key *key,
 			       struct apfs_inode_val *val, int len);
+extern struct sibling *get_sibling(u64 id, int namelen, struct inode *inode);
+extern void set_or_check_sibling(u64 parent_id, int namelen, u8 *name,
+				 struct sibling *sibling);
+extern void parse_sibling_record(struct apfs_sibling_link_key *key,
+				 struct apfs_sibling_val *val, int len);
 
 #endif	/* _INODE_H */

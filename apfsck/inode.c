@@ -61,6 +61,37 @@ struct inode **alloc_inode_table(void)
 }
 
 /**
+ * free_sibling_links - Free the sibling links for an inode
+ * @inode: inode to free
+ *
+ * Also checks that the number of listed siblings is correct, and that all
+ * of them had both a record and a dentry xfield.
+ */
+static void free_sibling_links(struct inode *inode)
+{
+	struct sibling *current = inode->i_siblings;
+	struct sibling *next;
+	u32 count = 0;
+
+	while (current) {
+		if (!current->s_checked)
+			report("Catalog", "orphaned or missing sibling link.");
+		next = current->s_next;
+		free(current);
+		current = next;
+		++count;
+	}
+
+	/* Inodes with one link can have a sibling record, but don't need it */
+	if (inode->i_link_count == 1 && count == 0)
+		return;
+
+	if (count != inode->i_link_count)
+		report("Inode record",
+		       "link count inconsistent with sibling records.");
+}
+
+/**
  * free_inode_table - Free the inode hash table and all its inodes
  * @table: table to free
  *
@@ -77,6 +108,7 @@ void free_inode_table(struct inode **table)
 		current = table[i];
 		while (current) {
 			check_inode_stats(current);
+			free_sibling_links(current);
 
 			next = current->i_next;
 			free(current);
@@ -427,4 +459,107 @@ void parse_inode_record(struct apfs_inode_key *key,
 
 	if ((filetype == S_IFCHR || filetype == S_IFBLK) && !inode->i_rdev)
 		report("Inode record", "device file with no device ID.");
+}
+
+/**
+ * get_sibling - Find or create a sibling link structure for an inode
+ * @id:		sibling id
+ * @namelen:	length of the sibling name
+ * @inode:	the inode
+ *
+ * Returns the sibling structure, after creating it if necessary.
+ */
+struct sibling *get_sibling(u64 id, int namelen, struct inode *inode)
+{
+	struct sibling **entry_p = &inode->i_siblings;
+	struct sibling *entry = *entry_p;
+	struct sibling *new;
+
+	/* Siblings are ordered by id in the inode's linked list */
+	while (entry) {
+		if (id == entry->s_id)
+			return entry;
+		if (id < entry->s_id)
+			break;
+
+		entry_p = &entry->s_next;
+		entry = *entry_p;
+	}
+
+	new = calloc(1, sizeof(*new) + namelen);
+	if (!new) {
+		perror(NULL);
+		exit(1);
+	}
+
+	new->s_checked = false;
+	new->s_id = id;
+	new->s_next = entry;
+	*entry_p = new;
+	return new;
+}
+
+/**
+ * set_or_check_sibling - Set or check the fields of a sibling structure
+ * @parent_id:	parent id
+ * @namelen:	length of the name
+ * @name:	name of the sibling
+ * @sibling:	the sibling structure
+ *
+ * When first called for @sibling, sets the three given fields.  On the second
+ * call, checks that they are set to the correct values.
+ */
+void set_or_check_sibling(u64 parent_id, int namelen, u8 *name,
+			  struct sibling *sibling)
+{
+	/* Whichever was read first, dentry or sibling, sets the fields */
+	if (!sibling->s_name_len) {
+		sibling->s_name_len = namelen;
+		strcpy((char *)sibling->s_name, (char *)name);
+		sibling->s_parent_ino = parent_id;
+		return;
+	}
+
+	/* Fields already set, check them */
+	if (sibling->s_name_len != namelen)
+		report("Sibling record", "name length doesn't match dentry's.");
+	if (strcmp((char *)sibling->s_name, (char *)name))
+		report("Sibling record", "name doesn't match dentry's.");
+	if (sibling->s_parent_ino != parent_id)
+		report("Sibling record", "parent id doesn't match dentry's.");
+	sibling->s_checked = true;
+}
+
+/**
+ * parse_sibling_record - Parse and check a sibling link record value
+ * @key:	pointer to the raw key
+ * @val:	pointer to the raw value
+ * @len:	length of the raw value
+ *
+ * Internal consistency of @key must be checked before calling this function.
+ */
+void parse_sibling_record(struct apfs_sibling_link_key *key,
+			  struct apfs_sibling_val *val, int len)
+{
+	struct inode *inode;
+	struct sibling *sibling;
+	int namelen;
+
+	if (len < sizeof(*val))
+		report("Sibling link record", "value is too small.");
+	namelen = le16_to_cpu(val->name_len);
+
+	if (len != sizeof(*val) + namelen)
+		report("Sibling link record", "wrong size of value.");
+	if (val->name[namelen - 1] != 0)
+		report("Sibling link record", "name lacks NULL-termination.");
+	/* Name length doesn't need checking: it's the same for the dentry */
+
+	inode = get_inode(cat_cnid(&key->hdr), vsb->v_inode_table);
+	if (!inode->i_seen) /* The b-tree keys are in order */
+		report("Sibling link record", "inode is missing");
+
+	sibling = get_sibling(le64_to_cpu(key->sibling_id), namelen, inode);
+	set_or_check_sibling(le64_to_cpu(val->parent_id), namelen, val->name,
+			     sibling);
 }
