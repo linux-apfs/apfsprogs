@@ -262,9 +262,10 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 		case APFS_INO_EXT_TYPE_FS_UUID:
 			xlen = 16;
 			break;
+		case APFS_INO_EXT_TYPE_PREV_FSIZE:
+			printf("Inode xfield: filesystem has crashed.\n");
 		case APFS_INO_EXT_TYPE_SNAP_XID:
 		case APFS_INO_EXT_TYPE_DELTA_TREE_OID:
-		case APFS_INO_EXT_TYPE_PREV_FSIZE:
 			xlen = 8;
 			break;
 		case APFS_INO_EXT_TYPE_SPARSE_BYTES:
