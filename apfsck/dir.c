@@ -44,8 +44,7 @@ static void parse_dentry_xfields(struct apfs_xf_blob *xblob, int len,
 {
 	struct apfs_x_field *xfield;
 	char *xval;
-	int xcount;
-	int i;
+	int xlen;
 
 	*sibling_id = 0;
 	if (len == 0) /* No extended fields */
@@ -54,52 +53,28 @@ static void parse_dentry_xfields(struct apfs_xf_blob *xblob, int len,
 	len -= sizeof(*xblob);
 	if (len < 0)
 		report("Dentry record", "no room for extended fields.");
-
-	xcount = le16_to_cpu(xblob->xf_num_exts);
-	if (!xcount)
-		report("Dentry record", "xfield blob has no xfields.");
+	if (le16_to_cpu(xblob->xf_num_exts) != 1)
+		report("Dentry record", "bad xfield count.");
 
 	xfield = (struct apfs_x_field *)xblob->xf_data;
-	xval = (char *)xfield + xcount * sizeof(xfield[0]);
-	len -= xcount * sizeof(xfield[0]);
+	xval = (char *)xfield + sizeof(*xfield);
+	len -= sizeof(*xfield);
 	if (len < 0)
-		report("Dentry record", "number of xfields cannot fit.");
+		report("Dentry record", "xfield cannot fit.");
 
 	/* The official reference seems to be wrong here */
 	if (le16_to_cpu(xblob->xf_used_data) != len)
 		report("Dentry record",
 		       "value size incompatible with xfields.");
 
-	/* TODO: could a dentry actually have more than one xfield? */
-	for (i = 0; i < le16_to_cpu(xblob->xf_num_exts); ++i) {
-		int xlen, xpad_len;
+	if (xfield->x_type != APFS_DREC_EXT_TYPE_SIBLING_ID)
+		report("Dentry xfield", "invalid type.");
+	xlen = read_sibling_id_xfield(xval, len, sibling_id);
 
-		switch (xfield[i].x_type) {
-		case APFS_DREC_EXT_TYPE_SIBLING_ID:
-			xlen = read_sibling_id_xfield(xval, len, sibling_id);
-			break;
-		default:
-			report("Dentry xfield", "invalid type.");
-		}
-
-		if (xlen != le16_to_cpu(xfield[i].x_size))
-			report("Dentry xfield", "wrong size");
-		len -= xlen;
-		xval += xlen;
-
-		/* Attribute length is padded with zeroes to a multiple of 8 */
-		xpad_len = ROUND_UP(xlen, 8) - xlen;
-		len -= xpad_len;
-		if (len < 0)
-			report("Dentry xfield", "doesn't fit in record value.");
-
-		for (; xpad_len; ++xval, --xpad_len)
-			if (*xval)
-				report("Dentry xfield", "non-zero padding.");
-	}
-
-	if (len)
-		report("Dentry record", "length of xfields does not add up.");
+	if (xlen != le16_to_cpu(xfield->x_size))
+		report("Dentry xfield", "wrong size");
+	if (xlen != len)
+		report("Dentry record", "wrong used space for xfields.");
 }
 
 /**
