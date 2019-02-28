@@ -275,7 +275,10 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 	len -= sizeof(*xblob);
 	if (len < 0)
 		report("Inode records", "no room for extended fields.");
+
 	xcount = le16_to_cpu(xblob->xf_num_exts);
+	if (!xcount)
+		report("Inode record", "xfield blob has no xfields.");
 
 	xfield = (struct apfs_x_field *)xblob->xf_data;
 	xval = (char *)xfield + xcount * sizeof(xfield[0]);
