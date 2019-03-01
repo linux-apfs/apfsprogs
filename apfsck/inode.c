@@ -76,15 +76,24 @@ static void free_inode_names(struct inode *inode)
 	struct sibling *next;
 	u32 count = 0;
 
-	/* The primary link has the lowest id, so it's the first in the list */
+	if (!inode->i_name) /* Oddly, this seems to be always required */
+		report("Inode record", "no name for primary link.");
+	if (!inode->i_first_name)
+		report("Catalog", "inode with no dentries.");
+
 	if (current) {
-		if (!inode->i_name)
-			report("Inode record", "no name for primary link.");
+		/* Primary link has lowest id, so it comes first in the list */
 		if (strcmp(inode->i_name, (char *)current->s_name))
 			report("Inode record", "wrong name for primary link.");
+	} else {
+		/* No siblings, so the primary link is the first and only */
+		if (strcmp(inode->i_name, inode->i_first_name))
+			report("Inode record", "wrong name for only link.");
 	}
 	free(inode->i_name);
 	inode->i_name = NULL;
+	free(inode->i_first_name);
+	inode->i_first_name = NULL;
 
 	while (current) {
 		if (!current->s_checked)

@@ -162,6 +162,7 @@ struct inode {
 	/* Inode stats measured by the fsck */
 	u32		i_child_count;	/* Number of children of directory */
 	u32		i_link_count;	/* Number of dentries for file */
+	char		*i_first_name;	/* Name of first dentry encountered */
 	struct sibling	*i_siblings;	/* Linked list of siblings for inode */
 
 	struct inode	*i_next;	/* Next inode in linked list */

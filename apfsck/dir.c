@@ -4,6 +4,9 @@
  * Copyright (C) 2018 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "apfsck.h"
 #include "dir.h"
 #include "inode.h"
@@ -101,6 +104,16 @@ void parse_dentry_record(struct apfs_drec_hashed_key *key,
 	ino = le64_to_cpu(val->file_id);
 	inode = get_inode(ino, vsb->v_inode_table);
 	inode->i_link_count++;
+
+	if (!inode->i_first_name) {
+		/* No dentry for this inode has been seen before */
+		inode->i_first_name = malloc(namelen);
+		if (!inode->i_first_name) {
+			perror(NULL);
+			exit(1);
+		}
+		strcpy(inode->i_first_name, (char *)key->name);
+	}
 
 	parent_ino = cat_cnid(&key->hdr);
 	check_inode_ids(ino, parent_ino);
