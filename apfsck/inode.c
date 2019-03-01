@@ -61,17 +61,30 @@ struct inode **alloc_inode_table(void)
 }
 
 /**
- * free_sibling_links - Free the sibling links for an inode
+ * free_inode_names - Free all data on an inode's names
  * @inode: inode to free
  *
- * Also checks that the number of listed siblings is correct, and that all
- * of them had both a record and a dentry xfield.
+ * Frees the primary name and all sibling links, but not before running a few
+ * remaining consistency checks.
+ * remaining checking that
+ * the number of listed siblings is correct, that all of them had both a record
+ * and a dentry xfield, and that the primary link matches the primary name.
  */
-static void free_sibling_links(struct inode *inode)
+static void free_inode_names(struct inode *inode)
 {
 	struct sibling *current = inode->i_siblings;
 	struct sibling *next;
 	u32 count = 0;
+
+	/* The primary link has the lowest id, so it's the first in the list */
+	if (current) {
+		if (!inode->i_name)
+			report("Inode record", "no name for primary link.");
+		if (strcmp(inode->i_name, (char *)current->s_name))
+			report("Inode record", "wrong name for primary link.");
+	}
+	free(inode->i_name);
+	inode->i_name = NULL;
 
 	while (current) {
 		if (!current->s_checked)
@@ -108,7 +121,7 @@ void free_inode_table(struct inode **table)
 		current = table[i];
 		while (current) {
 			check_inode_stats(current);
-			free_sibling_links(current);
+			free_inode_names(current);
 
 			next = current->i_next;
 			free(current);
@@ -232,6 +245,32 @@ static int read_rdev_xfield(char *xval, int len, struct inode *inode)
 }
 
 /**
+ * read_name_xfield - Parse a name xfield and check its consistency
+ * @xval:	pointer to the xfield value
+ * @len:	remaining length of the inode value
+ * @inode:	struct to receive the results
+ *
+ * Returns the length of the xfield value.
+ */
+static int read_name_xfield(char *xval, int len, struct inode *inode)
+{
+	int xlen;
+
+	xlen = strnlen(xval, len - 1) + 1;
+	if (xval[xlen - 1] != 0)
+		report("Name xfield", "name with no null termination");
+
+	inode->i_name = malloc(xlen);
+	if (!inode->i_name) {
+		perror(NULL);
+		exit(1);
+	}
+	strcpy(inode->i_name, xval);
+
+	return xlen;
+}
+
+/**
  * read_dstream_xfield - Parse a dstream xfield and check its consistency
  * @xval:	pointer to the xfield value
  * @len:	remaining length of the inode value
@@ -316,10 +355,7 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 			xlen = read_rdev_xfield(xval, len, inode);
 			break;
 		case APFS_INO_EXT_TYPE_NAME:
-			xlen = strnlen(xval, len - 1) + 1;
-			if (xval[xlen - 1] != 0)
-				report("Inode xfield",
-				       "name with no null termination");
+			xlen = read_name_xfield(xval, len, inode);
 			break;
 		case APFS_INO_EXT_TYPE_DSTREAM:
 			xlen = read_dstream_xfield(xval, len, inode);
