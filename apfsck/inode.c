@@ -608,6 +608,11 @@ void parse_sibling_record(struct apfs_sibling_link_key *key,
 		report("Sibling link record", "inode is missing");
 
 	sibling = get_sibling(le64_to_cpu(key->sibling_id), namelen, inode);
+
+	/* It seems that sibling ids come from the same pool as inode numbers */
+	if (sibling->s_id < APFS_MIN_USER_INO_NUM)
+		report("Sibling record", "invalid sibling id.");
+
 	set_or_check_sibling(le64_to_cpu(val->parent_id), namelen, val->name,
 			     sibling);
 }
