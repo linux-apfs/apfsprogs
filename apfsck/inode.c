@@ -313,6 +313,7 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 				struct inode *inode)
 {
 	struct apfs_x_field *xfield;
+	u16 type_bitmap = 0;
 	char *xval;
 	int xcount;
 	int i;
@@ -340,6 +341,7 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 
 	for (i = 0; i < le16_to_cpu(xblob->xf_num_exts); ++i) {
 		int xlen, xpad_len;
+		u16 type_flag;
 
 		switch (xfield[i].x_type) {
 		case APFS_INO_EXT_TYPE_FS_UUID:
@@ -380,6 +382,11 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 		default:
 			report("Inode xfield", "invalid type.");
 		}
+
+		type_flag = 1 << xfield[i].x_type;
+		if (type_bitmap & type_flag)
+			report("Inode record", "two xfields of the same type.");
+		type_bitmap |= type_flag;
 
 		if (xlen != le16_to_cpu(xfield[i].x_size))
 			report("Inode xfield", "wrong size");
