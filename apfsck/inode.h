@@ -78,6 +78,16 @@ struct apfs_inode_val {
 #define APFS_INO_EXT_TYPE_SPARSE_BYTES 13
 #define APFS_INO_EXT_TYPE_RDEV 14
 
+/* Extended field flags */
+#define APFS_XF_DATA_DEPENDENT		0x01
+#define APFS_XF_DO_NOT_COPY		0x02
+#define APFS_XF_RESERVED_4		0x04
+#define APFS_XF_CHILDREN_INHERIT	0x08
+#define APFS_XF_USER_FIELD		0x10
+#define APFS_XF_SYSTEM_FIELD		0x20
+#define APFS_XF_RESERVED_40		0x40
+#define APFS_XF_RESERVED_80		0x80
+
 /* Constants for extended fields */
 #define APFS_MIN_DOC_ID 3	/* Smallest not reserved document id */
 
@@ -192,5 +202,6 @@ extern void set_or_check_sibling(u64 parent_id, int namelen, u8 *name,
 				 struct sibling *sibling);
 extern void parse_sibling_record(struct apfs_sibling_link_key *key,
 				 struct apfs_sibling_val *val, int len);
+extern void check_xfield_flags(u8 flags);
 
 #endif	/* _INODE_H */

@@ -302,6 +302,20 @@ static int read_dstream_xfield(char *xval, int len, struct inode *inode)
 }
 
 /**
+ * check_xfield_flags - Run common flag checks for all xfield types
+ * @flags: flags to check
+ */
+void check_xfield_flags(u8 flags)
+{
+	if (flags & APFS_XF_RESERVED_4 || flags & APFS_XF_RESERVED_40 ||
+	    flags & APFS_XF_RESERVED_80)
+		report("Inode xfield", "reserved flag in use.");
+
+	if (flags & APFS_XF_USER_FIELD && flags & APFS_XF_SYSTEM_FIELD)
+		report("Inode xfield", "created by both user and kernel.");
+}
+
+/**
  * parse_inode_xfields - Parse and check an inode extended fields
  * @xblob:	pointer to the beginning of the xfields in the inode value
  * @len:	length of the xfields
@@ -342,6 +356,8 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 	for (i = 0; i < le16_to_cpu(xblob->xf_num_exts); ++i) {
 		int xlen, xpad_len;
 		u16 type_flag;
+
+		check_xfield_flags(xfield[i].x_flags);
 
 		switch (xfield[i].x_type) {
 		case APFS_INO_EXT_TYPE_FS_UUID:

@@ -70,6 +70,8 @@ static void parse_dentry_xfields(struct apfs_xf_blob *xblob, int len,
 		report("Dentry record",
 		       "value size incompatible with xfields.");
 
+	check_xfield_flags(xfield->x_flags);
+
 	if (xfield->x_type != APFS_DREC_EXT_TYPE_SIBLING_ID)
 		report("Dentry xfield", "invalid type.");
 	xlen = read_sibling_id_xfield(xval, len, sibling_id);
