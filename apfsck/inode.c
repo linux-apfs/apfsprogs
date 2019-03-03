@@ -356,8 +356,9 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 	for (i = 0; i < le16_to_cpu(xblob->xf_num_exts); ++i) {
 		int xlen, xpad_len;
 		u16 type_flag;
+		u8 xflags = xfield[i].x_flags;
 
-		check_xfield_flags(xfield[i].x_flags);
+		check_xfield_flags(xflags);
 
 		switch (xfield[i].x_type) {
 		case APFS_INO_EXT_TYPE_FS_UUID:
@@ -365,12 +366,17 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 			break;
 		case APFS_INO_EXT_TYPE_PREV_FSIZE:
 			printf("Inode xfield: filesystem has crashed.\n");
+			if (xflags != 0)
+				report("Previous size xfield", "wrong flags.");
 		case APFS_INO_EXT_TYPE_SNAP_XID:
 		case APFS_INO_EXT_TYPE_DELTA_TREE_OID:
 			xlen = 8;
 			break;
 		case APFS_INO_EXT_TYPE_SPARSE_BYTES:
 			xlen = read_sparse_bytes_xfield(xval, len, inode);
+			if (xflags != (APFS_XF_SYSTEM_FIELD |
+				       APFS_XF_CHILDREN_INHERIT))
+				report("Sparse bytes xfield", "wrong flags.");
 			break;
 		case APFS_INO_EXT_TYPE_DOCUMENT_ID:
 			xlen = read_document_id_xfield(xval, len, inode);
@@ -383,9 +389,13 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 			break;
 		case APFS_INO_EXT_TYPE_NAME:
 			xlen = read_name_xfield(xval, len, inode);
+			if (xflags != APFS_XF_DO_NOT_COPY)
+				report("Name xfield", "wrong flags.");
 			break;
 		case APFS_INO_EXT_TYPE_DSTREAM:
 			xlen = read_dstream_xfield(xval, len, inode);
+			if (xflags != APFS_XF_SYSTEM_FIELD)
+				report("Data stream xfield", "wrong flags.");
 			break;
 		case APFS_INO_EXT_TYPE_DIR_STATS_KEY:
 			xlen = sizeof(struct apfs_dir_stats_val);
