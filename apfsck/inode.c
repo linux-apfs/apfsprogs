@@ -365,7 +365,7 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 			xlen = 16;
 			break;
 		case APFS_INO_EXT_TYPE_PREV_FSIZE:
-			printf("Inode xfield: filesystem has crashed.\n");
+			report_crash("Inode xfield");
 			if (xflags != 0)
 				report("Previous size xfield", "wrong flags.");
 		case APFS_INO_EXT_TYPE_SNAP_XID:

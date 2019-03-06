@@ -123,7 +123,7 @@ static void map_main_super(void)
 		report("Checkpoint descriptors", "latest is missing.");
 	/* TODO: the latest checkpoint and block zero are somehow different? */
 	if (sb->s_xid != le64_to_cpu(msb_raw->nx_o.o_xid))
-		report("Block zero", "filesystem was not unmounted cleanly.");
+		report_crash("Block zero");
 	munmap(msb_raw, sb->s_blocksize);
 }
 
@@ -208,7 +208,7 @@ void parse_super(void)
 		if (le64_to_cpu(vsb_raw->apfs_num_files) !=
 							vsb->v_file_count)
 			/* Sometimes this is off by one.  TODO: why? */
-			printf("Bad file count, may not be corruption.\n");
+			report_weird("File count in volume superblock");
 		if (le64_to_cpu(vsb_raw->apfs_num_directories) !=
 							vsb->v_dir_count)
 			report("Volume superblock", "bad directory count.");
