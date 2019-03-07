@@ -363,14 +363,21 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 		switch (xfield[i].x_type) {
 		case APFS_INO_EXT_TYPE_FS_UUID:
 			xlen = 16;
+			report_unknown("UUID xfield");
 			break;
 		case APFS_INO_EXT_TYPE_PREV_FSIZE:
+			xlen = 8;
 			report_crash("Inode xfield");
 			if (xflags != 0)
 				report("Previous size xfield", "wrong flags.");
+			break;
 		case APFS_INO_EXT_TYPE_SNAP_XID:
+			xlen = 8;
+			report_unknown("Snapshot id xfield");
+			break;
 		case APFS_INO_EXT_TYPE_DELTA_TREE_OID:
 			xlen = 8;
+			report_unknown("Snapshot's extent delta list xfield");
 			break;
 		case APFS_INO_EXT_TYPE_SPARSE_BYTES:
 			xlen = read_sparse_bytes_xfield(xval, len, inode);
@@ -380,12 +387,15 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 			break;
 		case APFS_INO_EXT_TYPE_DOCUMENT_ID:
 			xlen = read_document_id_xfield(xval, len, inode);
+			report_unknown("Document id xfield");
 			break;
 		case APFS_INO_EXT_TYPE_FINDER_INFO:
 			xlen = 4;
+			report_unknown("Finder info xfield");
 			break;
 		case APFS_INO_EXT_TYPE_RDEV:
 			xlen = read_rdev_xfield(xval, len, inode);
+			report_unknown("Device identifier xfield");
 			break;
 		case APFS_INO_EXT_TYPE_NAME:
 			xlen = read_name_xfield(xval, len, inode);
@@ -399,6 +409,7 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 			break;
 		case APFS_INO_EXT_TYPE_DIR_STATS_KEY:
 			xlen = sizeof(struct apfs_dir_stats_val);
+			report_unknown("Directory statistics xfield");
 			break;
 		case APFS_INO_EXT_TYPE_RESERVED_6:
 		case APFS_INO_EXT_TYPE_RESERVED_9:
