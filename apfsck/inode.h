@@ -23,6 +23,34 @@ struct apfs_sibling_link_key;
 /* Smallest inode number available for user content */
 #define APFS_MIN_USER_INO_NUM		16
 
+/* Inode internal flags */
+#define APFS_INODE_IS_APFS_PRIVATE		0x00000001
+#define APFS_INODE_MAINTAIN_DIR_STATS		0x00000002
+#define APFS_INODE_DIR_STATS_ORIGIN		0x00000004
+#define APFS_INODE_PROT_CLASS_EXPLICIT		0x00000008
+#define APFS_INODE_WAS_CLONED			0x00000010
+#define APFS_INODE_FLAG_UNUSED			0x00000020
+#define APFS_INODE_HAS_SECURITY_EA		0x00000040
+#define APFS_INODE_BEING_TRUNCATED		0x00000080
+#define APFS_INODE_HAS_FINDER_INFO		0x00000100
+#define APFS_INODE_IS_SPARSE			0x00000200
+#define APFS_INODE_WAS_EVER_CLONED		0x00000400
+#define APFS_INODE_ACTIVE_FILE_TRIMMED		0x00000800
+#define APFS_INODE_PINNED_TO_MAIN		0x00001000
+#define APFS_INODE_PINNED_TO_TIER2		0x00002000
+#define APFS_INODE_HAS_RSRC_FORK		0x00004000
+#define APFS_INODE_NO_RSRC_FORK			0x00008000
+#define APFS_INODE_ALLOCATION_SPILLEDOVER	0x00010000
+
+/* Masks for internal flags */
+#define APFS_VALID_INTERNAL_INODE_FLAGS		0x0001ffdf
+#define APFS_INODE_INHERITED_INTERNAL_FLAGS	(APFS_INODE_MAINTAIN_DIR_STATS)
+#define APFS_INDOE_CLONED_INTERNAL_FLAGS	(APFS_INODE_HAS_RSRC_FORK \
+						| APFS_INODE_NO_RSRC_FORK \
+						| APFS_INODE_HAS_FINDER_INFO)
+#define APFS_INODE_PINNED_MASK			(APFS_INODE_PINNED_TO_MAIN \
+						| APFS_INODE_PINNED_TO_TIER2)
+
 /* File mode flags */
 #define S_IFMT  00170000
 #define S_IFSOCK 0140000
@@ -166,6 +194,7 @@ struct inode {
 	u64		i_size;		/* Inode size */
 	u64		i_alloced_size;	/* Inode size, including unused */
 	u64		i_sparse_bytes;	/* Number of sparse bytes */
+	u64		i_flags;	/* Internal flags */
 	u32		i_rdev;		/* Device ID */
 	char		*i_name;	/* Name of primary link */
 

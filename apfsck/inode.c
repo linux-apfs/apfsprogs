@@ -446,6 +446,36 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 }
 
 /**
+ * check_inode_internal_flags - Check basic consistency of inode flags
+ * @flags: the flags
+ */
+static void check_inode_internal_flags(u64 flags)
+{
+	if ((flags & APFS_VALID_INTERNAL_INODE_FLAGS) != flags)
+		report("Inode record", "invalid flags in use.");
+
+	if ((flags & APFS_INODE_DIR_STATS_ORIGIN) &&
+	    !(flags & APFS_INODE_MAINTAIN_DIR_STATS))
+		report("Inode record", "incompatible directory stats flags.");
+	if (flags & APFS_INODE_HAS_RSRC_FORK && flags & APFS_INODE_NO_RSRC_FORK)
+		report("Inode record", "incompatible resource fork flags.");
+
+	if (flags & APFS_INODE_BEING_TRUNCATED)
+		report_crash("Inode internal flags");
+
+	if (flags & APFS_INODE_PINNED_TO_MAIN ||
+	    flags & APFS_INODE_PINNED_TO_TIER2 ||
+	    flags & APFS_INODE_ALLOCATION_SPILLEDOVER)
+		report_unknown("Fusion drive");
+	if (flags & APFS_INODE_HAS_RSRC_FORK)
+		report_unknown("Resource fork");
+	if (flags & APFS_INODE_MAINTAIN_DIR_STATS)
+		report_unknown("Directory statistics");
+	if (flags & APFS_INODE_IS_APFS_PRIVATE)
+		report_unknown("Private implementation inode");
+}
+
+/**
  * check_inode_ids - Check that an inode id is consistent with its parent id
  * @ino:	inode number
  * @parent_ino:	parent inode number
@@ -511,6 +541,9 @@ void parse_inode_record(struct apfs_inode_key *key,
 	inode->i_private_id = le64_to_cpu(val->private_id);
 
 	check_inode_ids(inode->i_ino, le64_to_cpu(val->parent_id));
+
+	inode->i_flags = le64_to_cpu(val->internal_flags);
+	check_inode_internal_flags(inode->i_flags);
 
 	mode = le16_to_cpu(val->mode);
 	filetype = mode & S_IFMT;
