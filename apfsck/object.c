@@ -100,6 +100,8 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 		report("Object header", "undefined flag in use.");
 	if (obj->flags & APFS_OBJ_NONPERSISTENT)
 		report("Object header", "nonpersistent flag is set.");
+	if (obj->flags & APFS_OBJ_ENCRYPTED)
+		report_unknown("Encrypted object");
 
 	/* TODO: ephemeral objects? */
 	storage_type = obj->flags & APFS_OBJ_STORAGETYPE_MASK;
