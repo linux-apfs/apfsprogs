@@ -316,6 +316,49 @@ void check_xfield_flags(u8 flags)
 }
 
 /**
+ * xbmap_set - Set an xfield type in the xfield bitmap
+ * @bmap: the xfield bitmap
+ * @type: the extended field type
+ */
+static inline void xbmap_set(u16 *bmap, u8 type)
+{
+	*bmap |= 1 << type;
+}
+
+/**
+ * xbmap_test - Test if an xfield type is present in the xfield bitmap
+ * @bmap: the xfield bitmap
+ * @type: the extended field type
+ */
+static inline bool xbmap_test(u16 bmap, u8 type)
+{
+	return bmap & (1 << type);
+}
+
+/**
+ * check_xfield_inode_flags - Check that xfields are consistent with inode flags
+ * @bmap:	bitmap of xfield types seen in the inode
+ * @flags:	inode flags
+ */
+static void check_xfield_inode_flags(u16 bmap, u64 flags)
+{
+	if (xbmap_test(bmap, APFS_INO_EXT_TYPE_DIR_STATS_KEY) !=
+	    (bool)(flags & APFS_INODE_MAINTAIN_DIR_STATS))
+		report("Inode record", "wrong setting for dir stats flag.");
+	if (xbmap_test(bmap, APFS_INO_EXT_TYPE_SPARSE_BYTES) !=
+	    (bool)(flags & APFS_INODE_IS_SPARSE))
+		report("Inode record", "wrong setting for sparse flag.");
+
+	/* Some inodes don't have finder info but still have the flag... */
+	if (xbmap_test(bmap, APFS_INO_EXT_TYPE_FINDER_INFO) &&
+	    !(flags & APFS_INODE_HAS_FINDER_INFO))
+		report("Inode record", "wrong setting for finder info flag.");
+	if (!xbmap_test(bmap, APFS_INO_EXT_TYPE_FINDER_INFO) &&
+	    (flags & APFS_INODE_HAS_FINDER_INFO))
+		report_weird("Finder info flag in inode record");
+}
+
+/**
  * parse_inode_xfields - Parse and check an inode extended fields
  * @xblob:	pointer to the beginning of the xfields in the inode value
  * @len:	length of the xfields
@@ -332,8 +375,10 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 	int xcount;
 	int i;
 
-	if (len == 0) /* No extended fields */
+	if (len == 0) { /* No extended fields */
+		check_xfield_inode_flags(type_bitmap, inode->i_flags);
 		return;
+	}
 
 	len -= sizeof(*xblob);
 	if (len < 0)
@@ -355,7 +400,6 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 
 	for (i = 0; i < le16_to_cpu(xblob->xf_num_exts); ++i) {
 		int xlen, xpad_len;
-		u16 type_flag;
 		u8 xflags = xfield[i].x_flags;
 
 		check_xfield_flags(xflags);
@@ -420,10 +464,9 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 			report("Inode xfield", "invalid type.");
 		}
 
-		type_flag = 1 << xfield[i].x_type;
-		if (type_bitmap & type_flag)
+		if (xbmap_test(type_bitmap, xfield[i].x_type))
 			report("Inode record", "two xfields of the same type.");
-		type_bitmap |= type_flag;
+		xbmap_set(&type_bitmap, xfield[i].x_type);
 
 		if (xlen != le16_to_cpu(xfield[i].x_size))
 			report("Inode xfield", "wrong size");
@@ -443,6 +486,8 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 
 	if (len)
 		report("Inode record", "length of xfields does not add up.");
+
+	check_xfield_inode_flags(type_bitmap, inode->i_flags);
 }
 
 /**
