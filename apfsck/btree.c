@@ -18,6 +18,7 @@
 #include "object.h"
 #include "super.h"
 #include "types.h"
+#include "xattr.h"
 
 /**
  * node_is_valid - Check basic sanity of the node index
@@ -511,6 +512,9 @@ static void parse_cat_record(void *key, void *val, int len)
 		break;
 	case APFS_TYPE_SIBLING_LINK:
 		parse_sibling_record(key, val, len);
+		break;
+	case APFS_TYPE_XATTR:
+		parse_xattr_record(key, val, len);
 		break;
 	default:
 		break;
