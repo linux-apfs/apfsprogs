@@ -179,6 +179,7 @@ struct apfs_sibling_val {
 
 /* Flags for the bitmap of seen system xattrs (i_xattr_bmap) */
 #define XATTR_BMAP_SYMLINK	0x01	/* Symlink target xattr */
+#define XATTR_BMAP_RSRC_FORK	0x02	/* Resource fork xattr */
 
 /*
  * Inode data in memory

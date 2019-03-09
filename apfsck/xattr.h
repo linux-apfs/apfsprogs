@@ -18,6 +18,7 @@ struct apfs_xattr_key;
 /* Extended attributes names */
 #define APFS_XATTR_NAME_SYMLINK		"com.apple.fs.symlink"
 #define APFS_XATTR_NAME_COMPRESSED	"com.apple.decmpfs"
+#define APFS_XATTR_NAME_RSRC_FORK	"com.apple.ResourceFork"
 
 /* Extended attributes flags */
 enum {

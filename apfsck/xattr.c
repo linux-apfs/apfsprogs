@@ -71,5 +71,11 @@ void parse_xattr_record(struct apfs_xattr_key *key,
 		if (inode->i_xattr_bmap & XATTR_BMAP_SYMLINK)
 			report("Catalog", "two targets for same symlink.");
 		inode->i_xattr_bmap |= XATTR_BMAP_SYMLINK;
+	} else if (!strcmp((char *)key->name, APFS_XATTR_NAME_RSRC_FORK)) {
+		if (flags & APFS_XATTR_FILE_SYSTEM_OWNED)
+			report("Resource fork xattr", "owned by system.");
+		if (inode->i_xattr_bmap & XATTR_BMAP_RSRC_FORK)
+			report("Catalog", "two resource forks for same inode.");
+		inode->i_xattr_bmap |= XATTR_BMAP_RSRC_FORK;
 	}
 }

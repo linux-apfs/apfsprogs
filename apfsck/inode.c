@@ -48,6 +48,9 @@ static void check_inode_stats(struct inode *inode)
 	    (bool)((inode->i_mode & S_IFMT) == S_IFLNK))
 		report("Inode record",
 		       "symlink inode should come with target xattr.");
+	if ((bool)(inode->i_xattr_bmap & XATTR_BMAP_RSRC_FORK) !=
+	    (bool)(inode->i_flags & APFS_INODE_HAS_RSRC_FORK))
+		report("Inode record", "wrong flag for resource fork.");
 }
 
 /**
@@ -517,8 +520,6 @@ static void check_inode_internal_flags(u64 flags)
 	    flags & APFS_INODE_PINNED_TO_TIER2 ||
 	    flags & APFS_INODE_ALLOCATION_SPILLEDOVER)
 		report_unknown("Fusion drive");
-	if (flags & APFS_INODE_HAS_RSRC_FORK)
-		report_unknown("Resource fork");
 	if (flags & APFS_INODE_MAINTAIN_DIR_STATS)
 		report_unknown("Directory statistics");
 	if (flags & APFS_INODE_IS_APFS_PRIVATE)
