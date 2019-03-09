@@ -43,6 +43,11 @@ static void check_inode_stats(struct inode *inode)
 		report("Inode record", "wrong allocated space for dstream.");
 	if (dstream->d_sparse_bytes != inode->i_sparse_bytes)
 		report("Inode record", "wrong count of sparse bytes.");
+
+	if ((bool)(inode->i_xattr_bmap & XATTR_BMAP_SYMLINK) !=
+	    (bool)((inode->i_mode & S_IFMT) == S_IFLNK))
+		report("Inode record",
+		       "symlink inode should come with target xattr.");
 }
 
 /**

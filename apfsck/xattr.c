@@ -4,8 +4,11 @@
  * Copyright (C) 2018 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */
 
+#include <string.h>
 #include "apfsck.h"
+#include "inode.h"
 #include "key.h"
+#include "super.h"
 #include "types.h"
 #include "xattr.h"
 
@@ -36,6 +39,7 @@ static void check_xattr_flags(u16 flags)
 void parse_xattr_record(struct apfs_xattr_key *key,
 			struct apfs_xattr_val *val, int len)
 {
+	struct inode *inode;
 	u16 flags;
 
 	if (len < sizeof(*val))
@@ -55,5 +59,17 @@ void parse_xattr_record(struct apfs_xattr_key *key,
 	} else {
 		if (len != le16_to_cpu(val->xdata_len))
 			report("Xattr record", "bad length for embedded data.");
+	}
+
+	inode = get_inode(cat_cnid(&key->hdr), vsb->v_inode_table);
+	if (!inode->i_seen)
+		report("Catalog", "xattr record with no inode.");
+
+	if (!strcmp((char *)key->name, APFS_XATTR_NAME_SYMLINK)) {
+		if (!(flags & APFS_XATTR_FILE_SYSTEM_OWNED))
+			report("Symlink target xattr", "not owned by system.");
+		if (inode->i_xattr_bmap & XATTR_BMAP_SYMLINK)
+			report("Catalog", "two targets for same symlink.");
+		inode->i_xattr_bmap |= XATTR_BMAP_SYMLINK;
 	}
 }

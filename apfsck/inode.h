@@ -177,6 +177,9 @@ struct apfs_sibling_val {
 
 #define INODE_TABLE_BUCKETS	512	/* So the hash table array fits in 4k */
 
+/* Flags for the bitmap of seen system xattrs (i_xattr_bmap) */
+#define XATTR_BMAP_SYMLINK	0x01	/* Symlink target xattr */
+
 /*
  * Inode data in memory
  */
@@ -199,6 +202,7 @@ struct inode {
 	char		*i_name;	/* Name of primary link */
 
 	/* Inode stats measured by the fsck */
+	u8		i_xattr_bmap;	/* Bitmap of system xattrs for inode */
 	u32		i_child_count;	/* Number of children of directory */
 	u32		i_link_count;	/* Number of dentries for file */
 	char		*i_first_name;	/* Name of first dentry encountered */
