@@ -27,6 +27,8 @@ enum {
 	APFS_XATTR_RESERVED_8		= 0x00000008,
 };
 
+#define APFS_XATTR_VALID_FLAGS 0x0000000f
+
 /*
  * Structure of the value of an extended attributes record
  */
