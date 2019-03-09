@@ -77,5 +77,11 @@ void parse_xattr_record(struct apfs_xattr_key *key,
 		if (inode->i_xattr_bmap & XATTR_BMAP_RSRC_FORK)
 			report("Catalog", "two resource forks for same inode.");
 		inode->i_xattr_bmap |= XATTR_BMAP_RSRC_FORK;
+	} else if (!strcmp((char *)key->name, APFS_XATTR_NAME_SECURITY)) {
+		if (flags & APFS_XATTR_FILE_SYSTEM_OWNED)
+			report("Security xattr", "owned by system.");
+		if (inode->i_xattr_bmap & XATTR_BMAP_SECURITY)
+			report("Catalog", "two security xattrs for one inode.");
+		inode->i_xattr_bmap |= XATTR_BMAP_SECURITY;
 	}
 }

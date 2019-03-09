@@ -51,6 +51,9 @@ static void check_inode_stats(struct inode *inode)
 	if ((bool)(inode->i_xattr_bmap & XATTR_BMAP_RSRC_FORK) !=
 	    (bool)(inode->i_flags & APFS_INODE_HAS_RSRC_FORK))
 		report("Inode record", "wrong flag for resource fork.");
+	if ((bool)(inode->i_xattr_bmap & XATTR_BMAP_SECURITY) !=
+	    (bool)(inode->i_flags & APFS_INODE_HAS_SECURITY_EA))
+		report("Inode record", "wrong flag for access control list.");
 }
 
 /**
