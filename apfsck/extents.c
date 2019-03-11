@@ -32,10 +32,8 @@ struct dstream **alloc_dstream_table(void)
  */
 static void check_dstream_stats(struct dstream *dstream)
 {
-	if (dstream->d_obj_type != APFS_TYPE_INODE)
-		/* No checks for xattrs, for now */
-		return;
-
+	if (!dstream->d_obj_type) /* The dstream structure was never seen */
+		report_unknown("File extent without inode or xattr");
 	if (dstream->d_bytes < dstream->d_size)
 		report("Data stream", "some extents are missing.");
 	if (dstream->d_bytes != dstream->d_alloced_size)

@@ -6,6 +6,7 @@
 
 #include <string.h>
 #include "apfsck.h"
+#include "extents.h"
 #include "inode.h"
 #include "key.h"
 #include "super.h"
@@ -26,6 +27,38 @@ static void check_xattr_flags(u16 flags)
 	if ((bool)(flags & APFS_XATTR_DATA_STREAM) ==
 	    (bool)(flags & APFS_XATTR_DATA_EMBEDDED))
 		report("Xattr record", "must be either embedded or dstream.");
+}
+
+/**
+ * parse_xattr_dstream - Parse a xattr dstream struct and check for corruption
+ * @xstream: the dstream structure
+ */
+static void parse_xattr_dstream(struct apfs_xattr_dstream *xstream)
+{
+	struct dstream *dstream;
+	struct apfs_dstream *dstream_raw = &xstream->dstream;
+	u64 id = le64_to_cpu(xstream->xattr_obj_id);
+	u64 size, alloced_size;
+
+	size = le64_to_cpu(dstream_raw->size);
+	alloced_size = le64_to_cpu(dstream_raw->alloced_size);
+
+	dstream = get_dstream(id, vsb->v_dstream_table);
+	if (dstream->d_obj_type) {
+		/* A dstream structure for this id has already been seen */
+		if (dstream->d_obj_type != APFS_TYPE_XATTR)
+			report("Xattr dstream", "shared by inode and xattr.");
+		if (dstream->d_size != size)
+			report("Xattr dstream",
+			       "inconsistent size for stream.");
+		if (dstream->d_alloced_size != alloced_size)
+			report("Xattr dstream",
+			       "inconsistent allocated size for stream.");
+	} else {
+		dstream->d_obj_type = APFS_TYPE_XATTR;
+		dstream->d_size = size;
+		dstream->d_alloced_size = alloced_size;
+	}
 }
 
 /**
@@ -56,6 +89,7 @@ void parse_xattr_record(struct apfs_xattr_key *key,
 		if (len != le16_to_cpu(val->xdata_len))
 			/* Never seems to happen, but the docs don't ban it */
 			report_weird("Xattr data length for dstream structure");
+		parse_xattr_dstream((struct apfs_xattr_dstream *)val->xdata);
 	} else {
 		if (len != le16_to_cpu(val->xdata_len))
 			report("Xattr record", "bad length for embedded data.");
