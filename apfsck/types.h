@@ -1,7 +1,7 @@
 /*
  *  apfsprogs/apfsck/types.h
  *
- * Copyright (C) 2018 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
+ * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  *
  * Definitions that make it easier to reuse code from the kernel module.
  */

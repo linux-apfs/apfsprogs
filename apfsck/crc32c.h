@@ -1,7 +1,7 @@
 /*
  *  apfsprogs/apfsck/crc32c.h
  *
- * Copyright (C) 2018 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
+ * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */
 
 #ifndef _CRC32C_H

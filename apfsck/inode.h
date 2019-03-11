@@ -1,7 +1,7 @@
 /*
  *  apfsprogs/apfsck/inode.h
  *
- * Copyright (C) 2018 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
+ * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */
 
 #ifndef _INODE_H

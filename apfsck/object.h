@@ -1,7 +1,7 @@
 /*
  *  apfsprogs/apfsck/object.h
  *
- * Copyright (C) 2018 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
+ * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */
 
 #ifndef _OBJECT_H
