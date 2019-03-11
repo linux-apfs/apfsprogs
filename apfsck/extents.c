@@ -27,6 +27,22 @@ struct dstream **alloc_dstream_table(void)
 }
 
 /**
+ * check_dstream_stats - Verify the stats gathered by the fsck vs the metadata
+ * @dstream: dstream structure to check
+ */
+static void check_dstream_stats(struct dstream *dstream)
+{
+	if (dstream->d_obj_type != APFS_TYPE_INODE)
+		/* No checks for xattrs, for now */
+		return;
+
+	if (dstream->d_bytes < dstream->d_size)
+		report("Data stream", "some extents are missing.");
+	if (dstream->d_bytes != dstream->d_alloced_size)
+		report("Data stream", "wrong allocated space.");
+}
+
+/**
  * free_dstream_table - Free the dstream hash table and all its dstreams
  * @table: table to free
  */
@@ -39,6 +55,8 @@ void free_dstream_table(struct dstream **table)
 	for (i = 0; i < DSTREAM_TABLE_BUCKETS; ++i) {
 		current = table[i];
 		while (current) {
+			check_dstream_stats(current);
+
 			next = current->d_next;
 			free(current);
 			current = next;
@@ -110,9 +128,9 @@ void parse_extent_record(struct apfs_file_extent_key *key,
 		report("Extent record", "no flags should be set.");
 
 	dstream = get_dstream(cat_cnid(&key->hdr), vsb->v_dstream_table);
-	if (dstream->d_size != le64_to_cpu(key->logical_addr))
+	if (dstream->d_bytes != le64_to_cpu(key->logical_addr))
 		report("Data stream", "extents are not consecutive.");
-	dstream->d_size += length;
+	dstream->d_bytes += length;
 
 	if (!le64_to_cpu(val->phys_block_num)) /* This is a hole */
 		dstream->d_sparse_bytes += length;

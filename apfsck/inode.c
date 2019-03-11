@@ -37,10 +37,6 @@ static void check_inode_stats(struct inode *inode)
 	}
 
 	dstream = get_dstream(inode->i_private_id, vsb->v_dstream_table);
-	if (dstream->d_size < inode->i_size)
-		report("Inode record", "some extents are missing.");
-	if (dstream->d_size != inode->i_alloced_size)
-		report("Inode record", "wrong allocated space for dstream.");
 	if (dstream->d_sparse_bytes != inode->i_sparse_bytes)
 		report("Inode record", "wrong count of sparse bytes.");
 
@@ -300,16 +296,35 @@ static int read_name_xfield(char *xval, int len, struct inode *inode)
  */
 static int read_dstream_xfield(char *xval, int len, struct inode *inode)
 {
-	struct apfs_dstream *dstream;
+	struct apfs_dstream *dstream_raw;
+	struct dstream *dstream;
+	u64 size, alloced_size;
 
-	if (len < sizeof(*dstream))
+	if (len < sizeof(*dstream_raw))
 		report("Dstream xfield", "doesn't fit in inode record.");
-	dstream = (struct apfs_dstream *)xval;
+	dstream_raw = (struct apfs_dstream *)xval;
 
-	inode->i_size = le64_to_cpu(dstream->size);
-	inode->i_alloced_size = le64_to_cpu(dstream->alloced_size);
+	size = le64_to_cpu(dstream_raw->size);
+	alloced_size = le64_to_cpu(dstream_raw->alloced_size);
 
-	return sizeof(*dstream);
+	dstream = get_dstream(inode->i_private_id, vsb->v_dstream_table);
+	if (dstream->d_obj_type) {
+		/* A dstream structure for this id has already been seen */
+		if (dstream->d_obj_type != APFS_TYPE_INODE)
+			report("Dstream xfield", "shared by inode and xattr.");
+		if (dstream->d_size != size)
+			report("Dstream xfield",
+			       "inconsistent size for stream.");
+		if (dstream->d_alloced_size != alloced_size)
+			report("Dstream xfield",
+			       "inconsistent allocated size for stream.");
+	} else {
+		dstream->d_obj_type = APFS_TYPE_INODE;
+		dstream->d_size = size;
+		dstream->d_alloced_size = alloced_size;
+	}
+
+	return sizeof(*dstream_raw);
 }
 
 /**

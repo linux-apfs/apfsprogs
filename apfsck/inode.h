@@ -196,8 +196,6 @@ struct inode {
 		u32	i_nchildren;	/* Number of children of directory */
 		u32	i_nlink;	/* Number of hard links to file */
 	};
-	u64		i_size;		/* Inode size */
-	u64		i_alloced_size;	/* Inode size, including unused */
 	u64		i_sparse_bytes;	/* Number of sparse bytes */
 	u64		i_flags;	/* Internal flags */
 	u32		i_rdev;		/* Device ID */
