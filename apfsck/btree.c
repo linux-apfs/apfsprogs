@@ -527,8 +527,11 @@ static void parse_cat_record(void *key, void *val, int len)
  * @last_key:	parent key, that must come before all the keys in this subtree;
  *		on return, this will hold the last key of this subtree, that
  *		must come before the next key of the parent node
+ * @name_buf:	buffer to store the name of @last_key when its node is freed
+ *		(can be NULL if the keys have no name)
  */
-static void parse_subtree(struct node *root, struct key *last_key)
+static void parse_subtree(struct node *root,
+			  struct key *last_key, char *name_buf)
 {
 	struct btree *btree = root->btree;
 	struct key curr_key;
@@ -606,12 +609,22 @@ static void parse_subtree(struct node *root, struct key *last_key)
 			report("Object map",
 			       "xid of node is older than xid of its child.");
 
-		parse_subtree(child, last_key);
-		free(child);
+		parse_subtree(child, last_key, name_buf);
+		node_free(child);
 	}
 
 	/* All records of @root are processed, so it's a good time for this */
 	node_compare_bmaps(root);
+
+	/*
+	 * last_key->name is just a pointer to the memory-mapped on-disk name
+	 * of the key.  Since the caller will free the node, make a copy.
+	 */
+	if (node_is_leaf(root) && last_key->name) {
+		assert(name_buf);
+		strcpy(name_buf, last_key->name);
+		last_key->name = name_buf;
+	}
 }
 
 /**
@@ -679,6 +692,7 @@ struct btree *parse_cat_btree(u64 oid, struct node *omap_root)
 {
 	struct btree *cat;
 	struct key last_key = {0};
+	char name_buf[256];
 
 	cat = calloc(1, sizeof(*cat));
 	if (!cat) {
@@ -689,7 +703,7 @@ struct btree *parse_cat_btree(u64 oid, struct node *omap_root)
 	cat->omap_root = omap_root;
 	cat->root = read_node(oid, cat);
 
-	parse_subtree(cat->root, &last_key);
+	parse_subtree(cat->root, &last_key, name_buf);
 
 	check_btree_footer(cat);
 	return cat;
@@ -723,7 +737,7 @@ struct btree *parse_omap_btree(u64 oid)
 	omap->omap_root = NULL; /* The omap doesn't have an omap of its own */
 	omap->root = read_node(le64_to_cpu(raw->om_tree_oid), omap);
 
-	parse_subtree(omap->root, &last_key);
+	parse_subtree(omap->root, &last_key, NULL /* name_buf */);
 
 	check_btree_footer(omap);
 	return omap;

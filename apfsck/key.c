@@ -111,6 +111,10 @@ static void read_dir_rec_key(void *raw, int size, struct key *key)
 		report("Directory record", "filename hash is corrupted.");
 
 	namelen = le32_to_cpu(raw_key->name_len_and_hash) & 0x3FFU;
+	if (namelen > 256) {
+		/* The name must fit in name_buf from parse_subtree() */
+		report("Directory record", "name is too long.");
+	}
 	if (strlen(key->name) + 1 != namelen) {
 		/* APFS counts the NULL termination for the filename length */
 		report("Directory record", "wrong name length in key.");
@@ -142,6 +146,10 @@ static void read_xattr_key(void *raw, int size, struct key *key)
 	key->name = (char *)raw_key->name;
 
 	namelen = le16_to_cpu(raw_key->name_len);
+	if (namelen > 256) {
+		/* The name must fit in name_buf from parse_subtree() */
+		report("Xattr record", "name is too long.");
+	}
 	if (strlen(key->name) + 1 != namelen) {
 		/* APFS counts the NULL termination in the string length */
 		report("Xattr record", "wrong name length.");
@@ -176,6 +184,10 @@ static void read_snap_name_key(void *raw, int size, struct key *key)
 	key->name = (char *)raw_key->name;
 
 	namelen = le16_to_cpu(raw_key->name_len);
+	if (namelen > 256) {
+		/* The name must fit in name_buf from parse_subtree() */
+		report("Snapshot name record", "name is too long.");
+	}
 	if (strlen(key->name) + 1 != namelen) {
 		/* APFS counts the NULL termination in the string length */
 		report("Snapshot name record", "wrong name length.");
