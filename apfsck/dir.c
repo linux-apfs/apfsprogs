@@ -145,6 +145,6 @@ void parse_dentry_record(struct apfs_drec_hashed_key *key,
 
 	if (!sibling_id) /* No sibling record for this dentry */
 		return;
-	sibling = get_sibling(sibling_id, namelen, inode);
+	sibling = get_sibling(sibling_id, inode);
 	set_or_check_sibling(parent_ino, namelen, key->name, sibling);
 }

@@ -221,7 +221,7 @@ struct sibling {
 
 	u64		s_parent_ino;	/* Inode number for parent */
 	u16		s_name_len;	/* Name length */
-	u8		s_name[0];	/* Name */
+	u8		*s_name;	/* In-memory copy of the name */
 };
 
 extern struct inode **alloc_inode_table();
@@ -230,7 +230,7 @@ extern struct inode *get_inode(u64 ino, struct inode **table);
 extern void check_inode_ids(u64 ino, u64 parent_ino);
 extern void parse_inode_record(struct apfs_inode_key *key,
 			       struct apfs_inode_val *val, int len);
-extern struct sibling *get_sibling(u64 id, int namelen, struct inode *inode);
+extern struct sibling *get_sibling(u64 id, struct inode *inode);
 extern void set_or_check_sibling(u64 parent_id, int namelen, u8 *name,
 				 struct sibling *sibling);
 extern void parse_sibling_record(struct apfs_sibling_link_key *key,

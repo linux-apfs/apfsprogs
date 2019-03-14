@@ -106,6 +106,7 @@ static void free_inode_names(struct inode *inode)
 		if (!current->s_checked)
 			report("Catalog", "orphaned or missing sibling link.");
 		next = current->s_next;
+		free(current->s_name);
 		free(current);
 		current = next;
 		++count;
@@ -658,12 +659,11 @@ void parse_inode_record(struct apfs_inode_key *key,
 /**
  * get_sibling - Find or create a sibling link structure for an inode
  * @id:		sibling id
- * @namelen:	length of the sibling name
  * @inode:	the inode
  *
  * Returns the sibling structure, after creating it if necessary.
  */
-struct sibling *get_sibling(u64 id, int namelen, struct inode *inode)
+struct sibling *get_sibling(u64 id, struct inode *inode)
 {
 	struct sibling **entry_p = &inode->i_siblings;
 	struct sibling *entry = *entry_p;
@@ -680,7 +680,7 @@ struct sibling *get_sibling(u64 id, int namelen, struct inode *inode)
 		entry = *entry_p;
 	}
 
-	new = calloc(1, sizeof(*new) + namelen);
+	new = calloc(1, sizeof(*new));
 	if (!new) {
 		perror(NULL);
 		exit(1);
@@ -707,10 +707,16 @@ void set_or_check_sibling(u64 parent_id, int namelen, u8 *name,
 			  struct sibling *sibling)
 {
 	/* Whichever was read first, dentry or sibling, sets the fields */
-	if (!sibling->s_name_len) {
-		sibling->s_name_len = namelen;
-		strcpy((char *)sibling->s_name, (char *)name);
+	if (!sibling->s_name) {
 		sibling->s_parent_ino = parent_id;
+		sibling->s_name_len = namelen;
+
+		sibling->s_name = malloc(namelen);
+		if (!sibling->s_name) {
+			perror(NULL);
+			exit(1);
+		}
+		strcpy((char *)sibling->s_name, (char *)name);
 		return;
 	}
 
@@ -753,7 +759,7 @@ void parse_sibling_record(struct apfs_sibling_link_key *key,
 	if (!inode->i_seen) /* The b-tree keys are in order */
 		report("Sibling link record", "inode is missing");
 
-	sibling = get_sibling(le64_to_cpu(key->sibling_id), namelen, inode);
+	sibling = get_sibling(le64_to_cpu(key->sibling_id), inode);
 
 	/* It seems that sibling ids come from the same pool as inode numbers */
 	if (sibling->s_id < APFS_MIN_USER_INO_NUM)
