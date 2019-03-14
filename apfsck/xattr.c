@@ -44,7 +44,7 @@ static void parse_xattr_dstream(struct apfs_xattr_dstream *xstream)
 	alloced_size = le64_to_cpu(dstream_raw->alloced_size);
 
 	dstream = get_dstream(id, vsb->v_dstream_table);
-	if (dstream->d_obj_type) {
+	if (dstream->d_references) {
 		/* A dstream structure for this id has already been seen */
 		if (dstream->d_obj_type != APFS_TYPE_XATTR)
 			report("Xattr dstream", "shared by inode and xattr.");
@@ -59,6 +59,7 @@ static void parse_xattr_dstream(struct apfs_xattr_dstream *xstream)
 		dstream->d_size = size;
 		dstream->d_alloced_size = alloced_size;
 	}
+	dstream->d_references++;
 }
 
 /**

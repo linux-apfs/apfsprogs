@@ -32,8 +32,22 @@ struct dstream **alloc_dstream_table(void)
  */
 static void check_dstream_stats(struct dstream *dstream)
 {
-	if (!dstream->d_obj_type) /* The dstream structure was never seen */
-		report_unknown("File extent without inode or xattr");
+	if (dstream->d_obj_type == APFS_TYPE_XATTR) {
+		if (dstream->d_seen || dstream->d_references != 1)
+			report("Data stream", "xattrs can't be cloned.");
+	} else {
+		if (!dstream->d_seen && dstream->d_references)
+			report("Data stream", "missing reference count.");
+		if (dstream->d_seen && !dstream->d_references)
+			report("Data stream", "unnecessary reference count.");
+		if (dstream->d_refcnt != dstream->d_references)
+			report("Data stream", "bad reference count.");
+	}
+
+	if (!dstream->d_references)
+		/* No dstream structure to report the length */
+		return;
+
 	if (dstream->d_bytes < dstream->d_size)
 		report("Data stream", "some extents are missing.");
 	if (dstream->d_bytes != dstream->d_alloced_size)
@@ -132,4 +146,25 @@ void parse_extent_record(struct apfs_file_extent_key *key,
 
 	if (!le64_to_cpu(val->phys_block_num)) /* This is a hole */
 		dstream->d_sparse_bytes += length;
+}
+
+/**
+ * parse_dstream_id_record - Parse a dstream id record value
+ * @key:	pointer to the raw key
+ * @val:	pointer to the raw value
+ * @len:	length of the raw value
+ *
+ * Internal consistency of @key must be checked before calling this function.
+ */
+void parse_dstream_id_record(struct apfs_dstream_id_key *key,
+			     struct apfs_dstream_id_val *val, int len)
+{
+	struct dstream *dstream;
+
+	if (len != sizeof(*val))
+		report("Dstream id record", "wrong size of value.");
+
+	dstream = get_dstream(cat_cnid(&key->hdr), vsb->v_dstream_table);
+	dstream->d_seen = true;
+	dstream->d_refcnt = le32_to_cpu(val->refcnt);
 }

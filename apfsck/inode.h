@@ -139,13 +139,6 @@ struct apfs_x_field {
 } __packed;
 
 /*
- * Structure of a data stream record
- */
-struct apfs_dstream_id_val {
-	__le32 refcnt;
-} __packed;
-
-/*
  * Structure used to store information about a data stream
  */
 struct apfs_dstream {

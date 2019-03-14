@@ -519,6 +519,9 @@ static void parse_cat_record(void *key, void *val, int len)
 	case APFS_TYPE_SIBLING_MAP:
 		parse_sibling_map_record(key, val, len);
 		break;
+	case APFS_TYPE_DSTREAM_ID:
+		parse_dstream_id_record(key, val, len);
+		break;
 	default:
 		break;
 	}

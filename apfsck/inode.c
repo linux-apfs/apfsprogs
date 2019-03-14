@@ -311,7 +311,7 @@ static int read_dstream_xfield(char *xval, int len, struct inode *inode)
 	alloced_size = le64_to_cpu(dstream_raw->alloced_size);
 
 	dstream = get_dstream(inode->i_private_id, vsb->v_dstream_table);
-	if (dstream->d_obj_type) {
+	if (dstream->d_references) {
 		/* A dstream structure for this id has already been seen */
 		if (dstream->d_obj_type != APFS_TYPE_INODE)
 			report("Dstream xfield", "shared by inode and xattr.");
@@ -327,6 +327,7 @@ static int read_dstream_xfield(char *xval, int len, struct inode *inode)
 		dstream->d_alloced_size = alloced_size;
 	}
 
+	dstream->d_references++;
 	return sizeof(*dstream_raw);
 }
 

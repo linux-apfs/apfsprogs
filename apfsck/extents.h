@@ -10,6 +10,7 @@
 #include "types.h"
 
 struct apfs_file_extent_key;
+struct apfs_dstream_id_key;
 
 /* File extent records */
 #define APFS_FILE_EXTENT_LEN_MASK	0x00ffffffffffffffULL
@@ -25,6 +26,13 @@ struct apfs_file_extent_val {
 	__le64 crypto_id;
 } __packed;
 
+/*
+ * Structure of a data stream record
+ */
+struct apfs_dstream_id_val {
+	__le32 refcnt;
+} __packed;
+
 #define DSTREAM_TABLE_BUCKETS	512	/* So the hash table array fits in 4k */
 
 /*
@@ -33,14 +41,17 @@ struct apfs_file_extent_val {
 struct dstream {
 	u64		d_id;		/* Id of the dstream */
 	u8		d_obj_type;	/* Type of the owner objects */
+	bool		d_seen;		/* Has the dstream record been seen? */
 
-	/* Dstream stats read from the dstream structure */
+	/* Dstream stats read from the dstream structures */
 	u64		d_size;		/* Dstream size */
 	u64		d_alloced_size;	/* Dstream size, including unused */
+	u32		d_refcnt;	/* Reference count */
 
 	/* Dstream stats measured by the fsck */
 	u64		d_bytes;	/* Size of the extents read so far */
 	u64		d_sparse_bytes;	/* Size of the holes read so far */
+	u32		d_references;	/* Number of references to dstream */
 
 	struct dstream	*d_next;	/* Next dstream in linked list */
 };
@@ -50,5 +61,7 @@ extern void free_dstream_table(struct dstream **table);
 extern struct dstream *get_dstream(u64 ino, struct dstream **table);
 extern void parse_extent_record(struct apfs_file_extent_key *key,
 				struct apfs_file_extent_val *val, int len);
+extern void parse_dstream_id_record(struct apfs_dstream_id_key *key,
+				    struct apfs_dstream_id_val *val, int len);
 
 #endif	/* _EXTENTS_H */
