@@ -523,6 +523,7 @@ static void parse_cat_record(void *key, void *val, int len)
 		parse_dstream_id_record(key, val, len);
 		break;
 	default:
+		report_unknown("Snapshots, encryption, directory statistics");
 		break;
 	}
 }
