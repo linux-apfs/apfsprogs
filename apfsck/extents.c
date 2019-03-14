@@ -133,8 +133,11 @@ void parse_extent_record(struct apfs_file_extent_key *key,
 
 	/* TODO: checks for crypto_id */
 	length = le64_to_cpu(val->len_and_flags) & APFS_FILE_EXTENT_LEN_MASK;
+	if (!length)
+		report("Extent record", "length is zero.");
 	if (length & (sb->s_blocksize - 1))
 		report("Extent record", "length isn't multiple of block size.");
+
 	flags = le64_to_cpu(val->len_and_flags) & APFS_FILE_EXTENT_FLAG_MASK;
 	if (flags)
 		report("Extent record", "no flags should be set.");
