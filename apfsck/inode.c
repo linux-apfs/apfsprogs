@@ -105,6 +105,8 @@ static void free_inode_names(struct inode *inode)
 	while (current) {
 		if (!current->s_checked)
 			report("Catalog", "orphaned or missing sibling link.");
+		if (!current->s_mapped)
+			report("Catalog", "no sibling map for link.");
 		next = current->s_next;
 		free(current->s_name);
 		free(current);
@@ -767,4 +769,26 @@ void parse_sibling_record(struct apfs_sibling_link_key *key,
 
 	set_or_check_sibling(le64_to_cpu(val->parent_id), namelen, val->name,
 			     sibling);
+}
+
+/**
+ * parse_sibling_record - Parse and check a sibling map record value
+ * @key:	pointer to the raw key
+ * @val:	pointer to the raw value
+ * @len:	length of the raw value
+ *
+ * Internal consistency of @key must be checked before calling this function.
+ */
+void parse_sibling_map_record(struct apfs_sibling_map_key *key,
+			      struct apfs_sibling_map_val *val, int len)
+{
+	struct inode *inode;
+	struct sibling *sibling;
+
+	if (len != sizeof(*val))
+		report("Sibling map record", "wrong size of value.");
+
+	inode = get_inode(le64_to_cpu(val->file_id), vsb->v_inode_table);
+	sibling = get_sibling(cat_cnid(&key->hdr), inode);
+	sibling->s_mapped = true;
 }

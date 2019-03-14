@@ -122,6 +122,13 @@ struct apfs_sibling_link_key {
 } __packed;
 
 /*
+ * Structure of the key for a siblink map record
+ */
+struct apfs_sibling_map_key {
+	struct apfs_key_header hdr;
+} __packed;
+
+/*
  * In-memory representation of a key, as relevant for a b-tree query.
  */
 struct key {

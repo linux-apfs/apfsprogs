@@ -11,6 +11,7 @@
 
 struct apfs_inode_key;
 struct apfs_sibling_link_key;
+struct apfs_sibling_map_key;
 
 /* Inode numbers for special inodes */
 #define APFS_INVALID_INO_NUM		0
@@ -175,6 +176,13 @@ struct apfs_sibling_val {
 	u8 name[0];
 } __packed;
 
+/*
+ * Structure of the value for a sibling map record.  No idea what these are for.
+ */
+struct apfs_sibling_map_val {
+	__le64 file_id;
+} __packed;
+
 #define INODE_TABLE_BUCKETS	512	/* So the hash table array fits in 4k */
 
 /* Flags for the bitmap of seen system xattrs (i_xattr_bmap) */
@@ -218,6 +226,7 @@ struct sibling {
 	struct sibling	*s_next;	/* Next sibling in linked list */
 	u64		s_id;		/* Sibling id */
 	bool		s_checked;	/* Has this sibling been checked? */
+	bool		s_mapped;	/* Has the sibling map been seen? */
 
 	u64		s_parent_ino;	/* Inode number for parent */
 	u16		s_name_len;	/* Name length */
@@ -235,6 +244,8 @@ extern void set_or_check_sibling(u64 parent_id, int namelen, u8 *name,
 				 struct sibling *sibling);
 extern void parse_sibling_record(struct apfs_sibling_link_key *key,
 				 struct apfs_sibling_val *val, int len);
+extern void parse_sibling_map_record(struct apfs_sibling_map_key *key,
+				     struct apfs_sibling_map_val *val, int len);
 extern void check_xfield_flags(u8 flags);
 
 #endif	/* _INODE_H */
