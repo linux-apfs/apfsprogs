@@ -10,6 +10,7 @@
 #include <string.h>
 #include "apfsck.h"
 #include "extents.h"
+#include "htable.h"
 #include "inode.h"
 #include "key.h"
 #include "super.h"
@@ -36,7 +37,7 @@ static void check_inode_stats(struct inode *inode)
 			report("Inode record", "wrong link count.");
 	}
 
-	dstream = get_dstream(inode->i_private_id, vsb->v_dstream_table);
+	dstream = get_dstream(inode->i_private_id);
 	if (dstream->d_sparse_bytes != inode->i_sparse_bytes)
 		report("Inode record", "wrong count of sparse bytes.");
 
@@ -53,29 +54,11 @@ static void check_inode_stats(struct inode *inode)
 }
 
 /**
- * alloc_inode_table - Allocates and returns an empty inode hash table
- */
-struct inode **alloc_inode_table(void)
-{
-	struct inode **table;
-
-	table = calloc(INODE_TABLE_BUCKETS, sizeof(*table));
-	if (!table) {
-		perror(NULL);
-		exit(1);
-	}
-	return table;
-}
-
-/**
  * free_inode_names - Free all data on an inode's names
  * @inode: inode to free
  *
  * Frees the primary name and all sibling links, but not before running a few
  * remaining consistency checks.
- * remaining checking that
- * the number of listed siblings is correct, that all of them had both a record
- * and a dentry xfield, and that the primary link matches the primary name.
  */
 static void free_inode_names(struct inode *inode)
 {
@@ -124,68 +107,42 @@ static void free_inode_names(struct inode *inode)
 }
 
 /**
- * free_inode_table - Free the inode hash table and all its inodes
+ * free_inode - Free an inode structure after performing some final checks
+ * @entry: the entry to free
+ */
+static void free_inode(union htable_entry *entry)
+{
+	struct inode *inode = &entry->inode;
+
+	check_inode_stats(inode);
+	free_inode_names(inode);
+	free(entry);
+}
+
+/**
+ * free_inode_table - Free the inode hash table and all its entries
  * @table: table to free
  *
  * Also performs some consistency checks that can only be done after the whole
  * catalog has been parsed.
  */
-void free_inode_table(struct inode **table)
+void free_inode_table(union htable_entry **table)
 {
-	struct inode *current;
-	struct inode *next;
-	int i;
-
-	for (i = 0; i < INODE_TABLE_BUCKETS; ++i) {
-		current = table[i];
-		while (current) {
-			check_inode_stats(current);
-			free_inode_names(current);
-
-			next = current->i_next;
-			free(current);
-			current = next;
-		}
-	}
-	free(table);
+	free_htable(table, free_inode);
 }
 
 /**
- * get_inode - Find or create an inode structure in a hash table
- * @ino:	inode number
- * @table:	the hash table
+ * get_inode - Find or create an inode structure in the inode hash table
+ * @ino: inode number
  *
  * Returns the inode structure, after creating it if necessary.
  */
-struct inode *get_inode(u64 ino, struct inode **table)
+struct inode *get_inode(u64 ino)
 {
-	int index = ino % INODE_TABLE_BUCKETS; /* Trivial hash function */
-	struct inode **entry_p = table + index;
-	struct inode *entry = *entry_p;
-	struct inode *new;
+	union htable_entry *entry;
 
-	/* Inodes are ordered by ino in each linked list */
-	while (entry) {
-		if (ino == entry->i_ino)
-			return entry;
-		if (ino < entry->i_ino)
-			break;
-
-		entry_p = &entry->i_next;
-		entry = *entry_p;
-	}
-
-	new = calloc(1, sizeof(*new));
-	if (!new) {
-		perror(NULL);
-		exit(1);
-	}
-
-	new->i_seen = false;
-	new->i_ino = ino;
-	new->i_next = entry;
-	*entry_p = new;
-	return new;
+	entry = get_htable_entry(ino, sizeof(struct inode), vsb->v_inode_table);
+	return &entry->inode;
 }
 
 /**
@@ -310,7 +267,7 @@ static int read_dstream_xfield(char *xval, int len, struct inode *inode)
 	size = le64_to_cpu(dstream_raw->size);
 	alloced_size = le64_to_cpu(dstream_raw->alloced_size);
 
-	dstream = get_dstream(inode->i_private_id, vsb->v_dstream_table);
+	dstream = get_dstream(inode->i_private_id);
 	if (dstream->d_references) {
 		/* A dstream structure for this id has already been seen */
 		if (dstream->d_obj_type != APFS_TYPE_INODE)
@@ -607,7 +564,7 @@ void parse_inode_record(struct apfs_inode_key *key,
 	if (len < sizeof(*val))
 		report("Inode record", "value is too small.");
 
-	inode = get_inode(cat_cnid(&key->hdr), vsb->v_inode_table);
+	inode = get_inode(cat_cnid(&key->hdr));
 	if (inode->i_seen)
 		report("Catalog", "inode numbers are repeated.");
 	inode->i_seen = true;
@@ -758,7 +715,7 @@ void parse_sibling_record(struct apfs_sibling_link_key *key,
 		report("Sibling link record", "name lacks NULL-termination.");
 	/* Name length doesn't need checking: it's the same for the dentry */
 
-	inode = get_inode(cat_cnid(&key->hdr), vsb->v_inode_table);
+	inode = get_inode(cat_cnid(&key->hdr));
 	if (!inode->i_seen) /* The b-tree keys are in order */
 		report("Sibling link record", "inode is missing");
 
@@ -789,7 +746,7 @@ void parse_sibling_map_record(struct apfs_sibling_map_key *key,
 	if (len != sizeof(*val))
 		report("Sibling map record", "wrong size of value.");
 
-	inode = get_inode(le64_to_cpu(val->file_id), vsb->v_inode_table);
+	inode = get_inode(le64_to_cpu(val->file_id));
 	sibling = get_sibling(cat_cnid(&key->hdr), inode);
 	sibling->s_mapped = true;
 }

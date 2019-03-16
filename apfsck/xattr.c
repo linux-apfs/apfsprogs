@@ -43,7 +43,7 @@ static void parse_xattr_dstream(struct apfs_xattr_dstream *xstream)
 	size = le64_to_cpu(dstream_raw->size);
 	alloced_size = le64_to_cpu(dstream_raw->alloced_size);
 
-	dstream = get_dstream(id, vsb->v_dstream_table);
+	dstream = get_dstream(id);
 	if (dstream->d_references) {
 		/* A dstream structure for this id has already been seen */
 		if (dstream->d_obj_type != APFS_TYPE_XATTR)
@@ -96,7 +96,7 @@ void parse_xattr_record(struct apfs_xattr_key *key,
 			report("Xattr record", "bad length for embedded data.");
 	}
 
-	inode = get_inode(cat_cnid(&key->hdr), vsb->v_inode_table);
+	inode = get_inode(cat_cnid(&key->hdr));
 	if (!inode->i_seen)
 		report("Catalog", "xattr record with no inode.");
 

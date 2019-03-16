@@ -10,6 +10,8 @@
 #include "types.h"
 #include "object.h"
 
+union htable_entry;
+
 /*
  * Structure used to store a range of physical blocks
  */
@@ -258,8 +260,8 @@ struct volume_superblock {
 	struct apfs_superblock *v_raw;
 	struct btree *v_omap;
 	struct btree *v_cat;
-	struct inode **v_inode_table;		/* Hash table of all inodes */
-	struct dstream **v_dstream_table;	/* Hash table of all dstreams */
+	union htable_entry **v_inode_table;	/* Hash table of all inodes */
+	union htable_entry **v_dstream_table;	/* Hash table of all dstreams */
 
 	/* Volume stats as measured by the fsck */
 	u64 v_file_count;	/* Number of files */

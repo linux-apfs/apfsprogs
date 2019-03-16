@@ -104,7 +104,7 @@ void parse_dentry_record(struct apfs_drec_hashed_key *key,
 		report("Dentry record", "value is too small.");
 
 	ino = le64_to_cpu(val->file_id);
-	inode = get_inode(ino, vsb->v_inode_table);
+	inode = get_inode(ino);
 	inode->i_link_count++;
 
 	if (!inode->i_first_name) {
@@ -120,7 +120,7 @@ void parse_dentry_record(struct apfs_drec_hashed_key *key,
 	parent_ino = cat_cnid(&key->hdr);
 	check_inode_ids(ino, parent_ino);
 	if (parent_ino != APFS_ROOT_DIR_PARENT) {
-		parent = get_inode(parent_ino, vsb->v_inode_table);
+		parent = get_inode(parent_ino);
 		if (!parent->i_seen) /* The b-tree keys are in order */
 			report("Dentry record", "parent inode missing");
 		if ((parent->i_mode & S_IFMT) != S_IFDIR)

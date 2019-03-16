@@ -11,6 +11,7 @@
 #include "apfsck.h"
 #include "btree.h"
 #include "extents.h"
+#include "htable.h"
 #include "inode.h"
 #include "object.h"
 #include "types.h"
@@ -183,8 +184,8 @@ void parse_super(void)
 			perror(NULL);
 			exit(1);
 		}
-		vsb->v_dstream_table = alloc_dstream_table();
-		vsb->v_inode_table = alloc_inode_table();
+		vsb->v_dstream_table = alloc_htable();
+		vsb->v_inode_table = alloc_htable();
 
 		vsb_raw = map_volume_super(vol, vsb);
 		if (!vsb_raw) {

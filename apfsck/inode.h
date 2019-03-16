@@ -12,6 +12,7 @@
 struct apfs_inode_key;
 struct apfs_sibling_link_key;
 struct apfs_sibling_map_key;
+union htable_entry;
 
 /* Inode numbers for special inodes */
 #define APFS_INVALID_INO_NUM		0
@@ -187,7 +188,12 @@ struct apfs_sibling_map_val {
  * Inode data in memory
  */
 struct inode {
-	u64		i_ino;		/* Inode number */
+	/* Hash table entry header (struct htable_entry_header from htable.h) */
+	struct {
+		union htable_entry	*i_next;
+		u64			i_ino;	/* Inode number */
+	};
+
 	u64		i_private_id;	/* Id of the inode's data stream */
 	bool		i_seen;		/* Has this inode been seen? */
 
@@ -208,8 +214,6 @@ struct inode {
 	u32		i_link_count;	/* Number of dentries for file */
 	char		*i_first_name;	/* Name of first dentry encountered */
 	struct sibling	*i_siblings;	/* Linked list of siblings for inode */
-
-	struct inode	*i_next;	/* Next inode in linked list */
 };
 
 /*
@@ -226,9 +230,8 @@ struct sibling {
 	u8		*s_name;	/* In-memory copy of the name */
 };
 
-extern struct inode **alloc_inode_table();
-extern void free_inode_table(struct inode **table);
-extern struct inode *get_inode(u64 ino, struct inode **table);
+extern void free_inode_table(union htable_entry **table);
+extern struct inode *get_inode(u64 ino);
 extern void check_inode_ids(u64 ino, u64 parent_ino);
 extern void parse_inode_record(struct apfs_inode_key *key,
 			       struct apfs_inode_val *val, int len);

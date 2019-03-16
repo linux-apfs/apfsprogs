@@ -8,23 +8,9 @@
 #include <stdio.h>
 #include "apfsck.h"
 #include "extents.h"
+#include "htable.h"
 #include "key.h"
 #include "super.h"
-
-/**
- * alloc_dstream_table - Allocates and returns an empty dstream hash table
- */
-struct dstream **alloc_dstream_table(void)
-{
-	struct dstream **table;
-
-	table = calloc(DSTREAM_TABLE_BUCKETS, sizeof(*table));
-	if (!table) {
-		perror(NULL);
-		exit(1);
-	}
-	return table;
-}
 
 /**
  * check_dstream_stats - Verify the stats gathered by the fsck vs the metadata
@@ -55,63 +41,39 @@ static void check_dstream_stats(struct dstream *dstream)
 }
 
 /**
- * free_dstream_table - Free the dstream hash table and all its dstreams
- * @table: table to free
+ * free_dstream - Free a dstream structure after performing some final checks
+ * @entry: the entry to free
  */
-void free_dstream_table(struct dstream **table)
+static void free_dstream(union htable_entry *entry)
 {
-	struct dstream *current;
-	struct dstream *next;
-	int i;
+	struct dstream *dstream = &entry->dstream;
 
-	for (i = 0; i < DSTREAM_TABLE_BUCKETS; ++i) {
-		current = table[i];
-		while (current) {
-			check_dstream_stats(current);
-
-			next = current->d_next;
-			free(current);
-			current = next;
-		}
-	}
-	free(table);
+	check_dstream_stats(dstream);
+	free(entry);
 }
 
 /**
- * get_dstream - Find or create a dstream structure in a hash table
+ * free_dstream_table - Free the dstream hash table and all its dentries
+ * @table: table to free
+ */
+void free_dstream_table(union htable_entry **table)
+{
+	free_htable(table, free_dstream);
+}
+
+/**
+ * get_dstream - Find or create a dstream structure in the dstream hash table
  * @id:		id of the dstream
- * @table:	the hash table
  *
  * Returns the dstream structure, after creating it if necessary.
  */
-struct dstream *get_dstream(u64 id, struct dstream **table)
+struct dstream *get_dstream(u64 id)
 {
-	int index = id % DSTREAM_TABLE_BUCKETS; /* Trivial hash function */
-	struct dstream **entry_p = table + index;
-	struct dstream *entry = *entry_p;
-	struct dstream *new;
+	union htable_entry *entry;
 
-	/* Dstreams are ordered by id in each linked list */
-	while (entry) {
-		if (id == entry->d_id)
-			return entry;
-		if (id < entry->d_id)
-			break;
-
-		entry_p = &entry->d_next;
-		entry = *entry_p;
-	}
-
-	new = calloc(1, sizeof(*new));
-	if (!new) {
-		perror(NULL);
-		exit(1);
-	}
-
-	new->d_id = id;
-	new->d_next = entry;
-	*entry_p = new;
-	return new;
+	entry = get_htable_entry(id, sizeof(struct dstream),
+				 vsb->v_dstream_table);
+	return &entry->dstream;
 }
 
 /**
@@ -142,7 +104,7 @@ void parse_extent_record(struct apfs_file_extent_key *key,
 	if (flags)
 		report("Extent record", "no flags should be set.");
 
-	dstream = get_dstream(cat_cnid(&key->hdr), vsb->v_dstream_table);
+	dstream = get_dstream(cat_cnid(&key->hdr));
 	if (dstream->d_bytes != le64_to_cpu(key->logical_addr))
 		report("Data stream", "extents are not consecutive.");
 	dstream->d_bytes += length;
@@ -167,7 +129,7 @@ void parse_dstream_id_record(struct apfs_dstream_id_key *key,
 	if (len != sizeof(*val))
 		report("Dstream id record", "wrong size of value.");
 
-	dstream = get_dstream(cat_cnid(&key->hdr), vsb->v_dstream_table);
+	dstream = get_dstream(cat_cnid(&key->hdr));
 	dstream->d_seen = true;
 	dstream->d_refcnt = le32_to_cpu(val->refcnt);
 }
