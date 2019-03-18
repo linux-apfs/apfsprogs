@@ -4,6 +4,7 @@
  * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */
 
+#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include "apfsck.h"
@@ -47,6 +48,16 @@ static void check_dstream_stats(struct dstream *dstream)
 static void free_dstream(union htable_entry *entry)
 {
 	struct dstream *dstream = &entry->dstream;
+	struct listed_cnid *cnid;
+
+	/* The dstreams must be freed before the cnids */
+	assert(vsb->v_cnid_table);
+
+	/* To check for reuse, put all filesystem object ids in a list */
+	cnid = get_listed_cnid(dstream->d_id);
+	if (cnid->c_state == CNID_USED)
+		report("Catalog", "a filesystem object id was used twice.");
+	cnid->c_state = CNID_USED;
 
 	check_dstream_stats(dstream);
 	free(entry);

@@ -86,10 +86,19 @@ static void free_inode_names(struct inode *inode)
 	inode->i_first_name = NULL;
 
 	while (current) {
+		struct listed_cnid *cnid;
+
+		/* Put all filesystem object ids in a list to check for reuse */
+		cnid = get_listed_cnid(current->s_id);
+		if (cnid->c_state != CNID_UNUSED)
+			report("Catalog", "a filesystem object id was reused.");
+		cnid->c_state = CNID_USED;
+
 		if (!current->s_checked)
 			report("Catalog", "orphaned or missing sibling link.");
 		if (!current->s_mapped)
 			report("Catalog", "no sibling map for link.");
+
 		next = current->s_next;
 		free(current->s_name);
 		free(current);
@@ -113,6 +122,19 @@ static void free_inode_names(struct inode *inode)
 static void free_inode(union htable_entry *entry)
 {
 	struct inode *inode = &entry->inode;
+	struct listed_cnid *cnid;
+
+	/* The inodes must be freed before the cnids */
+	assert(vsb->v_cnid_table);
+
+	/* To check for reuse, put all filesystem object ids in a list */
+	cnid = get_listed_cnid(inode->i_ino);
+	if (cnid->c_state != CNID_UNUSED)
+		report("Catalog", "a filesystem object id was used twice.");
+	if (inode->i_ino != inode->i_private_id)
+		cnid->c_state = CNID_USED;
+	else /* The inode and its dstream share an id */
+		cnid->c_state = CNID_DSTREAM_ALLOWED;
 
 	check_inode_stats(inode);
 	free_inode_names(inode);

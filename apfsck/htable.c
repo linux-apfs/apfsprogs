@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include "apfsck.h"
 #include "htable.h"
+#include "super.h"
 #include "types.h"
 
 /**
@@ -85,4 +86,29 @@ union htable_entry *get_htable_entry(u64 id, int size,
 	new->header.h_next = entry;
 	*entry_p = new;
 	return new;
+}
+
+/**
+ * free_cnid_table - Free the cnid hash table and all its entries
+ * @table: table to free
+ */
+void free_cnid_table(union htable_entry **table)
+{
+	/* No checks needed here, just call free() on each entry */
+	free_htable(table, (void (*)(union htable_entry *))free);
+}
+
+/**
+ * get_listed_cnid - Find or create a cnid structure in the cnid hash table
+ * @id: the cnid
+ *
+ * Returns the cnid structure, after creating it if necessary.
+ */
+struct listed_cnid *get_listed_cnid(u64 id)
+{
+	union htable_entry *entry;
+
+	entry = get_htable_entry(id, sizeof(struct listed_cnid),
+				 vsb->v_cnid_table);
+	return &entry->listed_cnid;
 }

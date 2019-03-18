@@ -262,6 +262,7 @@ struct volume_superblock {
 	struct btree *v_cat;
 	union htable_entry **v_inode_table;	/* Hash table of all inodes */
 	union htable_entry **v_dstream_table;	/* Hash table of all dstreams */
+	union htable_entry **v_cnid_table;	/* Hash table of all cnids */
 
 	/* Volume stats as measured by the fsck */
 	u64 v_file_count;	/* Number of files */

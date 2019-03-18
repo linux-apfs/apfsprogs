@@ -184,6 +184,7 @@ void parse_super(void)
 			perror(NULL);
 			exit(1);
 		}
+		vsb->v_cnid_table = alloc_htable();
 		vsb->v_dstream_table = alloc_htable();
 		vsb->v_inode_table = alloc_htable();
 
@@ -205,6 +206,8 @@ void parse_super(void)
 		vsb->v_inode_table = NULL;
 		free_dstream_table(vsb->v_dstream_table);
 		vsb->v_dstream_table = NULL;
+		free_cnid_table(vsb->v_cnid_table);
+		vsb->v_cnid_table = NULL;
 
 		if (le64_to_cpu(vsb_raw->apfs_num_files) !=
 							vsb->v_file_count)
