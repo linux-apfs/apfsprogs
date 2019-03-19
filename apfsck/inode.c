@@ -37,9 +37,14 @@ static void check_inode_stats(struct inode *inode)
 			report("Inode record", "wrong link count.");
 	}
 
-	dstream = get_dstream(inode->i_private_id);
-	if (dstream->d_sparse_bytes != inode->i_sparse_bytes)
-		report("Inode record", "wrong count of sparse bytes.");
+	dstream = inode->i_dstream;
+	if (dstream) {
+		if (dstream->d_sparse_bytes != inode->i_sparse_bytes)
+			report("Inode record", "wrong count of sparse bytes.");
+	} else {
+		if (inode->i_sparse_bytes)
+			report("Inode record", "sparse bytes without dstream.");
+	}
 
 	if ((bool)(inode->i_xattr_bmap & XATTR_BMAP_SYMLINK) !=
 	    (bool)((inode->i_mode & S_IFMT) == S_IFLNK))
@@ -307,6 +312,7 @@ static int read_dstream_xfield(char *xval, int len, struct inode *inode)
 	}
 
 	dstream->d_references++;
+	inode->i_dstream = dstream;
 	return sizeof(*dstream_raw);
 }
 

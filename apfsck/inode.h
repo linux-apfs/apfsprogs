@@ -207,6 +207,7 @@ struct inode {
 	u64		i_flags;	/* Internal flags */
 	u32		i_rdev;		/* Device ID */
 	char		*i_name;	/* Name of primary link */
+	struct dstream	*i_dstream;	/* The inode's dstream (can be NULL) */
 
 	/* Inode stats measured by the fsck */
 	u8		i_xattr_bmap;	/* Bitmap of system xattrs for inode */

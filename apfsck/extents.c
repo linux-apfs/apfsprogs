@@ -19,21 +19,18 @@
  */
 static void check_dstream_stats(struct dstream *dstream)
 {
+	if (!dstream->d_references)
+		report("Data stream", "has no references.");
+
 	if (dstream->d_obj_type == APFS_TYPE_XATTR) {
 		if (dstream->d_seen || dstream->d_references != 1)
 			report("Data stream", "xattrs can't be cloned.");
 	} else {
-		if (!dstream->d_seen && dstream->d_references)
+		if (!dstream->d_seen)
 			report("Data stream", "missing reference count.");
-		if (dstream->d_seen && !dstream->d_references)
-			report("Data stream", "unnecessary reference count.");
 		if (dstream->d_refcnt != dstream->d_references)
 			report("Data stream", "bad reference count.");
 	}
-
-	if (!dstream->d_references)
-		/* No dstream structure to report the length */
-		return;
 
 	if (dstream->d_bytes < dstream->d_size)
 		report("Data stream", "some extents are missing.");
