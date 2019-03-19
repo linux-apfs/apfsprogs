@@ -287,6 +287,9 @@ static int read_dstream_xfield(char *xval, int len, struct inode *inode)
 	struct dstream *dstream;
 	u64 size, alloced_size;
 
+	if ((inode->i_mode & S_IFMT) != S_IFREG)
+		report("Inode record", "has dstream but isn't a regular file.");
+
 	if (len < sizeof(*dstream_raw))
 		report("Dstream xfield", "doesn't fit in inode record.");
 	dstream_raw = (struct apfs_dstream *)xval;
