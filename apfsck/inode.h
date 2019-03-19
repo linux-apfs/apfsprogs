@@ -207,6 +207,7 @@ struct inode {
 	u64		i_flags;	/* Internal flags */
 	u32		i_rdev;		/* Device ID */
 	char		*i_name;	/* Name of primary link */
+	u64		i_parent_id;	/* Parent id for the primary link */
 	struct dstream	*i_dstream;	/* The inode's dstream (can be NULL) */
 
 	/* Inode stats measured by the fsck */
@@ -214,6 +215,7 @@ struct inode {
 	u32		i_child_count;	/* Number of children of directory */
 	u32		i_link_count;	/* Number of dentries for file */
 	char		*i_first_name;	/* Name of first dentry encountered */
+	u64		i_first_parent;	/* Parent id of the first dentry seen */
 	struct sibling	*i_siblings;	/* Linked list of siblings for inode */
 };
 

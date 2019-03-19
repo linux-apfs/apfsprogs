@@ -107,16 +107,6 @@ void parse_dentry_record(struct apfs_drec_hashed_key *key,
 	inode = get_inode(ino);
 	inode->i_link_count++;
 
-	if (!inode->i_first_name) {
-		/* No dentry for this inode has been seen before */
-		inode->i_first_name = malloc(namelen);
-		if (!inode->i_first_name) {
-			perror(NULL);
-			exit(1);
-		}
-		strcpy(inode->i_first_name, (char *)key->name);
-	}
-
 	parent_ino = cat_cnid(&key->hdr);
 	check_inode_ids(ino, parent_ino);
 	if (parent_ino != APFS_ROOT_DIR_PARENT) {
@@ -126,6 +116,17 @@ void parse_dentry_record(struct apfs_drec_hashed_key *key,
 		if ((parent->i_mode & S_IFMT) != S_IFDIR)
 			report("Dentry record", "parent inode not directory.");
 		parent->i_child_count++;
+	}
+
+	if (!inode->i_first_name) {
+		/* No dentry for this inode has been seen before */
+		inode->i_first_name = malloc(namelen);
+		if (!inode->i_first_name) {
+			perror(NULL);
+			exit(1);
+		}
+		strcpy(inode->i_first_name, (char *)key->name);
+		inode->i_first_parent = parent_ino;
 	}
 
 	dtype = le16_to_cpu(val->flags) & APFS_DREC_TYPE_MASK;

@@ -80,10 +80,14 @@ static void free_inode_names(struct inode *inode)
 		/* Primary link has lowest id, so it comes first in the list */
 		if (strcmp(inode->i_name, (char *)current->s_name))
 			report("Inode record", "wrong name for primary link.");
+		if (inode->i_parent_id != current->s_parent_ino)
+			report("Inode record", "bad parent for primary link.");
 	} else {
 		/* No siblings, so the primary link is the first and only */
 		if (strcmp(inode->i_name, inode->i_first_name))
 			report("Inode record", "wrong name for only link.");
+		if (inode->i_parent_id != inode->i_first_parent)
+			report("Inode record", "bad parent for only link.");
 	}
 	free(inode->i_name);
 	inode->i_name = NULL;
@@ -604,7 +608,8 @@ void parse_inode_record(struct apfs_inode_key *key,
 	inode->i_seen = true;
 	inode->i_private_id = le64_to_cpu(val->private_id);
 
-	check_inode_ids(inode->i_ino, le64_to_cpu(val->parent_id));
+	inode->i_parent_id = le64_to_cpu(val->parent_id);
+	check_inode_ids(inode->i_ino, inode->i_parent_id);
 
 	inode->i_flags = le64_to_cpu(val->internal_flags);
 	check_inode_internal_flags(inode->i_flags);
