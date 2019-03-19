@@ -10,6 +10,7 @@
 #include "apfsck.h"
 #include "extents.h"
 #include "htable.h"
+#include "inode.h"
 #include "key.h"
 #include "super.h"
 
@@ -21,6 +22,8 @@ static void check_dstream_stats(struct dstream *dstream)
 {
 	if (!dstream->d_references)
 		report("Data stream", "has no references.");
+	if (dstream->d_id < APFS_MIN_USER_INO_NUM)
+		report("Data stream", "invalid or reserved id.");
 
 	if (dstream->d_obj_type == APFS_TYPE_XATTR) {
 		if (dstream->d_seen || dstream->d_references != 1)
