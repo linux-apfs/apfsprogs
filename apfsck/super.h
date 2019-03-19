@@ -271,6 +271,7 @@ struct volume_superblock {
 	u64 v_special_count;	/* Number of other filesystem objects */
 
 	/* Volume information read from the on-disk structure */
+	u64 v_next_obj_id;	/* Next cnid to be assigned */
 	u32 v_next_doc_id;	/* Next document identifier to be assigned */
 
 	struct object v_obj;		/* Object holding the volume sb */

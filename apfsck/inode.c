@@ -543,6 +543,9 @@ static void check_inode_internal_flags(u64 flags)
  */
 void check_inode_ids(u64 ino, u64 parent_ino)
 {
+	if (ino >= vsb->v_next_obj_id || parent_ino >= vsb->v_next_obj_id)
+		report("Inode record", "free inode number in use.");
+
 	if (ino < APFS_MIN_USER_INO_NUM) {
 		switch (ino) {
 		case APFS_INVALID_INO_NUM:
@@ -755,6 +758,8 @@ void parse_sibling_record(struct apfs_sibling_link_key *key,
 	/* It seems that sibling ids come from the same pool as inode numbers */
 	if (sibling->s_id < APFS_MIN_USER_INO_NUM)
 		report("Sibling record", "invalid sibling id.");
+	if (sibling->s_id >= vsb->v_next_obj_id)
+		report("Sibling record", "free id in use.");
 
 	set_or_check_sibling(le64_to_cpu(val->parent_id), namelen, val->name,
 			     sibling);

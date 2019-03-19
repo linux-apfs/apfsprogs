@@ -24,6 +24,8 @@ static void check_dstream_stats(struct dstream *dstream)
 		report("Data stream", "has no references.");
 	if (dstream->d_id < APFS_MIN_USER_INO_NUM)
 		report("Data stream", "invalid or reserved id.");
+	if (dstream->d_id >= vsb->v_next_obj_id)
+		report("Data stream", "free id in use.");
 
 	if (dstream->d_obj_type == APFS_TYPE_XATTR) {
 		if (dstream->d_seen || dstream->d_references != 1)
