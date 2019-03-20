@@ -611,6 +611,11 @@ void parse_inode_record(struct apfs_inode_key *key,
 	inode->i_parent_id = le64_to_cpu(val->parent_id);
 	check_inode_ids(inode->i_ino, inode->i_parent_id);
 
+	if (inode->i_ino == APFS_ROOT_DIR_INO_NUM)
+		vsb->v_has_root = true;
+	if (inode->i_ino == APFS_PRIV_DIR_INO_NUM)
+		vsb->v_has_priv = true;
+
 	inode->i_flags = le64_to_cpu(val->internal_flags);
 	check_inode_internal_flags(inode->i_flags);
 

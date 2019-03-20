@@ -210,6 +210,11 @@ void parse_super(void)
 		free_cnid_table(vsb->v_cnid_table);
 		vsb->v_cnid_table = NULL;
 
+		if (!vsb->v_has_root)
+			report("Catalog", "the root directory is missing.");
+		if (!vsb->v_has_priv)
+			report("Catalog", "the private directory is missing.");
+
 		if (le64_to_cpu(vsb_raw->apfs_num_files) !=
 							vsb->v_file_count)
 			/* Sometimes this is off by one.  TODO: why? */

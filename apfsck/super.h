@@ -269,6 +269,8 @@ struct volume_superblock {
 	u64 v_dir_count;	/* Number of directories */
 	u64 v_symlink_count;	/* Number of symlinks */
 	u64 v_special_count;	/* Number of other filesystem objects */
+	bool v_has_root;	/* Is there a root directory? */
+	bool v_has_priv;	/* Is there a private directory? */
 
 	/* Volume information read from the on-disk structure */
 	u64 v_next_obj_id;	/* Next cnid to be assigned */
