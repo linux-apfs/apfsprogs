@@ -129,6 +129,75 @@ static void map_main_super(void)
 }
 
 /**
+ * software_strlen - Calculate the length of a software info string
+ * @str: the string
+ *
+ * Also checks that the string has a proper null-termination, and only null
+ * characters afterwards.
+ */
+static int software_strlen(u8 *str)
+{
+	int length = strnlen((char *)str, APFS_MODIFIED_NAMELEN);
+	u8 *end = str + APFS_MODIFIED_NAMELEN;
+
+	if (length == APFS_MODIFIED_NAMELEN)
+		report("Volume software id", "no NULL-termination.");
+	for (str += length + 1; str != end; ++str) {
+		if (*str)
+			report("Volume software id", "goes on after NULL.");
+	}
+	return length;
+}
+
+/**
+ * check_software_info - Check the fields reporting implementation info
+ * @formatted_by: information about the software that created the volume
+ * @modified_by:  information about the software that modified the volume
+ */
+static void check_software_information(struct apfs_modified_by *formatted_by,
+				       struct apfs_modified_by *modified_by)
+{
+	struct apfs_modified_by *end_mod_by;
+	int length;
+	bool mods_over;
+	u64 xid;
+
+	mods_over = false;
+	end_mod_by = modified_by + APFS_MAX_HIST;
+	xid = sb->s_xid + 1; /* Last possible xid */
+
+	for (; modified_by != end_mod_by; ++modified_by) {
+		length = software_strlen(modified_by->id);
+		if (!length &&
+		    (modified_by->timestamp || modified_by->last_xid))
+			report("Volume modification info", "entry without id.");
+
+		if (mods_over) {
+			if (length)
+				report("Volume modification info",
+				       "empty entry should end the list.");
+			continue;
+		}
+		if (!length) {
+			mods_over = true;
+			continue;
+		}
+
+		/* The first entry must be the most recent */
+		if (xid <= le64_to_cpu(modified_by->last_xid))
+			report("Volume modification info",
+			       "entries are not in order.");
+		xid = le64_to_cpu(modified_by->last_xid);
+	}
+
+	length = software_strlen(formatted_by->id);
+	if (!length)
+		report("Volume superblock", "creation information is missing.");
+	if (xid <= le64_to_cpu(formatted_by->last_xid))
+		report("Volume creation info", "transaction is too recent.");
+}
+
+/**
  * map_volume_super - Find the volume superblock and map it into memory
  * @vol:	volume number
  * @vsb:	volume superblock struct to receive the results
@@ -162,6 +231,9 @@ static struct apfs_superblock *map_volume_super(int vol,
 	vol_name = (char *)vsb->v_raw->apfs_volname;
 	if (strnlen(vol_name, APFS_VOLNAME_LEN) == APFS_VOLNAME_LEN)
 		report("Volume superblock", "name lacks NULL-termination.");
+
+	check_software_information(&vsb->v_raw->apfs_formatted_by,
+				   &vsb->v_raw->apfs_modified_by[0]);
 
 	if (le16_to_cpu(vsb->v_raw->reserved) != 0)
 		report("Volume superblock", "reserved field is in use.");

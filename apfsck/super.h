@@ -176,7 +176,7 @@ struct apfs_nx_superblock {
  * Structure containing information about a program that modified the volume
  */
 struct apfs_modified_by {
-	char id[APFS_MODIFIED_NAMELEN];
+	u8 id[APFS_MODIFIED_NAMELEN];
 	__le64 timestamp;
 	__le64 last_xid;
 } __packed;
