@@ -95,6 +95,7 @@ void parse_dentry_record(struct apfs_drec_hashed_key *key,
 {
 	u64 ino, parent_ino;
 	struct inode *inode, *parent;
+	char *name = (char *)key->name;
 	int namelen = le32_to_cpu(key->name_len_and_hash) & 0x3FFU;
 	u16 filetype, dtype;
 	u64 sibling_id;
@@ -106,6 +107,11 @@ void parse_dentry_record(struct apfs_drec_hashed_key *key,
 	ino = le64_to_cpu(val->file_id);
 	inode = get_inode(ino);
 	inode->i_link_count++;
+
+	if (ino == APFS_ROOT_DIR_INO_NUM && strcmp(name, "root"))
+		report("Root directory", "wrong name.");
+	if (ino == APFS_PRIV_DIR_INO_NUM && strcmp(name, "private-dir"))
+		report("Private directory", "wrong name.");
 
 	parent_ino = cat_cnid(&key->hdr);
 	check_inode_ids(ino, parent_ino);
@@ -125,7 +131,7 @@ void parse_dentry_record(struct apfs_drec_hashed_key *key,
 			perror(NULL);
 			exit(1);
 		}
-		strcpy(inode->i_first_name, (char *)key->name);
+		strcpy(inode->i_first_name, name);
 		inode->i_first_parent = parent_ino;
 	}
 
