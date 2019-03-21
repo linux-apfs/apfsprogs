@@ -140,6 +140,7 @@ static struct apfs_superblock *map_volume_super(int vol,
 						struct volume_superblock *vsb)
 {
 	struct apfs_nx_superblock *msb_raw = sb->s_raw;
+	char *vol_name;
 	u64 vol_id;
 
 	vol_id = le64_to_cpu(msb_raw->nx_fs_oid[vol]);
@@ -157,6 +158,11 @@ static struct apfs_superblock *map_volume_super(int vol,
 
 	vsb->v_next_obj_id = le64_to_cpu(vsb->v_raw->apfs_next_obj_id);
 	vsb->v_next_doc_id = le32_to_cpu(vsb->v_raw->apfs_next_doc_id);
+
+	vol_name = (char *)vsb->v_raw->apfs_volname;
+	if (strnlen(vol_name, APFS_VOLNAME_LEN) == APFS_VOLNAME_LEN)
+		report("Volume superblock", "name lacks NULL-termination.");
+
 	return vsb->v_raw;
 }
 
