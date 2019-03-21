@@ -163,6 +163,9 @@ static struct apfs_superblock *map_volume_super(int vol,
 	if (strnlen(vol_name, APFS_VOLNAME_LEN) == APFS_VOLNAME_LEN)
 		report("Volume superblock", "name lacks NULL-termination.");
 
+	if (le16_to_cpu(vsb->v_raw->reserved) != 0)
+		report("Volume superblock", "reserved field is in use.");
+
 	return vsb->v_raw;
 }
 
