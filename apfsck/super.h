@@ -273,6 +273,7 @@ struct volume_superblock {
 	bool v_has_priv;	/* Is there a private directory? */
 
 	/* Volume information read from the on-disk structure */
+	u64 v_first_xid;	/* Transaction that created the volume */
 	u64 v_next_obj_id;	/* Next cnid to be assigned */
 	u32 v_next_doc_id;	/* Next document identifier to be assigned */
 

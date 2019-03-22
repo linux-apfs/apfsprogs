@@ -195,7 +195,9 @@ static void check_software_information(struct apfs_modified_by *formatted_by,
 	length = software_strlen(formatted_by->id);
 	if (!length)
 		report("Volume superblock", "creation information is missing.");
-	if (xid <= le64_to_cpu(formatted_by->last_xid))
+
+	vsb->v_first_xid = le64_to_cpu(formatted_by->last_xid);
+	if (xid <= vsb->v_first_xid)
 		report("Volume creation info", "transaction is too recent.");
 }
 
