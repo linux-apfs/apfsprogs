@@ -243,6 +243,8 @@ static struct apfs_superblock *map_volume_super(int vol,
 		report("Volume superblock", "reserved field is in use.");
 	if (le64_to_cpu(vsb->v_raw->apfs_root_to_xid) != 0)
 		report_unknown("Root from snapshot");
+	if (le64_to_cpu(vsb->v_raw->apfs_er_state_oid) != 0)
+		report_unknown("Encryption or decryption in progress");
 
 	return vsb->v_raw;
 }
