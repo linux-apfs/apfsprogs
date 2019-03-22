@@ -125,6 +125,8 @@ static void map_main_super(void)
 	/* TODO: the latest checkpoint and block zero are somehow different? */
 	if (sb->s_xid != le64_to_cpu(msb_raw->nx_o.o_xid))
 		report_crash("Block zero");
+	if (sb->s_xid + 1 != le64_to_cpu(msb_raw->nx_next_xid))
+		report("Container superblock", "next transaction id is wrong.");
 	munmap(msb_raw, sb->s_blocksize);
 }
 
