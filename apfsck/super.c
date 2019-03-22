@@ -241,6 +241,8 @@ static struct apfs_superblock *map_volume_super(int vol,
 
 	if (le16_to_cpu(vsb->v_raw->reserved) != 0)
 		report("Volume superblock", "reserved field is in use.");
+	if (le64_to_cpu(vsb->v_raw->apfs_root_to_xid) != 0)
+		report_unknown("Root from snapshot");
 
 	return vsb->v_raw;
 }
