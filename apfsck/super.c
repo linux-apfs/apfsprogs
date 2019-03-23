@@ -202,6 +202,26 @@ static void check_software_information(struct apfs_modified_by *formatted_by,
 }
 
 /**
+ * check_volume_flags - Check consistency of volume flags
+ * @flags: the flags
+ */
+static void check_volume_flags(u64 flags)
+{
+	if ((flags & APFS_FS_FLAGS_VALID_MASK) != flags)
+		report("Volume superblock", "invalid flag in use.");
+	if (flags & APFS_FS_RESERVED_4)
+		report("Volume superblock", "reserved flag in use.");
+
+	if (!(flags & APFS_FS_UNENCRYPTED))
+		report_unknown("Encryption");
+	else if (flags & (APFS_FS_EFFACEABLE | APFS_FS_ONEKEY))
+		report("Volume superblock", "inconsistent crypto flags.");
+
+	if (flags & (APFS_FS_SPILLEDOVER | APFS_FS_RUN_SPILLOVER_CLEANER))
+		report_unknown("Fusion drive");
+}
+
+/**
  * map_volume_super - Find the volume superblock and map it into memory
  * @vol:	volume number
  * @vsb:	volume superblock struct to receive the results
@@ -236,6 +256,7 @@ static struct apfs_superblock *map_volume_super(int vol,
 	if (strnlen(vol_name, APFS_VOLNAME_LEN) == APFS_VOLNAME_LEN)
 		report("Volume superblock", "name lacks NULL-termination.");
 
+	check_volume_flags(le64_to_cpu(vsb->v_raw->apfs_fs_flags));
 	check_software_information(&vsb->v_raw->apfs_formatted_by,
 				   &vsb->v_raw->apfs_modified_by[0]);
 
