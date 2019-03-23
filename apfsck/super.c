@@ -266,6 +266,10 @@ static struct apfs_superblock *map_volume_super(int vol,
 		report_unknown("Root from snapshot");
 	if (le64_to_cpu(vsb->v_raw->apfs_er_state_oid) != 0)
 		report_unknown("Encryption or decryption in progress");
+	if (le64_to_cpu(vsb->v_raw->apfs_revert_to_xid) != 0)
+		report_unknown("Revert to a snapshot");
+	if (le64_to_cpu(vsb->v_raw->apfs_revert_to_sblock_oid) != 0)
+		report_unknown("Revert to a volume superblock");
 
 	return vsb->v_raw;
 }
