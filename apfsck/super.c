@@ -260,6 +260,20 @@ static struct apfs_superblock *map_volume_super(int vol,
 	check_software_information(&vsb->v_raw->apfs_formatted_by,
 				   &vsb->v_raw->apfs_modified_by[0]);
 
+	/*
+	 * The documentation suggests that other tree types could be possible,
+	 * but I don't understand how that would work.
+	 */
+	if (le32_to_cpu(vsb->v_raw->apfs_root_tree_type) !=
+				(APFS_OBJ_VIRTUAL | APFS_OBJECT_TYPE_BTREE))
+		report("Volume superblock", "wrong type for catalog tree.");
+	if (le32_to_cpu(vsb->v_raw->apfs_extentref_tree_type) !=
+				(APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_BTREE))
+		report("Volume superblock", "wrong type for extentref tree.");
+	if (le32_to_cpu(vsb->v_raw->apfs_snap_meta_tree_type) !=
+				(APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_BTREE))
+		report("Volume superblock", "wrong type for snapshot tree.");
+
 	if (le16_to_cpu(vsb->v_raw->reserved) != 0)
 		report("Volume superblock", "reserved field is in use.");
 	if (le64_to_cpu(vsb->v_raw->apfs_root_to_xid) != 0)
