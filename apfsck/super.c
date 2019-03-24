@@ -222,6 +222,54 @@ static void check_volume_flags(u64 flags)
 }
 
 /**
+ * check_optional_vol_features - Check the optional features of a volume
+ * @flags: the optional feature flags
+ */
+static void check_optional_vol_features(u64 flags)
+{
+	if ((flags & APFS_SUPPORTED_FEATURES_MASK) != flags)
+		report("Volume superblock", "unknown optional feature.");
+	if (flags & APFS_FEATURE_DEFRAG_PRERELEASE)
+		report("Volume superblock", "prerelease defrag enabled.");
+
+	/* TODO: should be easy to support, but I need an image for testing */
+	if (!(flags & APFS_FEATURE_HARDLINK_MAP_RECORDS))
+		report_unknown("Volume without sibling map records");
+}
+
+/**
+ * check_rocompat_vol_features - Check the ro compatible features of a volume
+ * @flags: the read-only compatible feature flags
+ */
+static void check_rocompat_vol_features(u64 flags)
+{
+	if ((flags & APFS_SUPPORTED_ROCOMPAT_MASK) != flags)
+		report("Volume superblock", "unknown ro compatible feature.");
+}
+
+/**
+ * check_incompat_vol_features - Check the incompatible features of a volume
+ * @flags: the incompatible feature flags
+ */
+static void check_incompat_vol_features(u64 flags)
+{
+	if ((flags & APFS_SUPPORTED_INCOMPAT_MASK) != flags)
+		report("Volume superblock", "unknown incompatible feature.");
+	if (flags & APFS_INCOMPAT_DATALESS_SNAPS)
+		report_unknown("Dataless snapshots");
+	if (flags & APFS_INCOMPAT_ENC_ROLLED)
+		report_unknown("Change of encryption keys");
+
+	/*
+	 * I don't believe actual normalization-sensitive volumes exist, the
+	 * normalization-insensitive flag just means case-sensitive.
+	 */
+	if ((bool)(flags & APFS_INCOMPAT_CASE_INSENSITIVE) !=
+	    !(bool)(flags & APFS_INCOMPAT_NORMALIZATION_INSENSITIVE))
+		report("Volume superblock", "normalization sensitive?");
+}
+
+/**
  * map_volume_super - Find the volume superblock and map it into memory
  * @vol:	volume number
  * @vsb:	volume superblock struct to receive the results
@@ -255,6 +303,12 @@ static struct apfs_superblock *map_volume_super(int vol,
 		report("Volume superblock", "wrong reported volume number.");
 	if (le32_to_cpu(vsb->v_raw->apfs_magic) != APFS_MAGIC)
 		report("Volume superblock", "wrong magic.");
+
+	check_optional_vol_features(le64_to_cpu(vsb->v_raw->apfs_features));
+	check_rocompat_vol_features(le64_to_cpu(
+				vsb->v_raw->apfs_readonly_compatible_features));
+	check_incompat_vol_features(le64_to_cpu(
+				vsb->v_raw->apfs_incompatible_features));
 
 	vsb->v_next_obj_id = le64_to_cpu(vsb->v_raw->apfs_next_obj_id);
 	vsb->v_next_doc_id = le32_to_cpu(vsb->v_raw->apfs_next_doc_id);
