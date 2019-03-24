@@ -237,8 +237,13 @@ static struct apfs_superblock *map_volume_super(int vol,
 	u64 vol_id;
 
 	vol_id = le64_to_cpu(msb_raw->nx_fs_oid[vol]);
-	if (vol_id == 0)
+	if (vol_id == 0) {
+		for (++vol; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol)
+			if (msb_raw->nx_fs_oid[vol])
+				report("Container superblock",
+				       "volume array goes on after NULL.");
 		return NULL;
+	}
 
 	vsb->v_raw = read_object(vol_id, sb->s_omap->root, &vsb->v_obj);
 	if (vsb->v_obj.type != APFS_OBJECT_TYPE_FS)
