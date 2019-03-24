@@ -246,6 +246,8 @@ static struct apfs_superblock *map_volume_super(int vol,
 	if (vsb->v_obj.subtype != APFS_OBJECT_TYPE_INVALID)
 		report("Volume superblock", "wrong object subtype.");
 
+	if (le32_to_cpu(vsb->v_raw->apfs_fs_index) != vol)
+		report("Volume superblock", "wrong reported volume number.");
 	if (le32_to_cpu(vsb->v_raw->apfs_magic) != APFS_MAGIC)
 		report("Volume superblock", "wrong magic.");
 
