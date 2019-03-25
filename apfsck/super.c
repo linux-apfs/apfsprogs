@@ -66,6 +66,29 @@ static struct apfs_nx_superblock *read_super_copy(void)
 }
 
 /**
+ * main_super_compare - Compare two copies of the container superblock
+ * @desc: the superblock from the latest checkpoint
+ * @copy: the superblock copy in block zero
+ */
+static void main_super_compare(struct apfs_nx_superblock *desc,
+			       struct apfs_nx_superblock *copy)
+{
+	char *desc_bytes = (char *)desc;
+	char *copy_bytes = (char *)copy;
+
+	if (copy->nx_o.o_xid != desc->nx_o.o_xid)
+		report_crash("Block zero");
+
+	/*
+	 * The nx_counters array doesn't always match.  Naturally, this means
+	 * the checksum won't match either.
+	 */
+	if (memcmp(desc_bytes + 0x08, copy_bytes + 0x08, 0x3D8 - 0x08) ||
+	    memcmp(desc_bytes + 0x4D8, copy_bytes + 0x4D8, 4096 - 0x4D8))
+		report("Block zero", "fields don't match the checkpoint.");
+}
+
+/**
  * map_main_super - Find the container superblock and map it into memory
  *
  * Sets sb->s_raw to the in-memory location of the main superblock.
@@ -122,9 +145,8 @@ static void map_main_super(void)
 
 	if (!sb->s_raw)
 		report("Checkpoint descriptors", "latest is missing.");
-	/* TODO: the latest checkpoint and block zero are somehow different? */
-	if (sb->s_xid != le64_to_cpu(msb_raw->nx_o.o_xid))
-		report_crash("Block zero");
+	main_super_compare(sb->s_raw, msb_raw);
+
 	if (sb->s_xid + 1 != le64_to_cpu(msb_raw->nx_next_xid))
 		report("Container superblock", "next transaction id is wrong.");
 	munmap(msb_raw, sb->s_blocksize);
