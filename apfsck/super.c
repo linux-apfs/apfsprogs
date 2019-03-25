@@ -147,6 +147,9 @@ static void map_main_super(void)
 		report("Checkpoint descriptors", "latest is missing.");
 	main_super_compare(sb->s_raw, msb_raw);
 
+	if (le32_to_cpu(sb->s_raw->nx_block_size) != APFS_NX_DEFAULT_BLOCK_SIZE)
+		report_unknown("Block size other than 4096");
+
 	if (sb->s_xid + 1 != le64_to_cpu(msb_raw->nx_next_xid))
 		report("Container superblock", "next transaction id is wrong.");
 	munmap(msb_raw, sb->s_blocksize);
