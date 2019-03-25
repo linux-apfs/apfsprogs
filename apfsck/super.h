@@ -285,6 +285,7 @@ struct super_block {
 	struct apfs_nx_superblock *s_raw;
 	struct btree *s_omap;
 	unsigned long s_blocksize;
+	u64 s_block_count; /* Number of blocks in the container */
 	u64 s_xid; /* Transaction id for the superblock */
 
 	/* This is excessive in most cases.  TODO: switch to a linked list? */

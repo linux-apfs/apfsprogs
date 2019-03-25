@@ -4,10 +4,15 @@
  * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */
 
+#include <linux/fs.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include "apfsck.h"
 #include "btree.h"
 #include "extents.h"
@@ -89,6 +94,30 @@ static void main_super_compare(struct apfs_nx_superblock *desc,
 }
 
 /**
+ * get_device_size - Get the block count of the device or image being checked
+ * @blocksize: the filesystem blocksize
+ */
+static u64 get_device_size(unsigned int blocksize)
+{
+	struct stat buf;
+	u64 size;
+
+	if (fstat(fd, &buf)) {
+		perror(NULL);
+		exit(1);
+	}
+
+	if ((buf.st_mode & S_IFMT) == S_IFREG)
+		return buf.st_size / blocksize;
+
+	if (ioctl(fd, BLKGETSIZE64, &size)) {
+		perror(NULL);
+		exit(1);
+	}
+	return size / blocksize;
+}
+
+/**
  * map_main_super - Find the container superblock and map it into memory
  *
  * Sets sb->s_raw to the in-memory location of the main superblock.
@@ -149,6 +178,10 @@ static void map_main_super(void)
 
 	if (le32_to_cpu(sb->s_raw->nx_block_size) != APFS_NX_DEFAULT_BLOCK_SIZE)
 		report_unknown("Block size other than 4096");
+
+	sb->s_block_count = le64_to_cpu(sb->s_raw->nx_block_count);
+	if (sb->s_block_count > get_device_size(sb->s_blocksize))
+		report("Container superblock", "too many blocks for device.");
 
 	if (sb->s_xid + 1 != le64_to_cpu(msb_raw->nx_next_xid))
 		report("Container superblock", "next transaction id is wrong.");

@@ -7,6 +7,7 @@
 #ifndef _INODE_H
 #define _INODE_H
 
+#include <sys/stat.h> /* The macros for the inode mode */
 #include "types.h"
 
 struct apfs_inode_key;
@@ -52,19 +53,6 @@ union htable_entry;
 						| APFS_INODE_HAS_FINDER_INFO)
 #define APFS_INODE_PINNED_MASK			(APFS_INODE_PINNED_TO_MAIN \
 						| APFS_INODE_PINNED_TO_TIER2)
-
-/* File mode flags */
-#define S_IFMT  00170000
-#define S_IFSOCK 0140000
-#define S_IFLNK	 0120000
-#define S_IFREG  0100000
-#define S_IFBLK  0060000
-#define S_IFDIR  0040000
-#define S_IFCHR  0020000
-#define S_IFIFO  0010000
-#define S_ISUID  0004000
-#define S_ISGID  0002000
-#define S_ISVTX  0001000
 
 /*
  * Structure of an inode as stored as a B-tree value

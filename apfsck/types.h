@@ -9,6 +9,7 @@
 #ifndef _TYPES_H
 #define _TYPES_H
 
+#include <linux/types.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -19,10 +20,8 @@
 #define __packed	__attribute__((packed))
 
 #ifdef __CHECKER__
-#define __bitwise	__attribute__((bitwise))
 #define __force		__attribute__((force))
 #else /* __CHECKER */
-#define __bitwise
 #define __force
 #endif /* __CHECKER__ */
 
@@ -32,11 +31,6 @@ typedef uint8_t		u8;
 typedef uint16_t	u16;
 typedef uint32_t	u32;
 typedef uint64_t	u64;
-
-/* We only support little-endian, at least for now */
-typedef uint16_t __bitwise __le16;
-typedef uint32_t __bitwise __le32;
-typedef uint64_t __bitwise __le64;
 
 #define cpu_to_le16(x)	((__force __le16)(u16)(x))
 #define le16_to_cpu(x)	((__force u16)(__le16)(x))
