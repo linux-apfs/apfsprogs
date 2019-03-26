@@ -118,6 +118,46 @@ static u64 get_device_size(unsigned int blocksize)
 }
 
 /**
+ * check_optional_main_features - Check the optional features of the container
+ * @flags: the optional feature flags
+ */
+static void check_optional_main_features(u64 flags)
+{
+	if ((flags & APFS_NX_SUPPORTED_FEATURES_MASK) != flags)
+		report("Container superblock", "unknown optional feature.");
+	if (flags & APFS_NX_FEATURE_DEFRAG)
+		report_unknown("Defragmentation");
+	if (flags & APFS_NX_FEATURE_LCFD)
+		report_unknown("Low-capacity fusion drive");
+}
+
+/**
+ * check_rocompat_main_features - Check the ro compatible features of container
+ * @flags: the read-only compatible feature flags
+ */
+static void check_rocompat_main_features(u64 flags)
+{
+	if ((flags & APFS_NX_SUPPORTED_ROCOMPAT_MASK) != flags)
+		report("Container superblock", "unknown ro-compat feature.");
+}
+
+/**
+ * check_incompat_main_features - Check the incompatible features of a container
+ * @flags: the incompatible feature flags
+ */
+static void check_incompat_main_features(u64 flags)
+{
+	if ((flags & APFS_NX_SUPPORTED_INCOMPAT_MASK) != flags)
+		report("Container superblock", "unknown incompatible feature.");
+	if (flags & APFS_NX_INCOMPAT_VERSION1)
+		report_unknown("APFS version 1");
+	if (!(flags & APFS_NX_INCOMPAT_VERSION2))
+		report_unknown("APFS versions other than 2");
+	if (flags & APFS_NX_INCOMPAT_FUSION)
+		report_unknown("Fusion drive");
+}
+
+/**
  * map_main_super - Find the container superblock and map it into memory
  *
  * Sets sb->s_raw to the in-memory location of the main superblock.
@@ -182,6 +222,12 @@ static void map_main_super(void)
 	sb->s_block_count = le64_to_cpu(sb->s_raw->nx_block_count);
 	if (sb->s_block_count > get_device_size(sb->s_blocksize))
 		report("Container superblock", "too many blocks for device.");
+
+	check_optional_main_features(le64_to_cpu(sb->s_raw->nx_features));
+	check_rocompat_main_features(le64_to_cpu(
+				sb->s_raw->nx_readonly_compatible_features));
+	check_incompat_main_features(le64_to_cpu(
+				sb->s_raw->nx_incompatible_features));
 
 	if (sb->s_xid + 1 != le64_to_cpu(msb_raw->nx_next_xid))
 		report("Container superblock", "next transaction id is wrong.");
