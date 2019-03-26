@@ -229,6 +229,12 @@ static void map_main_super(void)
 	check_incompat_main_features(le64_to_cpu(
 				sb->s_raw->nx_incompatible_features));
 
+	if (le32_to_cpu(sb->s_raw->nx_xp_desc_blocks) >> 31 ||
+	    le32_to_cpu(sb->s_raw->nx_xp_data_blocks) >> 31 ||
+	    le64_to_cpu(sb->s_raw->nx_xp_desc_base) >> 63 ||
+	    le64_to_cpu(sb->s_raw->nx_xp_data_base) >> 63)
+		report("Container superblock", "has checkpoint tree.");
+
 	sb->s_next_oid = le64_to_cpu(sb->s_raw->nx_next_oid);
 	if (sb->s_xid + 1 != le64_to_cpu(msb_raw->nx_next_xid))
 		report("Container superblock", "next transaction id is wrong.");
