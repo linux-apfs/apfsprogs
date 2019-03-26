@@ -235,6 +235,9 @@ static void map_main_super(void)
 	    le64_to_cpu(sb->s_raw->nx_xp_data_base) >> 63)
 		report("Container superblock", "has checkpoint tree.");
 
+	if (sb->s_raw->nx_test_type)
+		report("Container superblock", "test field is set.");
+
 	sb->s_next_oid = le64_to_cpu(sb->s_raw->nx_next_oid);
 	if (sb->s_xid + 1 != le64_to_cpu(msb_raw->nx_next_xid))
 		report("Container superblock", "next transaction id is wrong.");
