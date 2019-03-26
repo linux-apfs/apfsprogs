@@ -229,6 +229,7 @@ static void map_main_super(void)
 	check_incompat_main_features(le64_to_cpu(
 				sb->s_raw->nx_incompatible_features));
 
+	sb->s_next_oid = le64_to_cpu(sb->s_raw->nx_next_oid);
 	if (sb->s_xid + 1 != le64_to_cpu(msb_raw->nx_next_xid))
 		report("Container superblock", "next transaction id is wrong.");
 	munmap(msb_raw, sb->s_blocksize);

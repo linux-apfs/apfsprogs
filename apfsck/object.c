@@ -78,6 +78,9 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 	if (oid < APFS_OID_RESERVED_COUNT)
 		report("Object header", "reserved object id in block 0x%llx.",
 		       (unsigned long long)bno);
+	if (omap && oid >= sb->s_next_oid)
+		report("Object header", "unassigned object id in block 0x%llx.",
+		       (unsigned long long)bno);
 
 	xid = le64_to_cpu(raw->o_xid);
 	if (!xid || sb->s_xid < xid)
