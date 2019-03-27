@@ -118,6 +118,21 @@ static u64 get_device_size(unsigned int blocksize)
 }
 
 /**
+ * get_max_volumes - Calculate the maximum number of volumes for the container
+ * @size: the container size, in bytes
+ */
+static u32 get_max_volumes(u64 size)
+{
+	u32 max_vols;
+
+	/* Divide by 512 MiB and round up, as the reference requires */
+	max_vols = DIV_ROUND_UP(size, 512 * 1024 * 1024);
+	if (max_vols > APFS_NX_MAX_FILE_SYSTEMS)
+		max_vols = APFS_NX_MAX_FILE_SYSTEMS;
+	return max_vols;
+}
+
+/**
  * check_optional_main_features - Check the optional features of the container
  * @flags: the optional feature flags
  */
@@ -222,6 +237,9 @@ static void map_main_super(void)
 	sb->s_block_count = le64_to_cpu(sb->s_raw->nx_block_count);
 	if (sb->s_block_count > get_device_size(sb->s_blocksize))
 		report("Container superblock", "too many blocks for device.");
+	sb->s_max_vols = get_max_volumes(sb->s_block_count * sb->s_blocksize);
+	if (sb->s_max_vols != le32_to_cpu(sb->s_raw->nx_max_file_systems))
+		report("Container superblock", "bad maximum volume number.");
 
 	check_optional_main_features(le64_to_cpu(sb->s_raw->nx_features));
 	check_rocompat_main_features(le64_to_cpu(
@@ -400,6 +418,8 @@ static struct apfs_superblock *map_volume_super(int vol,
 
 	vol_id = le64_to_cpu(msb_raw->nx_fs_oid[vol]);
 	if (vol_id == 0) {
+		if (vol > sb->s_max_vols)
+			report("Container superblock", "too many volumes.");
 		for (++vol; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol)
 			if (msb_raw->nx_fs_oid[vol])
 				report("Container superblock",

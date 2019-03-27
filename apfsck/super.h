@@ -288,6 +288,7 @@ struct super_block {
 	u64 s_block_count; /* Number of blocks in the container */
 	u64 s_xid; /* Transaction id for the superblock */
 	u64 s_next_oid;	/* Next virtual object id to be used */
+	u32 s_max_vols; /* Maximum number of volumes allowed */
 
 	/* This is excessive in most cases.  TODO: switch to a linked list? */
 	struct volume_superblock *s_volumes[APFS_NX_MAX_FILE_SYSTEMS];
