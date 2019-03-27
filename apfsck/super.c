@@ -255,6 +255,8 @@ static void map_main_super(void)
 
 	if (sb->s_raw->nx_test_type)
 		report("Container superblock", "test field is set.");
+	if (sb->s_raw->nx_blocked_out_prange.pr_block_count)
+		report_unknown("Partition resizing");
 
 	sb->s_next_oid = le64_to_cpu(sb->s_raw->nx_next_oid);
 	if (sb->s_xid + 1 != le64_to_cpu(msb_raw->nx_next_xid))
