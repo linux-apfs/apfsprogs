@@ -133,6 +133,20 @@ static u32 get_max_volumes(u64 size)
 }
 
 /**
+ * check_main_flags - Check consistency of container flags
+ * @flags: the flags
+ */
+static void check_main_flags(u64 flags)
+{
+	if ((flags & APFS_NX_FLAGS_VALID_MASK) != flags)
+		report("Container superblock", "invalid flag in use.");
+	if (flags & (APFS_NX_RESERVED_1 | APFS_NX_RESERVED_2))
+		report("Container superblock", "reserved flag in use.");
+	if (flags & APFS_NX_CRYPTO_SW)
+		report_unknown("Encryption");
+}
+
+/**
  * check_optional_main_features - Check the optional features of the container
  * @flags: the optional feature flags
  */
@@ -241,6 +255,7 @@ static void map_main_super(void)
 	if (sb->s_max_vols != le32_to_cpu(sb->s_raw->nx_max_file_systems))
 		report("Container superblock", "bad maximum volume number.");
 
+	check_main_flags(le64_to_cpu(sb->s_raw->nx_flags));
 	check_optional_main_features(le64_to_cpu(sb->s_raw->nx_features));
 	check_rocompat_main_features(le64_to_cpu(
 				sb->s_raw->nx_readonly_compatible_features));

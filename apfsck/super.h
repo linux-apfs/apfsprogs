@@ -37,6 +37,9 @@ struct apfs_prange {
 #define APFS_NX_RESERVED_1			0x00000001LL
 #define APFS_NX_RESERVED_2			0x00000002LL
 #define APFS_NX_CRYPTO_SW			0x00000004LL
+#define APFS_NX_FLAGS_VALID_MASK		(APFS_NX_RESERVED_1 \
+						| APFS_NX_RESERVED_2 \
+						| APFS_NX_CRYPTO_SW)
 
 /* Optional container feature flags */
 #define APFS_NX_FEATURE_DEFRAG			0x0000000000000001ULL
