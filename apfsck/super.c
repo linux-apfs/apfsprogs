@@ -326,6 +326,11 @@ static void map_main_super(void)
 
 	check_efi_information(le64_to_cpu(sb->s_raw->nx_efi_jumpstart));
 
+	for (i = 0; i < 16; ++i) {
+		if (sb->s_raw->nx_fusion_uuid[i])
+			report_unknown("Fusion drive");
+	}
+
 	sb->s_next_oid = le64_to_cpu(sb->s_raw->nx_next_oid);
 	if (sb->s_xid + 1 != le64_to_cpu(msb_raw->nx_next_xid))
 		report("Container superblock", "next transaction id is wrong.");
