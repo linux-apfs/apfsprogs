@@ -187,6 +187,57 @@ static void check_incompat_main_features(u64 flags)
 }
 
 /**
+ * check_efi_information - Check the EFI info from the container superblock
+ * @oid: the physical object id for the EFI driver record
+ */
+static void check_efi_information(u64 oid)
+{
+	struct apfs_nx_efi_jumpstart *efi;
+	struct object obj;
+	long long num_extents;
+	u64 block_count = 0;
+	u32 file_length;
+	int i;
+
+	if (!oid) /* Not all containers can be booted from, of course */
+		return;
+
+	efi = read_object(oid, NULL /* omap */, &obj);
+	if (obj.type != APFS_OBJECT_TYPE_EFI_JUMPSTART)
+		report("EFI info", "wrong object type.");
+	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
+		report("EFI info", "wrong object subtype.");
+
+	if (le32_to_cpu(efi->nej_magic) != APFS_NX_EFI_JUMPSTART_MAGIC)
+		report("EFI info", "wrong magic.");
+	if (le32_to_cpu(efi->nej_version) != APFS_NX_EFI_JUMPSTART_VERSION)
+		report("EFI info", "wrong version.");
+	for (i = 0; i < 16; ++i)
+		if (efi->nej_reserved[i])
+			report("EFI info", "reserved field in use.");
+
+	num_extents = le32_to_cpu(efi->nej_num_extents);
+	if (sizeof(*efi) + num_extents * sizeof(efi->nej_rec_extents[0]) >
+								sb->s_blocksize)
+		report("EFI info", "number of extents cannot fit.");
+	for (i = 0; i < num_extents; ++i) {
+		struct apfs_prange *ext = &efi->nej_rec_extents[i];
+
+		if (!ext->pr_block_count)
+			report("EFI info", "empty extent.");
+		block_count += le64_to_cpu(ext->pr_block_count);
+	}
+
+	file_length = le32_to_cpu(efi->nej_efi_file_len);
+	if (!file_length)
+		report("EFI info", "driver is empty.");
+	if (file_length > block_count * sb->s_blocksize)
+		report("EFI info", "driver doesn't fit in extents.");
+	if (file_length <= (block_count - 1) * sb->s_blocksize)
+		report("EFI info", "wasted space in driver extents.");
+}
+
+/**
  * map_main_super - Find the container superblock and map it into memory
  *
  * Sets sb->s_raw to the in-memory location of the main superblock.
@@ -272,6 +323,8 @@ static void map_main_super(void)
 		report("Container superblock", "test field is set.");
 	if (sb->s_raw->nx_blocked_out_prange.pr_block_count)
 		report_unknown("Partition resizing");
+
+	check_efi_information(le64_to_cpu(sb->s_raw->nx_efi_jumpstart));
 
 	sb->s_next_oid = le64_to_cpu(sb->s_raw->nx_next_oid);
 	if (sb->s_xid + 1 != le64_to_cpu(msb_raw->nx_next_xid))

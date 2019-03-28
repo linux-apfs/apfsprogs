@@ -20,6 +20,23 @@ struct apfs_prange {
 	__le64 pr_block_count;
 } __packed;
 
+/* EFI constants */
+#define APFS_NX_EFI_JUMPSTART_MAGIC	0x5244534A
+#define APFS_NX_EFI_JUMPSTART_VERSION	1
+
+/*
+ * Information about the embedded EFI driver
+ */
+struct apfs_nx_efi_jumpstart {
+	struct apfs_obj_phys	nej_o;
+	__le32			nej_magic;
+	__le32			nej_version;
+	__le32			nej_efi_file_len;
+	__le32			nej_num_extents;
+	__le64			nej_reserved[16];
+	struct apfs_prange	nej_rec_extents[];
+};
+
 /* Main container */
 
 /* Container constants */
