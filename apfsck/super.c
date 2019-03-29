@@ -352,7 +352,7 @@ static void map_main_super(void)
 	    le64_to_cpu(sb->s_raw->nx_xp_data_base) >> 63)
 		report("Container superblock", "has checkpoint tree.");
 
-	if (sb->s_raw->nx_test_type)
+	if (sb->s_raw->nx_test_type || sb->s_raw->nx_test_oid)
 		report("Container superblock", "test field is set.");
 	if (sb->s_raw->nx_blocked_out_prange.pr_block_count)
 		report_unknown("Partition resizing");
