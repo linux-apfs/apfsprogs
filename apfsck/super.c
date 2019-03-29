@@ -4,6 +4,7 @@
  * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */
 
+#include <assert.h>
 #include <linux/fs.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -238,6 +239,36 @@ static void check_efi_information(u64 oid)
 }
 
 /**
+ * check_ephemeral_information - Check the container's array of ephemeral info
+ * @info: pointer to the nx_ephemeral_info array on the container superblock
+ */
+static void check_ephemeral_information(__le64 *info)
+{
+	u64 min_block_count;
+	u64 container_size;
+	int i;
+
+	assert(sb->s_block_count);
+	container_size = sb->s_block_count * sb->s_blocksize;
+
+	/* TODO: support for small containers is very important */
+	if (container_size < 128 * 1024 * 1024)
+		report_unknown("Small container size");
+
+	min_block_count = APFS_NX_EPH_MIN_BLOCK_COUNT;
+	if (le64_to_cpu(info[0]) != ((min_block_count << 32)
+				  | (APFS_NX_MAX_FILE_SYSTEM_EPH_STRUCTS << 16)
+				  | APFS_NX_EPH_INFO_VERSION_1))
+		report("Container superblock",
+		       "bad first entry in ephemeral info.");
+
+	/* Only the first entry in the info array is documented */
+	for (i = 1; i < APFS_NX_EPH_INFO_COUNT; ++i)
+		if (info[i])
+			report_unknown("Ephemeral info array");
+}
+
+/**
  * map_main_super - Find the container superblock and map it into memory
  *
  * Sets sb->s_raw to the in-memory location of the main superblock.
@@ -300,6 +331,8 @@ static void map_main_super(void)
 		report_unknown("Block size other than 4096");
 
 	sb->s_block_count = le64_to_cpu(sb->s_raw->nx_block_count);
+	if (!sb->s_block_count)
+		report("Container superblock", "reports no block count.");
 	if (sb->s_block_count > get_device_size(sb->s_blocksize))
 		report("Container superblock", "too many blocks for device.");
 	sb->s_max_vols = get_max_volumes(sb->s_block_count * sb->s_blocksize);
@@ -325,6 +358,7 @@ static void map_main_super(void)
 		report_unknown("Partition resizing");
 
 	check_efi_information(le64_to_cpu(sb->s_raw->nx_efi_jumpstart));
+	check_ephemeral_information(&sb->s_raw->nx_ephemeral_info[0]);
 
 	for (i = 0; i < 16; ++i) {
 		if (sb->s_raw->nx_fusion_uuid[i])
@@ -570,7 +604,7 @@ void parse_super(void)
 {
 	int vol;
 
-	sb = malloc(sizeof(*sb));
+	sb = calloc(1, sizeof(*sb));
 	if (!sb) {
 		perror(NULL);
 		exit(1);
