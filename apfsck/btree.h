@@ -199,8 +199,13 @@ struct query {
 	int depth;			/* Put a limit on recursion */
 };
 
+/* In-memory tree types */
+#define BTREE_TYPE_OMAP		1 /* The tree is an object map */
+#define BTREE_TYPE_CATALOG	2 /* The tree is a catalog */
+
 /* In-memory structure representing a b-tree */
 struct btree {
+	u8 type;		/* Type of the tree */
 	struct node *root;	/* Root of this b-tree */
 	struct node *omap_root;	/* Root of its object map (can be NULL) */
 
@@ -217,7 +222,16 @@ struct btree {
  */
 static inline bool btree_is_omap(struct btree *btree)
 {
-	return !btree->omap_root; /* The omap doesn't have an omap itself */
+	return btree->type == BTREE_TYPE_OMAP;
+}
+
+/**
+ * btree_is_catalog - Check if a b-tree is a catalog
+ * @btree: the b-tree to check
+ */
+static inline bool btree_is_catalog(struct btree *btree)
+{
+	return btree->type == BTREE_TYPE_CATALOG;
 }
 
 extern struct btree *parse_omap_btree(u64 oid);

@@ -264,7 +264,7 @@ static struct node *read_node(u64 oid, struct btree *btree)
 	obj_subtype = node->object.subtype;
 	if (btree_is_omap(btree) && obj_subtype != APFS_OBJECT_TYPE_OMAP)
 		report("Object map node", "wrong object subtype.");
-	if (!btree_is_omap(btree) && obj_subtype != APFS_OBJECT_TYPE_FSTREE)
+	if (btree_is_catalog(btree) && obj_subtype != APFS_OBJECT_TYPE_FSTREE)
 		report("Catalog node", "wrong object subtype.");
 
 	node_prepare_bitmaps(node);
@@ -553,7 +553,7 @@ static void parse_subtree(struct node *root,
 
 	if (btree_is_omap(btree) && !node_has_fixed_kv_size(root))
 		report("Object map", "key size should be fixed.");
-	if (!btree_is_omap(btree) && node_has_fixed_kv_size(root))
+	if (btree_is_catalog(btree) && node_has_fixed_kv_size(root))
 		report("Catalog", "key size should not be fixed.");
 
 	for (i = 0; i < root->records; ++i) {
@@ -595,7 +595,7 @@ static void parse_subtree(struct node *root,
 		if (node_is_leaf(root)) {
 			if (len > btree->longest_val)
 				btree->longest_val = len;
-			if (!btree_is_omap(btree))
+			if (btree_is_catalog(btree))
 				parse_cat_record(raw_key, raw_val, len);
 			continue;
 		}
@@ -644,7 +644,16 @@ static void check_btree_footer(struct btree *btree)
 	struct apfs_btree_info *info;
 	char *ctx;
 
-	ctx = btree_is_omap(btree) ? "Object map" : "Catalog";
+	switch (btree->type) {
+	case BTREE_TYPE_OMAP:
+		ctx = "Object map";
+		break;
+	case BTREE_TYPE_CATALOG:
+		ctx = "Catalog";
+		break;
+	default:
+		report(NULL, "Bug!");
+	}
 
 	/* Flags are not part of the footer, but this check fits best here */
 	if (!node_is_root(root))
@@ -675,8 +684,9 @@ static void check_btree_footer(struct btree *btree)
 		if (le32_to_cpu(info->bt_longest_val) !=
 					sizeof(struct apfs_omap_val))
 			report(ctx, "wrong maximum value size in info footer.");
-	} else {
-		/* This is a catalog tree */
+	}
+
+	if (btree_is_catalog(btree)) {
 		if (le32_to_cpu(info->bt_fixed.bt_key_size) != 0)
 			report(ctx, "key size should not be set.");
 		if (le32_to_cpu(info->bt_fixed.bt_val_size) != 0)
@@ -707,6 +717,7 @@ struct btree *parse_cat_btree(u64 oid, struct node *omap_root)
 		exit(1);
 	}
 
+	cat->type = BTREE_TYPE_CATALOG;
 	cat->omap_root = omap_root;
 	cat->root = read_node(oid, cat);
 
@@ -741,6 +752,7 @@ struct btree *parse_omap_btree(u64 oid)
 		perror(NULL);
 		exit(1);
 	}
+	omap->type = BTREE_TYPE_OMAP;
 	omap->omap_root = NULL; /* The omap doesn't have an omap of its own */
 	omap->root = read_node(le64_to_cpu(raw->om_tree_oid), omap);
 
