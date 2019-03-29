@@ -470,6 +470,8 @@ static void check_volume_flags(u64 flags)
 
 	if (flags & (APFS_FS_SPILLEDOVER | APFS_FS_RUN_SPILLOVER_CLEANER))
 		report_unknown("Fusion drive");
+	if (flags & APFS_FS_ALWAYS_CHECK_EXTENTREF)
+		report_unknown("Forced extent reference checks");
 }
 
 /**
