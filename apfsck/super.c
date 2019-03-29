@@ -370,6 +370,11 @@ static void map_main_super(void)
 	    sb->s_raw->nx_keylocker.pr_block_count)
 		report_weird("Container keybag");
 
+	if (sb->s_raw->nx_fusion_mt_oid || sb->s_raw->nx_fusion_wbc_oid ||
+	    sb->s_raw->nx_fusion_wbc.pr_start_paddr ||
+	    sb->s_raw->nx_fusion_wbc.pr_block_count)
+		report_unknown("Fusion drive");
+
 	sb->s_next_oid = le64_to_cpu(sb->s_raw->nx_next_oid);
 	if (sb->s_xid + 1 != le64_to_cpu(msb_raw->nx_next_xid))
 		report("Container superblock", "next transaction id is wrong.");
