@@ -659,6 +659,9 @@ static void check_btree_footer(struct btree *btree)
 	case BTREE_TYPE_CATALOG:
 		ctx = "Catalog";
 		break;
+	case BTREE_TYPE_EXTENTREF:
+		ctx = "Extent reference tree";
+		break;
 	default:
 		report(NULL, "Bug!");
 	}
@@ -694,7 +697,7 @@ static void check_btree_footer(struct btree *btree)
 			report(ctx, "wrong maximum value size in info footer.");
 	}
 
-	if (btree_is_catalog(btree)) {
+	if (btree_is_catalog(btree) || btree_is_extentref(btree)) {
 		if (le32_to_cpu(info->bt_fixed.bt_key_size) != 0)
 			report(ctx, "key size should not be set.");
 		if (le32_to_cpu(info->bt_fixed.bt_val_size) != 0)
@@ -791,6 +794,8 @@ struct btree *parse_extentref_btree(u64 oid)
 	extref->root = read_node(oid, extref);
 
 	parse_subtree(extref->root, &last_key, NULL /* name_buf */);
+
+	check_btree_footer(extref);
 	return extref;
 }
 
