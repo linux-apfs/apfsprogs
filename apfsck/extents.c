@@ -146,3 +146,34 @@ void parse_dstream_id_record(struct apfs_dstream_id_key *key,
 	dstream->d_seen = true;
 	dstream->d_refcnt = le32_to_cpu(val->refcnt);
 }
+
+/**
+ * parse_phys_ext_record - Parse and check a physical extent record value
+ * @key:	pointer to the raw key
+ * @val:	pointer to the raw value
+ * @len:	length of the raw value
+ *
+ * Internal consistency of @key must be checked before calling this function.
+ */
+void parse_phys_ext_record(struct apfs_phys_ext_key *key,
+			   struct apfs_phys_ext_val *val, int len)
+{
+	u8 kind;
+	u64 length;
+
+	if (len != sizeof(*val))
+		report("Physical extent record", "wrong size of value.");
+
+	kind = le64_to_cpu(val->len_and_kind) >> APFS_PEXT_KIND_SHIFT;
+	if (kind != APFS_KIND_NEW && kind != APFS_KIND_UPDATE)
+		report("Physical extent record", "invalid kind");
+	if (kind == APFS_KIND_UPDATE)
+		report_unknown("Snapshots");
+
+	length = le64_to_cpu(val->len_and_kind) & APFS_PEXT_LEN_MASK;
+	if (!length)
+		report("Physical extent record", "has no blocks.");
+
+	if (!val->refcnt)
+		report("Physical extent record", "should have been deleted.");
+}

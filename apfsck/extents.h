@@ -11,6 +11,23 @@
 
 struct apfs_file_extent_key;
 struct apfs_dstream_id_key;
+struct apfs_phys_ext_key;
+
+/* Physical extent records */
+#define APFS_PEXT_LEN_MASK	0x0fffffffffffffffULL
+#define APFS_PEXT_KIND_MASK	0xf000000000000000ULL
+#define APFS_PEXT_KIND_SHIFT	60
+
+/* The kind of a physical extent record */
+enum {
+	APFS_KIND_ANY		= 0,
+	APFS_KIND_NEW		= 1,
+	APFS_KIND_UPDATE	= 2,
+	APFS_KIND_DEAD		= 3,
+	APFS_KIND_UPDATE_REFCNT	= 4,
+
+	APFS_KIND_INVALID	= 255 /* This is weird, won't fit in 4 bits */
+};
 
 /*
  * Structure of a physical extent record
@@ -74,5 +91,7 @@ extern void parse_extent_record(struct apfs_file_extent_key *key,
 				struct apfs_file_extent_val *val, int len);
 extern void parse_dstream_id_record(struct apfs_dstream_id_key *key,
 				    struct apfs_dstream_id_val *val, int len);
+extern void parse_phys_ext_record(struct apfs_phys_ext_key *key,
+				  struct apfs_phys_ext_val *val, int len);
 
 #endif	/* _EXTENTS_H */

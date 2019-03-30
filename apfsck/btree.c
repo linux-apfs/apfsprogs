@@ -605,6 +605,8 @@ static void parse_subtree(struct node *root,
 				btree->longest_val = len;
 			if (btree_is_catalog(btree))
 				parse_cat_record(raw_key, raw_val, len);
+			if (btree_is_extentref(btree))
+				parse_phys_ext_record(raw_key, raw_val, len);
 			continue;
 		}
 
