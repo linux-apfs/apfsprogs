@@ -558,6 +558,9 @@ static void parse_subtree(struct node *root,
 		report("Object map", "key size should be fixed.");
 	if (btree_is_catalog(btree) && node_has_fixed_kv_size(root))
 		report("Catalog", "key size should not be fixed.");
+	if (btree_is_extentref(btree) && node_has_fixed_kv_size(root))
+		/* This makes little sense, but it appears to be true */
+		report("Extent reference tree", "key size shouldn't be fixed.");
 
 	for (i = 0; i < root->records; ++i) {
 		struct node *child;
@@ -615,10 +618,10 @@ static void parse_subtree(struct node *root,
 		if (node_is_root(child))
 			report("B-tree", "nonroot node is flagged as root.");
 
-		/* When an omap node changes, the parent must update the bno */
-		if (btree_is_omap(btree) &&
+		/* If a physical node changes, the parent must update the bno */
+		if ((btree_is_omap(btree) || btree_is_extentref(btree)) &&
 		    root->object.xid < child->object.xid)
-			report("Object map",
+			report("Physical tree",
 			       "xid of node is older than xid of its child.");
 
 		parse_subtree(child, last_key, name_buf);
