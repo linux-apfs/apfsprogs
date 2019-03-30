@@ -202,6 +202,7 @@ struct query {
 /* In-memory tree types */
 #define BTREE_TYPE_OMAP		1 /* The tree is an object map */
 #define BTREE_TYPE_CATALOG	2 /* The tree is a catalog */
+#define BTREE_TYPE_EXTENTREF	3 /* The tree is for extent references */
 
 /* In-memory structure representing a b-tree */
 struct btree {
@@ -234,6 +235,16 @@ static inline bool btree_is_catalog(struct btree *btree)
 	return btree->type == BTREE_TYPE_CATALOG;
 }
 
+/**
+ * btree_is_extentref - Check if a b-tree is for extent references
+ * @btree: the b-tree to check
+ */
+static inline bool btree_is_extentref(struct btree *btree)
+{
+	return btree->type == BTREE_TYPE_EXTENTREF;
+}
+
+extern struct btree *parse_extentref_btree(u64 oid);
 extern struct btree *parse_omap_btree(u64 oid);
 extern struct btree *parse_cat_btree(u64 oid, struct node *omap_root);
 extern struct query *alloc_query(struct node *node, struct query *parent);

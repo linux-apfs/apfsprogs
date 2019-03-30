@@ -282,6 +282,7 @@ struct volume_superblock {
 	struct apfs_superblock *v_raw;
 	struct btree *v_omap;
 	struct btree *v_cat;
+	struct btree *v_extent_ref;
 	union htable_entry **v_inode_table;	/* Hash table of all inodes */
 	union htable_entry **v_dstream_table;	/* Hash table of all dstreams */
 	union htable_entry **v_cnid_table;	/* Hash table of all cnids */

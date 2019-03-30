@@ -270,6 +270,8 @@ void read_cat_key(void *raw, int size, struct key *key)
 	case APFS_TYPE_SIBLING_LINK:
 		read_sibling_link_key(raw, size, key);
 		return;
+	case APFS_TYPE_EXTENT:
+		report("Catalog tree", "has extent reference record.");
 	default:
 		/* All other key types are just the header */
 		if (size != sizeof(struct apfs_key_header))
@@ -278,4 +280,27 @@ void read_cat_key(void *raw, int size, struct key *key)
 		key->name = NULL;
 		return;
 	}
+}
+
+/**
+ * read_extentref_key - Parse an on-disk extent reference key
+ * @raw:	pointer to the raw key
+ * @size:	size of the raw key
+ * @key:	key structure to store the result
+ */
+void read_extentref_key(void *raw, int size, struct key *key)
+{
+	int type;
+
+	if (size != sizeof(struct apfs_phys_ext_key))
+		report("Extent reference tree", "wrong size of key.");
+
+	type = cat_type((struct apfs_key_header *)raw);
+	if (type != APFS_TYPE_EXTENT)
+		report("Extent reference tree", "wrong record type.");
+
+	key->id = cat_cnid((struct apfs_key_header *)raw);
+	key->type = type;
+	key->number = 0;
+	key->name = NULL;
 }

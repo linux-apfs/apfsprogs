@@ -50,6 +50,13 @@ struct apfs_key_header {
 } __packed;
 
 /*
+ * Structure of the key for a physical extent record
+ */
+struct apfs_phys_ext_key {
+	struct apfs_key_header hdr;
+} __packed;
+
+/*
  * Structure of the key for an inode record
  */
 struct apfs_inode_key {
@@ -221,5 +228,6 @@ static inline u64 cat_cnid(struct apfs_key_header *key)
 extern int keycmp(struct key *k1, struct key *k2);
 extern void read_cat_key(void *raw, int size, struct key *key);
 extern void read_omap_key(void *raw, int size, struct key *key);
+extern void read_extentref_key(void *raw, int size, struct key *key);
 
 #endif	/* _KEY_H */

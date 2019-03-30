@@ -266,6 +266,9 @@ static struct node *read_node(u64 oid, struct btree *btree)
 		report("Object map node", "wrong object subtype.");
 	if (btree_is_catalog(btree) && obj_subtype != APFS_OBJECT_TYPE_FSTREE)
 		report("Catalog node", "wrong object subtype.");
+	if (btree_is_extentref(btree) && obj_subtype !=
+						APFS_OBJECT_TYPE_BLOCKREFTREE)
+		report("Extent reference tree node", "wrong object subtype.");
 
 	node_prepare_bitmaps(node);
 
@@ -576,9 +579,11 @@ static void parse_subtree(struct node *root,
 			if (curr_key.number > root->object.xid)
 				report("Object map",
 				       "node xid is older than key xid.");
-		} else {
-			read_cat_key(raw_key, len, &curr_key);
 		}
+		if (btree_is_catalog(btree))
+			read_cat_key(raw_key, len, &curr_key);
+		if (btree_is_extentref(btree))
+			read_extentref_key(raw_key, len, &curr_key);
 
 		if (keycmp(last_key, &curr_key) > 0)
 			report("B-tree", "keys are out of order.");
@@ -760,6 +765,30 @@ struct btree *parse_omap_btree(u64 oid)
 
 	check_btree_footer(omap);
 	return omap;
+}
+
+/**
+ * parse_extentref_btree - Parse and check an extent reference tree
+ * @oid:	object id for the b-tree root
+ *
+ * Returns a pointer to the btree struct for the extent reference tree.
+ */
+struct btree *parse_extentref_btree(u64 oid)
+{
+	struct btree *extref;
+	struct key last_key = {0};
+
+	extref = calloc(1, sizeof(*extref));
+	if (!extref) {
+		perror(NULL);
+		exit(1);
+	}
+	extref->type = BTREE_TYPE_EXTENTREF;
+	extref->omap_root = NULL; /* These are phyisical objects */
+	extref->root = read_node(oid, extref);
+
+	parse_subtree(extref->root, &last_key, NULL /* name_buf */);
+	return extref;
 }
 
 /**

@@ -642,10 +642,13 @@ void parse_super(void)
 		/* Check for corruption in the volume object map... */
 		vsb->v_omap = parse_omap_btree(
 				le64_to_cpu(vsb_raw->apfs_omap_oid));
-		/* ...and in the catalog tree */
+		/* ...in the catalog... */
 		vsb->v_cat = parse_cat_btree(
 				le64_to_cpu(vsb_raw->apfs_root_tree_oid),
 				vsb->v_omap->root);
+		/* ...and in the extent reference tree */
+		vsb->v_extent_ref = parse_extentref_btree(
+				le64_to_cpu(vsb_raw->apfs_extentref_tree_oid));
 
 		free_inode_table(vsb->v_inode_table);
 		vsb->v_inode_table = NULL;
