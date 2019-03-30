@@ -12,6 +12,15 @@
 struct apfs_file_extent_key;
 struct apfs_dstream_id_key;
 
+/*
+ * Structure of a physical extent record
+ */
+struct apfs_phys_ext_val {
+	__le64 len_and_kind;
+	__le64 owning_obj_id;
+	__le32 refcnt;
+} __packed;
+
 /* File extent records */
 #define APFS_FILE_EXTENT_LEN_MASK	0x00ffffffffffffffULL
 #define APFS_FILE_EXTENT_FLAG_MASK	0xff00000000000000ULL

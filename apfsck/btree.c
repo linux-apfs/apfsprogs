@@ -695,16 +695,34 @@ static void check_btree_footer(struct btree *btree)
 		if (le32_to_cpu(info->bt_longest_val) !=
 					sizeof(struct apfs_omap_val))
 			report(ctx, "wrong maximum value size in info footer.");
+
+		return;
 	}
 
-	if (btree_is_catalog(btree) || btree_is_extentref(btree)) {
-		if (le32_to_cpu(info->bt_fixed.bt_key_size) != 0)
-			report(ctx, "key size should not be set.");
-		if (le32_to_cpu(info->bt_fixed.bt_val_size) != 0)
-			report(ctx, "value size should not be set.");
+	/* For now, only the omap reports fixed key/value sizes */
+	if (le32_to_cpu(info->bt_fixed.bt_key_size) != 0)
+		report(ctx, "key size should not be set.");
+	if (le32_to_cpu(info->bt_fixed.bt_val_size) != 0)
+		report(ctx, "value size should not be set.");
+
+	if (btree_is_catalog(btree)) {
 		if (le32_to_cpu(info->bt_longest_key) < btree->longest_key)
 			report(ctx, "wrong maximum key size in info footer.");
 		if (le32_to_cpu(info->bt_longest_val) < btree->longest_val)
+			report(ctx, "wrong maximum value size in info footer.");
+	}
+
+	if (btree_is_extentref(btree)) {
+		/*
+		 * The extentref only seems to have records of this type.
+		 * No idea why it reports keys/values of variable size...
+		 */
+		if (le32_to_cpu(info->bt_longest_key) !=
+					sizeof(struct apfs_phys_ext_key))
+			report(ctx, "wrong maximum key size in info footer.");
+
+		if (le32_to_cpu(info->bt_longest_val) !=
+					sizeof(struct apfs_phys_ext_val))
 			report(ctx, "wrong maximum value size in info footer.");
 	}
 }
