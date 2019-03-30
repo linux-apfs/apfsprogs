@@ -106,7 +106,9 @@ void parse_extent_record(struct apfs_file_extent_key *key,
 	if (len != sizeof(*val))
 		report("Extent record", "wrong size of value.");
 
-	/* TODO: checks for crypto_id */
+	if (val->crypto_id)
+		report_unknown("Extent encryption");
+
 	length = le64_to_cpu(val->len_and_flags) & APFS_FILE_EXTENT_LEN_MASK;
 	if (!length)
 		report("Extent record", "length is zero.");

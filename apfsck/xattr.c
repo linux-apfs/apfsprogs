@@ -42,6 +42,8 @@ static void parse_xattr_dstream(struct apfs_xattr_dstream *xstream)
 
 	size = le64_to_cpu(dstream_raw->size);
 	alloced_size = le64_to_cpu(dstream_raw->alloced_size);
+	if (dstream_raw->default_crypto_id)
+		report_unknown("Dstream encryption");
 
 	dstream = get_dstream(id);
 	if (dstream->d_references) {

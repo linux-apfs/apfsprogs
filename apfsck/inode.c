@@ -300,6 +300,8 @@ static int read_dstream_xfield(char *xval, int len, struct inode *inode)
 
 	size = le64_to_cpu(dstream_raw->size);
 	alloced_size = le64_to_cpu(dstream_raw->alloced_size);
+	if (dstream_raw->default_crypto_id)
+		report_unknown("Dstream encryption");
 
 	dstream = get_dstream(inode->i_private_id);
 	if (dstream->d_references) {
