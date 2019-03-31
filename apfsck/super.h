@@ -308,6 +308,7 @@ struct super_block {
 	struct apfs_nx_superblock *s_raw;
 	struct btree *s_omap;
 	unsigned long s_blocksize;
+	unsigned char s_blocksize_bits;
 	u64 s_block_count; /* Number of blocks in the container */
 	u64 s_xid; /* Transaction id for the superblock */
 	u64 s_next_oid;	/* Next virtual object id to be used */

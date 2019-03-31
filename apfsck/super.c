@@ -27,6 +27,35 @@ struct super_block *sb;
 struct volume_superblock *vsb;
 
 /**
+ * is_power_of_two - Check if a number is a power of two
+ * @n: the number to check
+ */
+static bool is_power_of_2(unsigned int n)
+{
+        return (n != 0 && ((n & (n - 1)) == 0));
+}
+
+/**
+ * blksize_bits - Find the corresponding bit shift for a blocksize
+ * @size: the blocksize
+ */
+static inline unsigned int blksize_bits(unsigned int size)
+{
+	unsigned int bits = 8;
+
+	if (size < 4096)
+		report("Container superblock", "block size is too small.");
+	if (!is_power_of_2(size))
+		report("Container superblock", "blocksize isn't power of two.");
+
+	do {
+		bits++;
+		size >>= 1;
+	} while (size > 256);
+	return bits;
+}
+
+/**
  * read_super_copy - Read the copy of the container superblock in block 0
  *
  * Sets sb->s_blocksize and returns a pointer to the raw superblock in memory.
@@ -49,6 +78,7 @@ static struct apfs_nx_superblock *read_super_copy(void)
 		exit(1);
 	}
 	sb->s_blocksize = le32_to_cpu(msb_raw->nx_block_size);
+	sb->s_blocksize_bits = blksize_bits(sb->s_blocksize);
 
 	if (sb->s_blocksize != bsize_tmp) {
 		munmap(msb_raw, bsize_tmp);
