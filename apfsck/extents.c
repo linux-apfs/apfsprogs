@@ -8,11 +8,50 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "apfsck.h"
+#include "btree.h"
 #include "extents.h"
 #include "htable.h"
 #include "inode.h"
 #include "key.h"
 #include "super.h"
+
+/**
+ * free_extent - Free an extent structure after performing a final check
+ * @entry: the entry to free
+ */
+static void free_extent(union htable_entry *entry)
+{
+	struct extent *extent = &entry->extent;
+
+	if (extent->e_refcnt != extent->e_references)
+		report("Physical extent record", "bad reference count.");
+
+	free(entry);
+}
+
+/**
+ * free_extent_table - Free the extent hash table and all its entries
+ * @table: table to free
+ */
+void free_extent_table(union htable_entry **table)
+{
+	free_htable(table, free_extent);
+}
+
+/**
+ * get_extent - Find or create an extent structure in the extent hash table
+ * @bno: first physical block of the extent
+ *
+ * Returns the extent structure, after creating it if necessary.
+ */
+static struct extent *get_extent(u64 bno)
+{
+	union htable_entry *entry;
+
+	entry = get_htable_entry(bno, sizeof(struct extent),
+				 vsb->v_extent_table);
+	return &entry->extent;
+}
 
 /**
  * check_dstream_stats - Verify the stats gathered by the fsck vs the metadata
@@ -51,6 +90,7 @@ static void free_dstream(union htable_entry *entry)
 {
 	struct dstream *dstream = &entry->dstream;
 	struct listed_cnid *cnid;
+	struct listed_extent *curr_extent = dstream->d_extents;
 
 	/* The dstreams must be freed before the cnids */
 	assert(vsb->v_cnid_table);
@@ -60,6 +100,30 @@ static void free_dstream(union htable_entry *entry)
 	if (cnid->c_state == CNID_USED)
 		report("Catalog", "a filesystem object id was used twice.");
 	cnid->c_state = CNID_USED;
+
+	/* Increase the refcount of each physical extent used by the dstream */
+	while (curr_extent) {
+		struct listed_extent *next_extent;
+		struct extent *extent;
+
+		extent = get_extent(curr_extent->paddr);
+		if (extent->e_references) {
+			if (extent->e_obj_type != dstream->d_obj_type)
+				report("Physical extent record",
+				       "owners have inconsistent types.");
+			/* Only count the extent once for each owner */
+			if (extent->e_latest_owner != dstream->d_owner)
+				extent->e_references++;
+		} else {
+			extent->e_references++;
+		}
+		extent->e_obj_type = dstream->d_obj_type;
+		extent->e_latest_owner = dstream->d_owner;
+
+		next_extent = curr_extent->next;
+		free(curr_extent);
+		curr_extent = next_extent;
+	}
 
 	check_dstream_stats(dstream);
 	free(entry);
@@ -87,6 +151,52 @@ struct dstream *get_dstream(u64 id)
 	entry = get_htable_entry(id, sizeof(struct dstream),
 				 vsb->v_dstream_table);
 	return &entry->dstream;
+}
+
+/**
+ * attach_prange_to_dstream - Attach a physical range to a dstream structure
+ * @paddr:	physical address of the range
+ * @blk_count:	number of blocks in the range
+ * @dstream:	dstream structure
+ */
+static void attach_extent_to_dstream(u64 paddr, u64 blk_count,
+				     struct dstream *dstream)
+{
+	struct listed_extent **ext_p = &dstream->d_extents;
+	struct listed_extent *ext = *ext_p;
+	struct listed_extent *new;
+	struct extref_record extref;
+
+	if (paddr + blk_count < paddr) /* Overflow */
+		report("Extent record", "physical address is too big.");
+
+	/* Find out which physical extent contains this address range */
+	extentref_lookup(vsb->v_extent_ref->root, paddr, &extref);
+	if (extref.phys_addr + extref.blocks < paddr + blk_count)
+		report("Extent record", "no entry in extent reference tree.");
+	paddr = extref.phys_addr;
+
+	/* Entries are ordered by their physical address */
+	while (ext) {
+		/* Count physical extents only once for each owner */
+		if (paddr == ext->paddr)
+			return;
+
+		if (paddr < ext->paddr)
+			break;
+		ext_p = &ext->next;
+		ext = *ext_p;
+	}
+
+	new = malloc(sizeof(*new));
+	if (!new) {
+		perror(NULL);
+		exit(1);
+	}
+
+	new->paddr = paddr;
+	new->next = ext;
+	*ext_p = new;
 }
 
 /**
@@ -124,8 +234,12 @@ void parse_extent_record(struct apfs_file_extent_key *key,
 		report("Data stream", "extents are not consecutive.");
 	dstream->d_bytes += length;
 
-	if (!le64_to_cpu(val->phys_block_num)) /* This is a hole */
+	if (!le64_to_cpu(val->phys_block_num)) { /* This is a hole */
 		dstream->d_sparse_bytes += length;
+		return;
+	}
+	attach_extent_to_dstream(le64_to_cpu(val->phys_block_num),
+				 length >> sb->s_blocksize_bits, dstream);
 }
 
 /**
@@ -160,7 +274,9 @@ void parse_dstream_id_record(struct apfs_dstream_id_key *key,
 void parse_phys_ext_record(struct apfs_phys_ext_key *key,
 			   struct apfs_phys_ext_val *val, int len)
 {
+	struct extent *extent;
 	u8 kind;
+	u32 refcnt;
 	u64 length;
 
 	if (len != sizeof(*val))
@@ -176,6 +292,10 @@ void parse_phys_ext_record(struct apfs_phys_ext_key *key,
 	if (!length)
 		report("Physical extent record", "has no blocks.");
 
-	if (!val->refcnt)
+	refcnt = le32_to_cpu(val->refcnt);
+	if (!refcnt)
 		report("Physical extent record", "should have been deleted.");
+
+	extent = get_extent(cat_cnid(&key->hdr));
+	extent->e_refcnt = refcnt;
 }

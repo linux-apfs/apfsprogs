@@ -160,6 +160,19 @@ static inline void init_omap_key(u64 oid, u64 xid, struct key *key)
 }
 
 /**
+ * init_extref_key - Initialize an in-memory key for an extentref query
+ * @bno:	first block number
+ * @key:	apfs_key structure to initialize
+ */
+static inline void init_extref_key(u64 bno, struct key *key)
+{
+	key->id = bno;
+	key->type = APFS_TYPE_EXTENT;
+	key->number = 0;
+	key->name = NULL;
+}
+
+/**
  * init_inode_key - Initialize an in-memory key for an inode query
  * @ino:	inode number
  * @key:	key structure to initialize

@@ -885,6 +885,59 @@ void omap_lookup(struct node *tbl, u64 id, struct omap_record *omap_rec)
 }
 
 /**
+ * extref_rec_from_query - Read the info found by a successful extentref query
+ * @query:	the query for the extent reference record
+ * @extref:	extent reference record struct to receive the result
+ */
+static void extref_rec_from_query(struct query *query,
+				  struct extref_record *extref)
+{
+	struct apfs_phys_ext_val *extref_val;
+	struct apfs_phys_ext_key *extref_key;
+	void *raw = query->node->raw;
+
+	if (query->len != sizeof(*extref_val))
+		report("Extent reference record", "wrong size of value.");
+
+	extref_val = (struct apfs_phys_ext_val *)(raw + query->off);
+	extref_key = (struct apfs_phys_ext_key *)(raw + query->key_off);
+
+	/* The physical address is used as the id in the extentref tree */
+	extref->phys_addr = cat_cnid(&extref_key->hdr);
+	extref->blocks = le64_to_cpu(extref_val->len_and_kind) &
+							APFS_PEXT_LEN_MASK;
+	extref->owner = le64_to_cpu(extref_val->owning_obj_id);
+	extref->refcnt = le32_to_cpu(extref_val->refcnt);
+}
+
+/**
+ * extentref_lookup - Find the best match for an extent in the extentref tree
+ * @tbl:	root of the extent reference tree to be searched
+ * @bno:	first block number for the extent
+ * @extref:	extentref record struct to receive the result
+ */
+void extentref_lookup(struct node *tbl, u64 bno, struct extref_record *extref)
+{
+	struct query *query;
+	struct key key;
+
+	query = alloc_query(tbl, NULL /* parent */);
+
+	init_extref_key(bno, &key);
+	query->key = &key;
+	query->flags |= QUERY_EXTENTREF;
+
+	if (btree_query(&query)) {
+		report("Extent reference tree",
+		       "record missing for block number 0x%llx.",
+		       (unsigned long long)bno);
+	}
+
+	extref_rec_from_query(query, extref);
+	free_query(query);
+}
+
+/**
  * alloc_query - Allocates a query structure
  * @node:	node to be searched
  * @parent:	query for the parent node
@@ -951,6 +1004,9 @@ static void key_from_query(struct query *query, struct key *key)
 		break;
 	case QUERY_OMAP:
 		read_omap_key(raw_key, query->key_len, key);
+		break;
+	case QUERY_EXTENTREF:
+		read_extentref_key(raw_key, query->key_len, key);
 		break;
 	default:
 		report(NULL, "Bug!");

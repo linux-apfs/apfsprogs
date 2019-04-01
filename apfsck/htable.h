@@ -48,6 +48,7 @@ union htable_entry {
 	struct inode			inode;		/* Inode data */
 	struct dstream			dstream;	/* Dstream data */
 	struct listed_cnid		listed_cnid;	/* Catalog id data */
+	struct extent			extent;		/* Extent data */
 };
 
 extern union htable_entry **alloc_htable();

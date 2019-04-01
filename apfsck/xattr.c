@@ -32,8 +32,10 @@ static void check_xattr_flags(u16 flags)
 /**
  * parse_xattr_dstream - Parse a xattr dstream struct and check for corruption
  * @xstream: the dstream structure
+ *
+ * Returns a pointer to the in-memory dstream structure.
  */
-static void parse_xattr_dstream(struct apfs_xattr_dstream *xstream)
+static struct dstream *parse_xattr_dstream(struct apfs_xattr_dstream *xstream)
 {
 	struct dstream *dstream;
 	struct apfs_dstream *dstream_raw = &xstream->dstream;
@@ -62,6 +64,7 @@ static void parse_xattr_dstream(struct apfs_xattr_dstream *xstream)
 		dstream->d_alloced_size = alloced_size;
 	}
 	dstream->d_references++;
+	return dstream;
 }
 
 /**
@@ -85,22 +88,28 @@ void parse_xattr_record(struct apfs_xattr_key *key,
 	flags = le16_to_cpu(val->flags);
 	check_xattr_flags(flags);
 
+	inode = get_inode(cat_cnid(&key->hdr));
+	if (!inode->i_seen)
+		report("Catalog", "xattr record with no inode.");
+
 	if (flags & APFS_XATTR_DATA_STREAM) {
-		if (len != sizeof(struct apfs_xattr_dstream))
+		struct apfs_xattr_dstream *dstream_raw;
+		struct dstream *dstream;
+
+		if (len != sizeof(*dstream_raw))
 			report("Xattr record",
 			       "bad length for dstream structure.");
 		if (len != le16_to_cpu(val->xdata_len))
 			/* Never seems to happen, but the docs don't ban it */
 			report_weird("Xattr data length for dstream structure");
-		parse_xattr_dstream((struct apfs_xattr_dstream *)val->xdata);
+
+		dstream_raw = (struct apfs_xattr_dstream *)val->xdata;
+		dstream = parse_xattr_dstream(dstream_raw);
+		dstream->d_owner = inode->i_ino;
 	} else {
 		if (len != le16_to_cpu(val->xdata_len))
 			report("Xattr record", "bad length for embedded data.");
 	}
-
-	inode = get_inode(cat_cnid(&key->hdr));
-	if (!inode->i_seen)
-		report("Catalog", "xattr record with no inode.");
 
 	if (!strcmp((char *)key->name, APFS_XATTR_NAME_SYMLINK)) {
 		if (!(flags & APFS_XATTR_FILE_SYSTEM_OWNED))

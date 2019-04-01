@@ -38,6 +38,16 @@ struct apfs_phys_ext_val {
 	__le32 refcnt;
 } __packed;
 
+/*
+ * Physical extent record data in memory
+ */
+struct extref_record {
+	u64 phys_addr;	/* First block number */
+	u64 blocks;	/* Block count */
+	u64 owner;	/* Owning object id */
+	u32 refcnt;	/* Reference count */
+};
+
 /* File extent records */
 #define APFS_FILE_EXTENT_LEN_MASK	0x00ffffffffffffffULL
 #define APFS_FILE_EXTENT_FLAG_MASK	0xff00000000000000ULL
@@ -59,6 +69,36 @@ struct apfs_dstream_id_val {
 	__le32 refcnt;
 } __packed;
 
+/*
+ * Physical extent data in memory
+ */
+struct extent {
+	/* Hash table entry header (struct htable_entry_header from htable.h) */
+	struct {
+		union htable_entry	*e_next;
+		u64			e_bno;	/* First physical block */
+	};
+
+	u8		e_obj_type;	/* Type of the owner objects */
+
+	/* Extent stats read from the physical extent structure */
+	u32		e_refcnt;	/* Reference count */
+
+	/* Extent stats measured by the fsck */
+	u32		e_references;	/* Number of references to extent */
+	u64		e_latest_owner;	/* Last owner counted on e_references */
+};
+
+/*
+ * Structure used to register each physical extent for a dstream, so that the
+ * references can later be counted.  The same extent structure might be shared
+ * by several dstreams.
+ */
+struct listed_extent {
+	u64			paddr;	 /* Physical address for the extent */
+	struct listed_extent	*next;	 /* Next entry in linked list */
+};
+
 #define DSTREAM_TABLE_BUCKETS	512	/* So the hash table array fits in 4k */
 
 /*
@@ -71,7 +111,11 @@ struct dstream {
 		u64			d_id;
 	};
 
+	/* Linked list of physical extents for dstream */
+	struct listed_extent *d_extents;
+
 	u8		d_obj_type;	/* Type of the owner objects */
+	u64		d_owner;	/* Owner id for the extentref tree */
 	bool		d_seen;		/* Has the dstream record been seen? */
 
 	/* Dstream stats read from the dstream structures */
@@ -86,6 +130,7 @@ struct dstream {
 };
 
 extern void free_dstream_table(union htable_entry **table);
+extern void free_extent_table(union htable_entry **table);
 extern struct dstream *get_dstream(u64 ino);
 extern void parse_extent_record(struct apfs_file_extent_key *key,
 				struct apfs_file_extent_val *val, int len);

@@ -11,6 +11,7 @@
 #include "types.h"
 
 struct super_block;
+struct extref_record;
 
 /*
  * On-disk representation of an object map
@@ -173,6 +174,7 @@ static inline bool node_has_fixed_kv_size(struct node *node)
 #define QUERY_TREE_MASK		0007	/* Which b-tree we query */
 #define QUERY_OMAP		0001	/* This is a b-tree object map query */
 #define QUERY_CAT		0002	/* This is a catalog tree query */
+#define QUERY_EXTENTREF		0004	/* This is an extentref tree query */
 #define QUERY_MULTIPLE		0010	/* Search for multiple matches */
 #define QUERY_NEXT		0020	/* Find next of multiple matches */
 #define QUERY_EXACT		0040	/* Search for an exact match */
@@ -252,5 +254,7 @@ extern void free_query(struct query *query);
 extern int btree_query(struct query **query);
 extern struct node *omap_read_node(u64 id);
 extern void omap_lookup(struct node *tbl, u64 id, struct omap_record *omap_rec);
+extern void extentref_lookup(struct node *tbl, u64 bno,
+			     struct extref_record *extref);
 
 #endif	/* _BTREE_H */

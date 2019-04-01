@@ -659,6 +659,7 @@ void parse_super(void)
 			perror(NULL);
 			exit(1);
 		}
+		vsb->v_extent_table = alloc_htable();
 		vsb->v_cnid_table = alloc_htable();
 		vsb->v_dstream_table = alloc_htable();
 		vsb->v_inode_table = alloc_htable();
@@ -672,13 +673,13 @@ void parse_super(void)
 		/* Check for corruption in the volume object map... */
 		vsb->v_omap = parse_omap_btree(
 				le64_to_cpu(vsb_raw->apfs_omap_oid));
-		/* ...in the catalog... */
+		/* ...in the extent reference tree... */
+		vsb->v_extent_ref = parse_extentref_btree(
+				le64_to_cpu(vsb_raw->apfs_extentref_tree_oid));
+		/* ... and in the catalog */
 		vsb->v_cat = parse_cat_btree(
 				le64_to_cpu(vsb_raw->apfs_root_tree_oid),
 				vsb->v_omap->root);
-		/* ...and in the extent reference tree */
-		vsb->v_extent_ref = parse_extentref_btree(
-				le64_to_cpu(vsb_raw->apfs_extentref_tree_oid));
 
 		free_inode_table(vsb->v_inode_table);
 		vsb->v_inode_table = NULL;
@@ -686,6 +687,8 @@ void parse_super(void)
 		vsb->v_dstream_table = NULL;
 		free_cnid_table(vsb->v_cnid_table);
 		vsb->v_cnid_table = NULL;
+		free_extent_table(vsb->v_extent_table);
+		vsb->v_extent_table = NULL;
 
 		if (!vsb->v_has_root)
 			report("Catalog", "the root directory is missing.");
