@@ -136,7 +136,7 @@ extern void parse_extent_record(struct apfs_file_extent_key *key,
 				struct apfs_file_extent_val *val, int len);
 extern void parse_dstream_id_record(struct apfs_dstream_id_key *key,
 				    struct apfs_dstream_id_val *val, int len);
-extern void parse_phys_ext_record(struct apfs_phys_ext_key *key,
-				  struct apfs_phys_ext_val *val, int len);
+extern u64 parse_phys_ext_record(struct apfs_phys_ext_key *key,
+				 struct apfs_phys_ext_val *val, int len);
 
 #endif	/* _EXTENTS_H */

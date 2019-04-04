@@ -606,7 +606,9 @@ static void parse_subtree(struct node *root,
 			if (btree_is_catalog(btree))
 				parse_cat_record(raw_key, raw_val, len);
 			if (btree_is_extentref(btree))
-				parse_phys_ext_record(raw_key, raw_val, len);
+				/* Physical extents must not overlap */
+				last_key->id = parse_phys_ext_record(raw_key,
+								raw_val, len);
 			continue;
 		}
 

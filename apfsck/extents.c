@@ -269,10 +269,12 @@ void parse_dstream_id_record(struct apfs_dstream_id_key *key,
  * @val:	pointer to the raw value
  * @len:	length of the raw value
  *
+ * Returns the physical address of the last block in the extent.
+ *
  * Internal consistency of @key must be checked before calling this function.
  */
-void parse_phys_ext_record(struct apfs_phys_ext_key *key,
-			   struct apfs_phys_ext_val *val, int len)
+u64 parse_phys_ext_record(struct apfs_phys_ext_key *key,
+			  struct apfs_phys_ext_val *val, int len)
 {
 	struct extent *extent;
 	u8 kind;
@@ -308,4 +310,6 @@ void parse_phys_ext_record(struct apfs_phys_ext_key *key,
 
 	extent = get_extent(cat_cnid(&key->hdr));
 	extent->e_refcnt = refcnt;
+
+	return extent->e_bno + length - 1;
 }
