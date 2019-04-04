@@ -277,7 +277,7 @@ void parse_phys_ext_record(struct apfs_phys_ext_key *key,
 	struct extent *extent;
 	u8 kind;
 	u32 refcnt;
-	u64 length;
+	u64 length, owner;
 
 	if (len != sizeof(*val))
 		report("Physical extent record", "wrong size of value.");
@@ -291,6 +291,16 @@ void parse_phys_ext_record(struct apfs_phys_ext_key *key,
 	length = le64_to_cpu(val->len_and_kind) & APFS_PEXT_LEN_MASK;
 	if (!length)
 		report("Physical extent record", "has no blocks.");
+
+	/*
+	 * If the owner of a physical extent got removed, I would expect this
+	 * field to be meaningless.  At least check that the number is in range.
+	 */
+	owner = le64_to_cpu(val->owning_obj_id);
+	if (owner < APFS_MIN_USER_INO_NUM)
+		report("Physical extent record", "invalid or reserved id.");
+	if (owner >= vsb->v_next_obj_id)
+		report("Physical extent record", "free id in use.");
 
 	refcnt = le32_to_cpu(val->refcnt);
 	if (!refcnt)
