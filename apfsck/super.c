@@ -630,6 +630,8 @@ static struct apfs_superblock *map_volume_super(int vol,
 		report_unknown("Revert to a snapshot");
 	if (le64_to_cpu(vsb->v_raw->apfs_revert_to_sblock_oid) != 0)
 		report_unknown("Revert to a volume superblock");
+	if (le64_to_cpu(vsb->v_raw->apfs_num_snapshots) != 0)
+		report_unknown("Snapshots");
 
 	return vsb->v_raw;
 }
