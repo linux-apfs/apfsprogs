@@ -34,8 +34,8 @@ static bool node_is_valid(struct node *node)
 	if ((flags & APFS_BTNODE_MASK) != flags)
 		return false;
 
-	if (!records) /* Empty nodes could keep a multiple query spinning */
-		return false;
+	if (!node_is_root(node) && !records)
+		return false; /* Empty children should just be deleted */
 
 	if (node->toc != sizeof(struct apfs_btree_node_phys))
 		return false; /* The table of contents follows the header */
