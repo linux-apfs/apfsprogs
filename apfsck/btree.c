@@ -269,6 +269,9 @@ static struct node *read_node(u64 oid, struct btree *btree)
 	if (btree_is_extentref(btree) && obj_subtype !=
 						APFS_OBJECT_TYPE_BLOCKREFTREE)
 		report("Extent reference tree node", "wrong object subtype.");
+	if (btree_is_snap_meta(btree) && obj_subtype !=
+						APFS_OBJECT_TYPE_SNAPMETATREE)
+		report("Snapshot metadata node", "wrong object subtype.");
 
 	node_prepare_bitmaps(node);
 
@@ -558,9 +561,19 @@ static void parse_subtree(struct node *root,
 		report("Object map", "key size should be fixed.");
 	if (btree_is_catalog(btree) && node_has_fixed_kv_size(root))
 		report("Catalog", "key size should not be fixed.");
+
+	/* This makes little sense, but it appears to be true */
 	if (btree_is_extentref(btree) && node_has_fixed_kv_size(root))
-		/* This makes little sense, but it appears to be true */
 		report("Extent reference tree", "key size shouldn't be fixed.");
+	if (btree_is_snap_meta(btree) && node_has_fixed_kv_size(root))
+		report("Snap meta tree", "key size shouldn't be fixed.");
+
+	if (btree_is_snap_meta(btree)) {
+		if (root->records)
+			report_unknown("Snapshots");
+		if (!node_is_leaf(root))
+			report("Snap meta tree", "has no root node.");
+	}
 
 	for (i = 0; i < root->records; ++i) {
 		struct node *child;
@@ -666,6 +679,9 @@ static void check_btree_footer(struct btree *btree)
 	case BTREE_TYPE_EXTENTREF:
 		ctx = "Extent reference tree";
 		break;
+	case BTREE_TYPE_SNAP_META:
+		ctx = "Extent reference tree";
+		break;
 	default:
 		report(NULL, "Bug!");
 	}
@@ -729,6 +745,38 @@ static void check_btree_footer(struct btree *btree)
 					sizeof(struct apfs_phys_ext_val))
 			report(ctx, "wrong maximum value size in info footer.");
 	}
+
+	if (btree_is_snap_meta(btree)) {
+		/* For now we only support empty snapshot metadata trees */
+		if (info->bt_longest_key || info->bt_longest_val)
+			report_unknown("Snapshots");
+	}
+}
+
+/**
+ * parse_snap_meta_btree - Parse and check a snapshot metadata tree
+ * @oid:	object id for the b-tree root
+ *
+ * Returns a pointer to the btree struct for the snapshot metadata tree.
+ */
+struct btree *parse_snap_meta_btree(u64 oid)
+{
+	struct btree *snap;
+	struct key last_key = {0};
+
+	snap = calloc(1, sizeof(*snap));
+	if (!snap) {
+		perror(NULL);
+		exit(1);
+	}
+	snap->type = BTREE_TYPE_SNAP_META;
+	snap->omap_root = NULL; /* These are physical objects */
+	snap->root = read_node(oid, snap);
+
+	parse_subtree(snap->root, &last_key, NULL /* name_buf */);
+
+	check_btree_footer(snap);
+	return snap;
 }
 
 /**

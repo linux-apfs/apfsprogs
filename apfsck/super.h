@@ -283,6 +283,7 @@ struct volume_superblock {
 	struct btree *v_omap;
 	struct btree *v_cat;
 	struct btree *v_extent_ref;
+	struct btree *v_snap_meta;
 	union htable_entry **v_inode_table;	/* Hash table of all inodes */
 	union htable_entry **v_dstream_table;	/* Hash table of all dstreams */
 	union htable_entry **v_cnid_table;	/* Hash table of all cnids */

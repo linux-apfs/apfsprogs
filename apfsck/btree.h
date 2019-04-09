@@ -205,6 +205,7 @@ struct query {
 #define BTREE_TYPE_OMAP		1 /* The tree is an object map */
 #define BTREE_TYPE_CATALOG	2 /* The tree is a catalog */
 #define BTREE_TYPE_EXTENTREF	3 /* The tree is for extent references */
+#define BTREE_TYPE_SNAP_META	4 /* The tree is for snapshot metadata */
 
 /* In-memory structure representing a b-tree */
 struct btree {
@@ -229,6 +230,15 @@ static inline bool btree_is_omap(struct btree *btree)
 }
 
 /**
+ * btree_is_snap_meta - Check if a b-tree is for snapshot metadata
+ * @btree: the b-tree to check
+ */
+static inline bool btree_is_snap_meta(struct btree *btree)
+{
+	return btree->type == BTREE_TYPE_SNAP_META;
+}
+
+/**
  * btree_is_catalog - Check if a b-tree is a catalog
  * @btree: the b-tree to check
  */
@@ -246,6 +256,7 @@ static inline bool btree_is_extentref(struct btree *btree)
 	return btree->type == BTREE_TYPE_EXTENTREF;
 }
 
+extern struct btree *parse_snap_meta_btree(u64 oid);
 extern struct btree *parse_extentref_btree(u64 oid);
 extern struct btree *parse_omap_btree(u64 oid);
 extern struct btree *parse_cat_btree(u64 oid, struct node *omap_root);

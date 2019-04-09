@@ -678,10 +678,13 @@ void parse_super(void)
 		/* ...in the extent reference tree... */
 		vsb->v_extent_ref = parse_extentref_btree(
 				le64_to_cpu(vsb_raw->apfs_extentref_tree_oid));
-		/* ... and in the catalog */
+		/* ...in the catalog... */
 		vsb->v_cat = parse_cat_btree(
 				le64_to_cpu(vsb_raw->apfs_root_tree_oid),
 				vsb->v_omap->root);
+		/* ...and in the snapshot metadata tree */
+		vsb->v_snap_meta = parse_snap_meta_btree(
+				le64_to_cpu(vsb_raw->apfs_snap_meta_tree_oid));
 
 		free_inode_table(vsb->v_inode_table);
 		vsb->v_inode_table = NULL;
