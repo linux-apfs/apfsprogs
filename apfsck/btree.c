@@ -40,7 +40,7 @@ static bool node_is_valid(struct node *node)
 	if (node->toc != sizeof(struct apfs_btree_node_phys))
 		return false; /* The table of contents follows the header */
 
-	if (node->data >= sb->s_blocksize -
+	if (node->data > sb->s_blocksize -
 		(node_is_root(node) ? sizeof(struct apfs_btree_info) : 0))
 		return false; /* The value area must start before it ends... */
 
