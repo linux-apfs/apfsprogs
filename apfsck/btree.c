@@ -730,26 +730,29 @@ static void check_btree_footer(struct btree *btree)
 			report(ctx, "wrong maximum key size in info footer.");
 		if (le32_to_cpu(info->bt_longest_val) < btree->longest_val)
 			report(ctx, "wrong maximum value size in info footer.");
+		return;
 	}
-
-	if (btree_is_extentref(btree)) {
-		/*
-		 * The extentref only seems to have records of this type.
-		 * No idea why it reports keys/values of variable size...
-		 */
-		if (le32_to_cpu(info->bt_longest_key) !=
-					sizeof(struct apfs_phys_ext_key))
-			report(ctx, "wrong maximum key size in info footer.");
-
-		if (le32_to_cpu(info->bt_longest_val) !=
-					sizeof(struct apfs_phys_ext_val))
-			report(ctx, "wrong maximum value size in info footer.");
-	}
-
 	if (btree_is_snap_meta(btree)) {
 		/* For now we only support empty snapshot metadata trees */
 		if (info->bt_longest_key || info->bt_longest_val)
 			report_unknown("Snapshots");
+		return;
+	}
+
+	/*
+	 * The extentref only seems to have records of this one type.
+	 * No idea why it reports keys/values of variable size...
+	 */
+	if (btree_is_extentref(btree)) {
+		u32 longest_key = le32_to_cpu(info->bt_longest_key);
+		u32 longest_val = le32_to_cpu(info->bt_longest_val);
+
+		if ((longest_key || btree->key_count) &&
+		    longest_key != sizeof(struct apfs_phys_ext_key))
+			report(ctx, "wrong maximum key size in info footer.");
+		if ((longest_val || btree->key_count) &&
+		    longest_val != sizeof(struct apfs_phys_ext_val))
+			report(ctx, "wrong maximum val size in info footer.");
 	}
 }
 
