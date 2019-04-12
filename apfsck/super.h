@@ -328,6 +328,6 @@ static inline bool apfs_is_case_insensitive(void)
 		cpu_to_le64(APFS_INCOMPAT_CASE_INSENSITIVE)) != 0;
 }
 
-extern void parse_super(void);
+extern void parse_filesystem(void);
 
 #endif	/* _SUPER_H */

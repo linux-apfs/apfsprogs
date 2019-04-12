@@ -89,14 +89,6 @@ void report_weird(const char *context)
 		report(context, "odd inconsistency (may not be corruption).");
 }
 
-/**
- * parse_filesystem - Parse the filesystem looking for corruption
- */
-static void parse_filesystem(void)
-{
-	parse_super();
-}
-
 int main(int argc, char *argv[])
 {
 	char *filename;
