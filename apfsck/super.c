@@ -600,6 +600,70 @@ static void check_container(struct super_block *sb)
 }
 
 /**
+ * parse_main_super - Parse a container superblock and run generic checks
+ * @sb: checkpoint superblock struct to receive the results
+ */
+static void parse_main_super(struct super_block *sb)
+{
+	int i;
+
+	/* These superblock fields must already be set */
+	assert(sb->s_blocksize);
+	assert(sb->s_raw);
+	assert(sb->s_xid);
+
+	if (le32_to_cpu(sb->s_raw->nx_block_size) != APFS_NX_DEFAULT_BLOCK_SIZE)
+		report_unknown("Block size other than 4096");
+
+	sb->s_block_count = le64_to_cpu(sb->s_raw->nx_block_count);
+	if (!sb->s_block_count)
+		report("Container superblock", "reports no block count.");
+	if (sb->s_block_count > get_device_size(sb->s_blocksize))
+		report("Container superblock", "too many blocks for device.");
+	sb->s_max_vols = get_max_volumes(sb->s_block_count * sb->s_blocksize);
+	if (sb->s_max_vols != le32_to_cpu(sb->s_raw->nx_max_file_systems))
+		report("Container superblock", "bad maximum volume number.");
+
+	check_main_flags(le64_to_cpu(sb->s_raw->nx_flags));
+	check_optional_main_features(le64_to_cpu(sb->s_raw->nx_features));
+	check_rocompat_main_features(le64_to_cpu(
+				sb->s_raw->nx_readonly_compatible_features));
+	check_incompat_main_features(le64_to_cpu(
+				sb->s_raw->nx_incompatible_features));
+
+	if (le32_to_cpu(sb->s_raw->nx_xp_desc_blocks) >> 31 ||
+	    le32_to_cpu(sb->s_raw->nx_xp_data_blocks) >> 31 ||
+	    le64_to_cpu(sb->s_raw->nx_xp_desc_base) >> 63 ||
+	    le64_to_cpu(sb->s_raw->nx_xp_data_base) >> 63)
+		report("Container superblock", "has checkpoint tree.");
+
+	if (sb->s_raw->nx_test_type || sb->s_raw->nx_test_oid)
+		report("Container superblock", "test field is set.");
+	if (sb->s_raw->nx_blocked_out_prange.pr_block_count)
+		report_unknown("Partition resizing");
+
+	check_efi_information(le64_to_cpu(sb->s_raw->nx_efi_jumpstart));
+	check_ephemeral_information(&sb->s_raw->nx_ephemeral_info[0]);
+
+	for (i = 0; i < 16; ++i) {
+		if (sb->s_raw->nx_fusion_uuid[i])
+			report_unknown("Fusion drive");
+	}
+
+	/* Containers with no encryption may still have a value here, why? */
+	if (sb->s_raw->nx_keylocker.pr_start_paddr ||
+	    sb->s_raw->nx_keylocker.pr_block_count)
+		report_weird("Container keybag");
+
+	if (sb->s_raw->nx_fusion_mt_oid || sb->s_raw->nx_fusion_wbc_oid ||
+	    sb->s_raw->nx_fusion_wbc.pr_start_paddr ||
+	    sb->s_raw->nx_fusion_wbc.pr_block_count)
+		report_unknown("Fusion drive");
+
+	sb->s_next_oid = le64_to_cpu(sb->s_raw->nx_next_oid);
+}
+
+/**
  * parse_filesystem - Parse the whole filesystem looking for corruption
  */
 void parse_filesystem(void)
@@ -662,58 +726,10 @@ void parse_filesystem(void)
 		report("Checkpoint descriptors", "latest is missing.");
 	main_super_compare(sb->s_raw, msb_raw);
 
-	if (le32_to_cpu(sb->s_raw->nx_block_size) != APFS_NX_DEFAULT_BLOCK_SIZE)
-		report_unknown("Block size other than 4096");
-
-	sb->s_block_count = le64_to_cpu(sb->s_raw->nx_block_count);
-	if (!sb->s_block_count)
-		report("Container superblock", "reports no block count.");
-	if (sb->s_block_count > get_device_size(sb->s_blocksize))
-		report("Container superblock", "too many blocks for device.");
-	sb->s_max_vols = get_max_volumes(sb->s_block_count * sb->s_blocksize);
-	if (sb->s_max_vols != le32_to_cpu(sb->s_raw->nx_max_file_systems))
-		report("Container superblock", "bad maximum volume number.");
-
-	check_main_flags(le64_to_cpu(sb->s_raw->nx_flags));
-	check_optional_main_features(le64_to_cpu(sb->s_raw->nx_features));
-	check_rocompat_main_features(le64_to_cpu(
-				sb->s_raw->nx_readonly_compatible_features));
-	check_incompat_main_features(le64_to_cpu(
-				sb->s_raw->nx_incompatible_features));
-
-	if (le32_to_cpu(sb->s_raw->nx_xp_desc_blocks) >> 31 ||
-	    le32_to_cpu(sb->s_raw->nx_xp_data_blocks) >> 31 ||
-	    le64_to_cpu(sb->s_raw->nx_xp_desc_base) >> 63 ||
-	    le64_to_cpu(sb->s_raw->nx_xp_data_base) >> 63)
-		report("Container superblock", "has checkpoint tree.");
-
-	if (sb->s_raw->nx_test_type || sb->s_raw->nx_test_oid)
-		report("Container superblock", "test field is set.");
-	if (sb->s_raw->nx_blocked_out_prange.pr_block_count)
-		report_unknown("Partition resizing");
-
-	check_efi_information(le64_to_cpu(sb->s_raw->nx_efi_jumpstart));
-	check_ephemeral_information(&sb->s_raw->nx_ephemeral_info[0]);
-
-	for (i = 0; i < 16; ++i) {
-		if (sb->s_raw->nx_fusion_uuid[i])
-			report_unknown("Fusion drive");
-	}
-
-	/* Containers with no encryption may still have a value here, why? */
-	if (sb->s_raw->nx_keylocker.pr_start_paddr ||
-	    sb->s_raw->nx_keylocker.pr_block_count)
-		report_weird("Container keybag");
-
-	if (sb->s_raw->nx_fusion_mt_oid || sb->s_raw->nx_fusion_wbc_oid ||
-	    sb->s_raw->nx_fusion_wbc.pr_start_paddr ||
-	    sb->s_raw->nx_fusion_wbc.pr_block_count)
-		report_unknown("Fusion drive");
-
-	sb->s_next_oid = le64_to_cpu(sb->s_raw->nx_next_oid);
 	if (sb->s_xid + 1 != le64_to_cpu(msb_raw->nx_next_xid))
 		report("Container superblock", "next transaction id is wrong.");
 	munmap(msb_raw, sb->s_blocksize);
 
+	parse_main_super(sb);
 	check_container(sb);
 }
