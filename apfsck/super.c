@@ -637,19 +637,13 @@ static struct apfs_superblock *map_volume_super(int vol,
 }
 
 /**
- * parse_super - Parse the on-disk superblock and check for corruption
+ * check_container - Check the whole container for a given checkpoint
+ * @sb: checkpoint superblock
  */
-void parse_super(void)
+static void check_container(struct super_block *sb)
 {
 	int vol;
 
-	sb = calloc(1, sizeof(*sb));
-	if (!sb) {
-		perror(NULL);
-		exit(1);
-	}
-
-	map_main_super();
 	/* Check for corruption in the container object map */
 	sb->s_omap = parse_omap_btree(le64_to_cpu(sb->s_raw->nx_omap_oid));
 
@@ -716,6 +710,19 @@ void parse_super(void)
 
 		sb->s_volumes[vol] = vsb;
 	}
+}
 
-	return;
+/**
+ * parse_super - Parse the on-disk superblock and check for corruption
+ */
+void parse_super(void)
+{
+	sb = calloc(1, sizeof(*sb));
+	if (!sb) {
+		perror(NULL);
+		exit(1);
+	}
+
+	map_main_super();
+	check_container(sb);
 }
