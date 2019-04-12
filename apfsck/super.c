@@ -661,6 +661,8 @@ static void parse_main_super(struct super_block *sb)
 		report_unknown("Fusion drive");
 
 	sb->s_next_oid = le64_to_cpu(sb->s_raw->nx_next_oid);
+	if (sb->s_xid + 1 != le64_to_cpu(sb->s_raw->nx_next_xid))
+		report("Container superblock", "next transaction id is wrong.");
 }
 
 /**
@@ -725,9 +727,6 @@ void parse_filesystem(void)
 	if (!sb->s_raw)
 		report("Checkpoint descriptors", "latest is missing.");
 	main_super_compare(sb->s_raw, msb_raw);
-
-	if (sb->s_xid + 1 != le64_to_cpu(msb_raw->nx_next_xid))
-		report("Container superblock", "next transaction id is wrong.");
 	munmap(msb_raw, sb->s_blocksize);
 
 	parse_main_super(sb);
