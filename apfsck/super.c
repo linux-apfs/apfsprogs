@@ -607,12 +607,11 @@ static void parse_main_super(struct super_block *sb)
 {
 	int i;
 
-	/* These superblock fields must already be set */
-	assert(sb->s_blocksize);
 	assert(sb->s_raw);
-	assert(sb->s_xid);
 
-	if (le32_to_cpu(sb->s_raw->nx_block_size) != APFS_NX_DEFAULT_BLOCK_SIZE)
+	sb->s_xid = le64_to_cpu(sb->s_raw->nx_o.o_xid);
+	sb->s_blocksize = le32_to_cpu(sb->s_raw->nx_block_size);
+	if (sb->s_blocksize != APFS_NX_DEFAULT_BLOCK_SIZE)
 		report_unknown("Block size other than 4096");
 
 	sb->s_block_count = le64_to_cpu(sb->s_raw->nx_block_count);
@@ -671,9 +670,8 @@ static void parse_main_super(struct super_block *sb)
 void parse_filesystem(void)
 {
 	struct apfs_nx_superblock *msb_raw;
-	struct apfs_nx_superblock *desc_raw = NULL;
 	u64 desc_base;
-	u32 desc_blocks;
+	u32 desc_blocks, desc_next, desc_index;
 	int i;
 
 	sb = calloc(1, sizeof(*sb));
@@ -695,40 +693,42 @@ void parse_filesystem(void)
 	desc_blocks = le32_to_cpu(msb_raw->nx_xp_desc_blocks);
 	if (desc_blocks > 10000) /* Arbitrary loop limit, is it enough? */
 		report("Block zero", "too many checkpoint descriptors?");
+	desc_next = le32_to_cpu(msb_raw->nx_xp_desc_next);
+	desc_index = le32_to_cpu(msb_raw->nx_xp_desc_index);
+	if (desc_next >= desc_blocks || desc_index >= desc_blocks)
+		report("Block zero", "out of range checkpoint descriptors.");
 
-	/* Now we go through the checkpoints one by one */
+	/*
+	 * Now go through the valid checkpoints one by one, though it seems
+	 * that cleanly unmounted filesystems only preserve the last one.
+	 */
 	sb->s_raw = NULL;
-	sb->s_xid = le64_to_cpu(msb_raw->nx_o.o_xid);
-	for (i = 0; i < desc_blocks; ++i) {
-		if (desc_raw)
-			munmap(desc_raw, sb->s_blocksize);
+	for (i = desc_index; i != desc_next; i = (i + 1) % desc_blocks) {
+		struct apfs_nx_superblock *raw;
+		u64 bno = desc_base + i;
 
-		desc_raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-				fd, (desc_base + i) * sb->s_blocksize);
-		if (desc_raw == MAP_FAILED) {
+		raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
+			   fd, bno * sb->s_blocksize);
+		if (raw == MAP_FAILED) {
 			perror(NULL);
 			exit(1);
 		}
 
-		if (le32_to_cpu(desc_raw->nx_magic) != APFS_NX_MAGIC)
+		if (le32_to_cpu(raw->nx_magic) != APFS_NX_MAGIC)
 			continue; /* Not a superblock */
-		if (le64_to_cpu(desc_raw->nx_o.o_xid) < sb->s_xid)
-			continue; /* Old */
-		if (!obj_verify_csum(&desc_raw->nx_o))
-			continue; /* Corrupted */
+		if (!obj_verify_csum(&raw->nx_o))
+			report("Checkpoint superblock", "bad checksum.");
 
-		sb->s_xid = le64_to_cpu(desc_raw->nx_o.o_xid);
 		if (sb->s_raw)
 			munmap(sb->s_raw, sb->s_blocksize);
-		sb->s_raw = desc_raw;
-		desc_raw = NULL;
+		sb->s_raw = raw;
+
+		parse_main_super(sb);
+		check_container(sb);
 	}
 
 	if (!sb->s_raw)
-		report("Checkpoint descriptors", "latest is missing.");
+		report("Checkpoint descriptor area", "no valid superblocks.");
 	main_super_compare(sb->s_raw, msb_raw);
 	munmap(msb_raw, sb->s_blocksize);
-
-	parse_main_super(sb);
-	check_container(sb);
 }
