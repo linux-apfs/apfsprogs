@@ -141,6 +141,32 @@ struct apfs_nx_superblock {
 	struct apfs_prange nx_fusion_wbc;
 } __packed;
 
+/*
+ * A mapping from an ephemeral object id to its physical address
+ */
+struct apfs_checkpoint_mapping {
+	__le32 cpm_type;
+	__le32 cpm_subtype;
+	__le32 cpm_size;
+	__le32 cpm_pad;
+	__le64 cpm_fs_oid;
+	__le64 cpm_oid;
+	__le64 cpm_paddr;
+} __packed;
+
+/* Checkpoint flags */
+#define	APFS_CHECKPOINT_MAP_LAST	0x00000001
+
+/*
+ * A checkpoint-mapping block
+ */
+struct apfs_checkpoint_map_phys {
+	struct apfs_obj_phys		cpm_o;
+	__le32				cpm_flags;
+	__le32				cpm_count;
+	struct apfs_checkpoint_mapping	cpm_map[];
+} __packed;
+
 /* Volume */
 
 /* Volume constants */

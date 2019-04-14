@@ -665,14 +665,55 @@ static void parse_main_super(struct super_block *sb)
 }
 
 /**
+ * parse_checkpoint_mappings - Parse and verify a checkpoint's mapping blocks
+ * @desc_base:		first block of the checkpoint descriptor area
+ * @desc_blocks:	block count of the checkpoint descriptor area
+ * @index:		index of the first mapping block for the checkpoint
+ *
+ * Returns the number of checkpoint-mapping blocks, and sets @index to the
+ * index of their checkpoint superblock.
+ */
+static u32 parse_checkpoint_mappings(u64 desc_base, u32 desc_blocks, u32 *index)
+{
+	struct object obj;
+	struct apfs_checkpoint_map_phys *raw;
+	u32 blk_count = 0;
+
+	while (1) {
+		u64 bno = desc_base + *index;
+		u32 flags;
+
+		raw = read_object_nocheck(bno, &obj);
+		if (obj.type != APFS_OBJECT_TYPE_CHECKPOINT_MAP)
+			report("Checkpoint map", "wrong object type.");
+		if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
+			report("Checkpoint map", "wrong object subtype.");
+
+		flags = le32_to_cpu(raw->cpm_flags);
+
+		munmap(raw, sb->s_blocksize);
+		blk_count++;
+		*index = (*index + 1) % desc_blocks;
+
+		if ((flags & APFS_CHECKPOINT_MAP_LAST) != flags)
+			report("Checkpoint map", "invalid flag in use.");
+		if (flags & APFS_CHECKPOINT_MAP_LAST)
+			return blk_count;
+		if (blk_count == desc_blocks)
+			report("Checkpoint", "no mapping block marked last.");
+	}
+}
+
+/**
  * parse_filesystem - Parse the whole filesystem looking for corruption
  */
 void parse_filesystem(void)
 {
 	struct apfs_nx_superblock *msb_raw;
 	u64 desc_base;
-	u32 desc_blocks, desc_next, desc_index;
-	int i;
+	u32 desc_blocks;
+	long long valid_blocks;
+	u32 desc_next, desc_index, index;
 
 	sb = calloc(1, sizeof(*sb));
 	if (!sb) {
@@ -703,10 +744,19 @@ void parse_filesystem(void)
 	 * that cleanly unmounted filesystems only preserve the last one.
 	 */
 	sb->s_raw = NULL;
-	for (i = desc_index; i != desc_next; i = (i + 1) % desc_blocks) {
+	index = desc_index;
+	valid_blocks = (desc_blocks + desc_next - desc_index) % desc_blocks;
+	while (valid_blocks > 0) {
 		struct apfs_nx_superblock *raw;
-		u64 bno = desc_base + i;
+		u64 bno;
+		u32 map_blocks;
 
+		/* The checkpoint-mapping blocks come before the superblock */
+		map_blocks = parse_checkpoint_mappings(desc_base, desc_blocks,
+						       &index);
+		valid_blocks -= map_blocks;
+
+		bno = desc_base + index;
 		raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
 			   fd, bno * sb->s_blocksize);
 		if (raw == MAP_FAILED) {
@@ -715,9 +765,12 @@ void parse_filesystem(void)
 		}
 
 		if (le32_to_cpu(raw->nx_magic) != APFS_NX_MAGIC)
-			continue; /* Not a superblock */
+			report("Checkpoint superblock", "wrong magic.");
 		if (!obj_verify_csum(&raw->nx_o))
 			report("Checkpoint superblock", "bad checksum.");
+		if (le32_to_cpu(raw->nx_xp_desc_len) != map_blocks + 1)
+			report("Checkpoint superblock",
+			       "wrong checkpoint descriptor block count.");
 
 		if (sb->s_raw)
 			munmap(sb->s_raw, sb->s_blocksize);
@@ -725,7 +778,14 @@ void parse_filesystem(void)
 
 		parse_main_super(sb);
 		check_container(sb);
+
+		/* One more block for the checkpoint superblock itself */
+		index = (index + 1) % desc_blocks;
+		valid_blocks--;
 	}
+
+	if (valid_blocks != 0)
+		report("Block zero", "bad index for checkpoint descriptors.");
 
 	if (!sb->s_raw)
 		report("Checkpoint descriptor area", "no valid superblocks.");
