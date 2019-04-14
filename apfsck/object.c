@@ -43,12 +43,48 @@ int obj_verify_csum(struct apfs_obj_phys *obj)
 }
 
 /**
- * read_object - Read an object header from disk
+ * read_object_nocheck - Read an object header from disk
+ * @bno: block number for the object
+ * @obj: object struct to receive the results
+ *
+ * Returns a pointer to the raw data of the object in memory, without running
+ * any checks other than the Fletcher verification.
+ */
+void *read_object_nocheck(u64 bno, struct object *obj)
+{
+	struct apfs_obj_phys *raw;
+
+	raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
+		   fd, bno * sb->s_blocksize);
+	if (raw == MAP_FAILED) {
+		perror(NULL);
+		exit(1);
+	}
+
+	/* This one check is always needed */
+	if (!obj_verify_csum(raw)) {
+		report("Object header", "bad checksum in block 0x%llx.",
+		       (unsigned long long)bno);
+	}
+
+	obj->oid = le64_to_cpu(raw->o_oid);
+	obj->xid = le64_to_cpu(raw->o_xid);
+	obj->block_nr = bno;
+	obj->type = le32_to_cpu(raw->o_type) & APFS_OBJECT_TYPE_MASK;
+	obj->flags = le32_to_cpu(raw->o_type) & APFS_OBJECT_TYPE_FLAGS_MASK;
+	obj->subtype = le32_to_cpu(raw->o_subtype);
+
+	return raw;
+}
+
+/**
+ * read_object - Read an object header from disk and run some checks
  * @oid:	object id
  * @omap:	root of the object map (NULL if no translation is needed)
  * @obj:	object struct to receive the results
  *
- * Returns a pointer to the raw data of the object in memory.
+ * Returns a pointer to the raw data of the object in memory, after checking
+ * the consistency of some of its fields.
  */
 void *read_object(u64 oid, struct node *omap, struct object *obj)
 {
@@ -65,14 +101,9 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 		bno = oid;
 	}
 
-	raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-		   fd, bno * sb->s_blocksize);
-	if (raw == MAP_FAILED) {
-		perror(NULL);
-		exit(1);
-	}
+	raw = read_object_nocheck(bno, obj);
 
-	if (oid != le64_to_cpu(raw->o_oid))
+	if (oid != obj->oid)
 		report("Object header", "wrong object id in block 0x%llx.",
 		       (unsigned long long)bno);
 	if (oid < APFS_OID_RESERVED_COUNT)
@@ -82,7 +113,7 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 		report("Object header", "unassigned object id in block 0x%llx.",
 		       (unsigned long long)bno);
 
-	xid = le64_to_cpu(raw->o_xid);
+	xid = obj->xid;
 	if (!xid || sb->s_xid < xid)
 		report("Object header", "bad transaction id in block 0x%llx.",
 		       (unsigned long long)bno);
@@ -94,13 +125,6 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 		report("Object header",
 		       "transaction id in omap key doesn't match block 0x%llx.",
 		       (unsigned long long)bno);
-
-	obj->oid = oid;
-	obj->xid = xid;
-	obj->block_nr = bno;
-	obj->type = le32_to_cpu(raw->o_type) & APFS_OBJECT_TYPE_MASK;
-	obj->flags = le32_to_cpu(raw->o_type) & APFS_OBJECT_TYPE_FLAGS_MASK;
-	obj->subtype = le32_to_cpu(raw->o_subtype);
 
 	/* TODO: OBJ_ENCRYPTED, OBJ_NOHEADER */
 	if ((obj->flags & APFS_OBJECT_TYPE_FLAGS_DEFINED_MASK) != obj->flags)
@@ -117,9 +141,5 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 	if (!omap && storage_type != APFS_OBJ_PHYSICAL)
 		report("Object header", "wrong flag for physical object.");
 
-	if (!obj_verify_csum(raw)) {
-		report("Object header", "bad checksum in block 0x%llx.",
-		       (unsigned long long)bno);
-	}
 	return raw;
 }

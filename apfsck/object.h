@@ -87,6 +87,7 @@ struct object {
 #define APFS_MAX_CKSUM_SIZE 8
 
 extern int obj_verify_csum(struct apfs_obj_phys *obj);
+extern void *read_object_nocheck(u64 bno, struct object *obj);
 extern void *read_object(u64 oid, struct node *omap, struct object *obj);
 
 #endif	/* _OBJECT_H */
