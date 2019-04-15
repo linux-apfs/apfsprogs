@@ -78,6 +78,24 @@ void *read_object_nocheck(u64 bno, struct object *obj)
 }
 
 /**
+ * parse_object_flags - Check consistency of object flags
+ * @flags: the flags
+ *
+ * Returns the storage type flags to be checked by the caller.
+ */
+u32 parse_object_flags(u32 flags)
+{
+	/* TODO: OBJ_ENCRYPTED, OBJ_NOHEADER */
+	if ((flags & APFS_OBJECT_TYPE_FLAGS_DEFINED_MASK) != flags)
+		report("Object header", "undefined flag in use.");
+	if (flags & APFS_OBJ_NONPERSISTENT)
+		report("Object header", "nonpersistent flag is set.");
+	if (flags & APFS_OBJ_ENCRYPTED)
+		report_unknown("Encrypted object");
+	return flags & APFS_OBJ_STORAGETYPE_MASK;
+}
+
+/**
  * read_object - Read an object header from disk and run some checks
  * @oid:	object id
  * @omap:	root of the object map (NULL if no translation is needed)
@@ -126,16 +144,8 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 		       "transaction id in omap key doesn't match block 0x%llx.",
 		       (unsigned long long)bno);
 
-	/* TODO: OBJ_ENCRYPTED, OBJ_NOHEADER */
-	if ((obj->flags & APFS_OBJECT_TYPE_FLAGS_DEFINED_MASK) != obj->flags)
-		report("Object header", "undefined flag in use.");
-	if (obj->flags & APFS_OBJ_NONPERSISTENT)
-		report("Object header", "nonpersistent flag is set.");
-	if (obj->flags & APFS_OBJ_ENCRYPTED)
-		report_unknown("Encrypted object");
-
 	/* TODO: ephemeral objects? */
-	storage_type = obj->flags & APFS_OBJ_STORAGETYPE_MASK;
+	storage_type = parse_object_flags(obj->flags);
 	if (omap && storage_type != APFS_OBJ_VIRTUAL)
 		report("Object header", "wrong flag for virtual object.");
 	if (!omap && storage_type != APFS_OBJ_PHYSICAL)
