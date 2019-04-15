@@ -85,11 +85,12 @@ void *read_object_nocheck(u64 bno, struct object *obj)
  */
 u32 parse_object_flags(u32 flags)
 {
-	/* TODO: OBJ_ENCRYPTED, OBJ_NOHEADER */
 	if ((flags & APFS_OBJECT_TYPE_FLAGS_DEFINED_MASK) != flags)
 		report("Object header", "undefined flag in use.");
 	if (flags & APFS_OBJ_NONPERSISTENT)
 		report("Object header", "nonpersistent flag is set.");
+	if (flags & APFS_OBJ_NOHEADER)
+		report("Object header", "noheader flag is set.");
 	if (flags & APFS_OBJ_ENCRYPTED)
 		report_unknown("Encrypted object");
 	return flags & APFS_OBJ_STORAGETYPE_MASK;
