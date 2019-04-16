@@ -685,6 +685,8 @@ static u32 parse_checkpoint_mappings(u64 desc_base, u32 desc_blocks, u32 *index)
 		u32 flags;
 
 		raw = read_object_nocheck(bno, &obj);
+		if (obj.oid != bno)
+			report("Checkpoint map", "wrong object id.");
 		if (parse_object_flags(obj.flags) != APFS_OBJ_PHYSICAL)
 			report("Checkpoint map", "wrong storage type.");
 		if (obj.type != APFS_OBJECT_TYPE_CHECKPOINT_MAP)
