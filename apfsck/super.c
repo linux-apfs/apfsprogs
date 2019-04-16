@@ -670,7 +670,17 @@ static void parse_main_super(struct super_block *sb)
 }
 
 /**
- * parse_checkpoint_mappings - Parse and verify a checkpoint's mapping blocks
+ * parse_cpoint_map - Parse and verify a checkpoint mapping
+ * @map: the checkpoint mapping
+ */
+static void parse_cpoint_map(struct apfs_checkpoint_mapping *map)
+{
+	if (map->cpm_pad)
+		report("Checkpoint map", "non-zero padding.");
+}
+
+/**
+ * parse_cpoint_map_blocks - Parse and verify a checkpoint's mapping blocks
  * @desc_base:		first block of the checkpoint descriptor area
  * @desc_blocks:	block count of the checkpoint descriptor area
  * @index:		index of the first mapping block for the checkpoint
@@ -678,7 +688,7 @@ static void parse_main_super(struct super_block *sb)
  * Returns the number of checkpoint-mapping blocks, and sets @index to the
  * index of their checkpoint superblock.
  */
-static u32 parse_checkpoint_mappings(u64 desc_base, u32 desc_blocks, u32 *index)
+static u32 parse_cpoint_map_blocks(u64 desc_base, u32 desc_blocks, u32 *index)
 {
 	struct object obj;
 	struct apfs_checkpoint_map_phys *raw;
@@ -694,6 +704,7 @@ static u32 parse_checkpoint_mappings(u64 desc_base, u32 desc_blocks, u32 *index)
 	while (1) {
 		u64 bno = desc_base + *index;
 		u32 flags;
+		int i;
 
 		raw = read_object_nocheck(bno, &obj);
 		if (obj.oid != bno)
@@ -716,6 +727,8 @@ static u32 parse_checkpoint_mappings(u64 desc_base, u32 desc_blocks, u32 *index)
 		if (sizeof(*raw) + cpm_count * sizeof(raw->cpm_map[0]) >
 								sb->s_blocksize)
 			report("Checkpoint maps", "won't fit in block.");
+		for (i = 0; i < cpm_count; ++i)
+			parse_cpoint_map(&raw->cpm_map[i]);
 
 		flags = le32_to_cpu(raw->cpm_flags);
 
@@ -785,8 +798,8 @@ void parse_filesystem(void)
 		sb->s_xid = 0;
 
 		/* The checkpoint-mapping blocks come before the superblock */
-		map_blocks = parse_checkpoint_mappings(desc_base, desc_blocks,
-						       &index);
+		map_blocks = parse_cpoint_map_blocks(desc_base, desc_blocks,
+						     &index);
 		valid_blocks -= map_blocks;
 
 		bno = desc_base + index;
