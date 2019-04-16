@@ -609,7 +609,12 @@ static void parse_main_super(struct super_block *sb)
 
 	assert(sb->s_raw);
 
-	sb->s_xid = le64_to_cpu(sb->s_raw->nx_o.o_xid);
+	/* This field was already set from the checkpoint mappings */
+	assert(sb->s_xid);
+
+	if (sb->s_xid != le64_to_cpu(sb->s_raw->nx_o.o_xid))
+		report("Container superblock", "inconsistent xid.");
+
 	sb->s_blocksize = le32_to_cpu(sb->s_raw->nx_block_size);
 	if (sb->s_blocksize != APFS_NX_DEFAULT_BLOCK_SIZE)
 		report_unknown("Block size other than 4096");
@@ -680,6 +685,12 @@ static u32 parse_checkpoint_mappings(u64 desc_base, u32 desc_blocks, u32 *index)
 	u32 blk_count = 0;
 	u32 cpm_count;
 
+	/*
+	 * The current superblock hasn't been parsed yet, so this xid would be
+	 * from the previous checkpoint.
+	 */
+	assert(!sb->s_xid);
+
 	while (1) {
 		u64 bno = desc_base + *index;
 		u32 flags;
@@ -693,6 +704,13 @@ static u32 parse_checkpoint_mappings(u64 desc_base, u32 desc_blocks, u32 *index)
 			report("Checkpoint map", "wrong object type.");
 		if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
 			report("Checkpoint map", "wrong object subtype.");
+
+		/* Checkpoint mappings belong to the checkpoint transaction */
+		if (sb->s_xid && obj.xid != sb->s_xid)
+			report("Checkpoint map", "inconsistent xid.");
+		if (!obj.xid)
+			report("Checkpoint map", "invalid xid.");
+		sb->s_xid = obj.xid;
 
 		cpm_count = le32_to_cpu(raw->cpm_count);
 		if (sizeof(*raw) + cpm_count * sizeof(raw->cpm_map[0]) >
@@ -753,13 +771,18 @@ void parse_filesystem(void)
 	 * Now go through the valid checkpoints one by one, though it seems
 	 * that cleanly unmounted filesystems only preserve the last one.
 	 */
-	sb->s_raw = NULL;
 	index = desc_index;
 	valid_blocks = (desc_blocks + desc_next - desc_index) % desc_blocks;
 	while (valid_blocks > 0) {
 		struct apfs_nx_superblock *raw;
 		u64 bno;
 		u32 map_blocks;
+
+		/* Some fields from the previous checkpoint need to be unset */
+		if (sb->s_raw)
+			munmap(sb->s_raw, sb->s_blocksize);
+		sb->s_raw = NULL;
+		sb->s_xid = 0;
 
 		/* The checkpoint-mapping blocks come before the superblock */
 		map_blocks = parse_checkpoint_mappings(desc_base, desc_blocks,
@@ -782,10 +805,7 @@ void parse_filesystem(void)
 			report("Checkpoint superblock",
 			       "wrong checkpoint descriptor block count.");
 
-		if (sb->s_raw)
-			munmap(sb->s_raw, sb->s_blocksize);
 		sb->s_raw = raw;
-
 		parse_main_super(sb);
 		check_container(sb);
 
