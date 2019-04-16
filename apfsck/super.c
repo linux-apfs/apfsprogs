@@ -678,6 +678,7 @@ static u32 parse_checkpoint_mappings(u64 desc_base, u32 desc_blocks, u32 *index)
 	struct object obj;
 	struct apfs_checkpoint_map_phys *raw;
 	u32 blk_count = 0;
+	u32 cpm_count;
 
 	while (1) {
 		u64 bno = desc_base + *index;
@@ -690,6 +691,11 @@ static u32 parse_checkpoint_mappings(u64 desc_base, u32 desc_blocks, u32 *index)
 			report("Checkpoint map", "wrong object type.");
 		if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
 			report("Checkpoint map", "wrong object subtype.");
+
+		cpm_count = le32_to_cpu(raw->cpm_count);
+		if (sizeof(*raw) + cpm_count * sizeof(raw->cpm_map[0]) >
+								sb->s_blocksize)
+			report("Checkpoint maps", "won't fit in block.");
 
 		flags = le32_to_cpu(raw->cpm_flags);
 
