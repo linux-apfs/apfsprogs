@@ -342,8 +342,26 @@ struct super_block {
 	u64 s_next_oid;	/* Next virtual object id to be used */
 	u32 s_max_vols; /* Maximum number of volumes allowed */
 
+	/* Hash table of ephemeral object mappings for the checkpoint */
+	union htable_entry **s_cpoint_map_table;
+
 	/* This is excessive in most cases.  TODO: switch to a linked list? */
 	struct volume_superblock *s_volumes[APFS_NX_MAX_FILE_SYSTEMS];
+};
+
+/*
+ * Checkpoint mapping data in memory
+ */
+struct cpoint_map {
+	/* Hash table entry header (struct htable_entry_header from htable.h) */
+	struct {
+		union htable_entry	*m_next;
+		u64			m_oid;	/* Ephemeral object id */
+	};
+
+	u32	m_type;		/* Type of the object */
+	u32	m_subtype;	/* Subtype of the object */
+	u64	m_paddr;	/* Physical address of the object */
 };
 
 static inline bool apfs_is_case_insensitive(void)

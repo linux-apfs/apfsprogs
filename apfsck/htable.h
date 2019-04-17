@@ -10,6 +10,7 @@
 #include "extents.h"
 #include "inode.h"
 #include "key.h"
+#include "super.h"
 #include "types.h"
 
 #define HTABLE_BUCKETS	512	/* So the hash table array fits in 4k */
@@ -49,6 +50,7 @@ union htable_entry {
 	struct dstream			dstream;	/* Dstream data */
 	struct listed_cnid		listed_cnid;	/* Catalog id data */
 	struct extent			extent;		/* Extent data */
+	struct cpoint_map		mapping;	/* Checkpoint map */
 };
 
 extern union htable_entry **alloc_htable();

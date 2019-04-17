@@ -670,14 +670,51 @@ static void parse_main_super(struct super_block *sb)
 }
 
 /**
- * parse_cpoint_map - Parse and verify a checkpoint mapping
- * @map: the checkpoint mapping
+ * free_cpoint_map_table - Free the checkpoint map table and all its entries
+ * @table: table to free
  */
-static void parse_cpoint_map(struct apfs_checkpoint_mapping *map)
+static void free_cpoint_map_table(union htable_entry **table)
 {
-	if (map->cpm_pad)
+	/* No checks needed here yet, just call free() on each entry */
+	free_htable(table, (void (*)(union htable_entry *))free);
+}
+
+/**
+ * get_cpoint_map - Find or create a map structure in the checkpoint map table
+ * @oid: ephemeral object id
+ *
+ * Returns the checkpoint mapping structure, after creating it if necessary.
+ */
+static struct cpoint_map *get_cpoint_map(u64 oid)
+{
+	union htable_entry *entry;
+
+	entry = get_htable_entry(oid, sizeof(struct cpoint_map),
+				 sb->s_cpoint_map_table);
+	return &entry->mapping;
+}
+
+/**
+ * parse_cpoint_map - Parse and verify a checkpoint mapping
+ * @raw: the raw checkpoint mapping
+ */
+static void parse_cpoint_map(struct apfs_checkpoint_mapping *raw)
+{
+	struct cpoint_map *map;
+
+	map = get_cpoint_map(le64_to_cpu(raw->cpm_oid));
+	if (map->m_paddr)
+		report("Checkpoint maps", "two mappings for the same oid.");
+	if (!raw->cpm_paddr)
+		report("Checkpoint map", "invalid physical address.");
+	map->m_paddr = le64_to_cpu(raw->cpm_paddr);
+
+	map->m_type = le32_to_cpu(raw->cpm_type);
+	map->m_subtype = le32_to_cpu(raw->cpm_subtype);
+
+	if (raw->cpm_pad)
 		report("Checkpoint map", "non-zero padding.");
-	if (map->cpm_fs_oid)
+	if (raw->cpm_fs_oid)
 		report_unknown("Ephmeral object belonging to a volume");
 }
 
@@ -702,6 +739,9 @@ static u32 parse_cpoint_map_blocks(u64 desc_base, u32 desc_blocks, u32 *index)
 	 * from the previous checkpoint.
 	 */
 	assert(!sb->s_xid);
+
+	assert(!sb->s_cpoint_map_table);
+	sb->s_cpoint_map_table = alloc_htable();
 
 	while (1) {
 		u64 bno = desc_base + *index;
@@ -823,6 +863,9 @@ void parse_filesystem(void)
 		sb->s_raw = raw;
 		parse_main_super(sb);
 		check_container(sb);
+
+		free_cpoint_map_table(sb->s_cpoint_map_table);
+		sb->s_cpoint_map_table = NULL;
 
 		/* One more block for the checkpoint superblock itself */
 		index = (index + 1) % desc_blocks;
