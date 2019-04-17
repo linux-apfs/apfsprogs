@@ -640,8 +640,20 @@ static void parse_main_super(struct super_block *sb)
 	    le64_to_cpu(sb->s_raw->nx_xp_desc_base) >> 63 ||
 	    le64_to_cpu(sb->s_raw->nx_xp_data_base) >> 63)
 		report("Container superblock", "has checkpoint tree.");
+
 	sb->s_data_base = le64_to_cpu(sb->s_raw->nx_xp_data_base);
 	sb->s_data_blocks = le64_to_cpu(sb->s_raw->nx_xp_data_blocks);
+	sb->s_data_index = le32_to_cpu(sb->s_raw->nx_xp_data_index);
+	sb->s_data_len = le32_to_cpu(sb->s_raw->nx_xp_data_len);
+	if (sb->s_data_index >= sb->s_data_blocks)
+		report("Container superblock", "out of range checkpoint data.");
+	if (sb->s_data_len > sb->s_data_blocks)
+		report("Container superblock",
+		       "reports too many blocks of checkpoint data.");
+	if ((sb->s_data_index + sb->s_data_len) % sb->s_data_blocks !=
+	    le32_to_cpu(sb->s_raw->nx_xp_data_next))
+		report("Container superblock",
+		       "wrong length for checkpoint data.");
 
 	if (sb->s_raw->nx_test_type || sb->s_raw->nx_test_oid)
 		report("Container superblock", "test field is set.");
