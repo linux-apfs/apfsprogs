@@ -640,6 +640,8 @@ static void parse_main_super(struct super_block *sb)
 	    le64_to_cpu(sb->s_raw->nx_xp_desc_base) >> 63 ||
 	    le64_to_cpu(sb->s_raw->nx_xp_data_base) >> 63)
 		report("Container superblock", "has checkpoint tree.");
+	sb->s_data_base = le64_to_cpu(sb->s_raw->nx_xp_data_base);
+	sb->s_data_blocks = le64_to_cpu(sb->s_raw->nx_xp_data_blocks);
 
 	if (sb->s_raw->nx_test_type || sb->s_raw->nx_test_oid)
 		report("Container superblock", "test field is set.");
@@ -670,13 +672,28 @@ static void parse_main_super(struct super_block *sb)
 }
 
 /**
+ * free_cpoint_map - Free a map structure after performing some final checks
+ * @entry: the entry to free
+ */
+static void free_cpoint_map(union htable_entry *entry)
+{
+	struct cpoint_map *map = &entry->mapping;
+	u32 blk_count = map->m_size >> sb->s_blocksize_bits;
+
+	if (map->m_paddr < sb->s_data_base ||
+	    map->m_paddr + blk_count > sb->s_data_base + sb->s_data_blocks)
+		report("Checkpoint map", "block number is out of range.");
+
+	free(entry);
+}
+
+/**
  * free_cpoint_map_table - Free the checkpoint map table and all its entries
  * @table: table to free
  */
 static void free_cpoint_map_table(union htable_entry **table)
 {
-	/* No checks needed here yet, just call free() on each entry */
-	free_htable(table, (void (*)(union htable_entry *))free);
+	free_htable(table, free_cpoint_map);
 }
 
 /**
@@ -708,6 +725,10 @@ static void parse_cpoint_map(struct apfs_checkpoint_mapping *raw)
 	if (!raw->cpm_paddr)
 		report("Checkpoint map", "invalid physical address.");
 	map->m_paddr = le64_to_cpu(raw->cpm_paddr);
+
+	map->m_size = le32_to_cpu(raw->cpm_size);
+	if (map->m_size != sb->s_blocksize)
+		report_unknown("Ephemeral objects with more than one block");
 
 	map->m_type = le32_to_cpu(raw->cpm_type);
 	map->m_subtype = le32_to_cpu(raw->cpm_subtype);
