@@ -523,6 +523,8 @@ static struct apfs_superblock *map_volume_super(int vol,
 	return vsb->v_raw;
 }
 
+static struct object *parse_reaper(u64 oid);
+
 /**
  * check_container - Check the whole container for a given checkpoint
  * @sb: checkpoint superblock
@@ -531,8 +533,10 @@ static void check_container(struct super_block *sb)
 {
 	int vol;
 
-	/* Check for corruption in the container object map */
+	/* Check for corruption in the container object map... */
 	sb->s_omap = parse_omap_btree(le64_to_cpu(sb->s_raw->nx_omap_oid));
+	/* ...and in the reaper */
+	sb->s_reaper = parse_reaper(le64_to_cpu(sb->s_raw->nx_reaper_oid));
 
 	for (vol = 0; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol) {
 		struct apfs_superblock *vsb_raw;
@@ -929,4 +933,59 @@ void parse_filesystem(void)
 		report("Checkpoint descriptor area", "no valid superblocks.");
 	main_super_compare(sb->s_raw, msb_raw);
 	munmap(msb_raw, sb->s_blocksize);
+}
+
+/**
+ * read_ephemeral_object - Read an ephemeral object header from disk
+ * @oid:	object id
+ * @obj:	object struct to receive the results
+ *
+ * Returns a pointer to the raw data of the object in memory, after checking
+ * the consistency of some of its fields.
+ */
+static void *read_ephemeral_object(u64 oid, struct object *obj)
+{
+	struct apfs_obj_phys *raw;
+	struct cpoint_map *map;
+	u32 storage_type;
+
+	assert(sb->s_cpoint_map_table);
+	assert(sb->s_xid);
+
+	map = get_cpoint_map(oid);
+	if (!map->m_paddr)
+		report("Ephemeral object", "missing checkpoint mapping.");
+
+	/* Multiblock ephemeral objects may exist, but are not supported yet */
+	raw = read_object_nocheck(map->m_paddr, obj);
+	if (obj->oid != oid)
+		report("Ephemeral object", "wrong object id.");
+	if (obj->xid != sb->s_xid)
+		report("Ephemeral object", "not part of latest transaction.");
+
+	storage_type = parse_object_flags(obj->flags);
+	if (storage_type != APFS_OBJ_EPHEMERAL)
+		report("Object header", "wrong flag for ephemeral object.");
+
+	return raw;
+}
+
+/**
+ * parse_reaper - Parse the reaper and check for corruption
+ * @oid: object id for the reaper
+ *
+ * Returns a pointer to the object struct for the reaper.
+ */
+static struct object *parse_reaper(u64 oid)
+{
+	struct object *reaper;
+
+	reaper = calloc(1, sizeof(*reaper));
+	if (!reaper) {
+		perror(NULL);
+		exit(1);
+	}
+
+	read_ephemeral_object(oid, reaper);
+	return reaper;
 }

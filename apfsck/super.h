@@ -335,6 +335,7 @@ struct volume_superblock {
 struct super_block {
 	struct apfs_nx_superblock *s_raw;
 	struct btree *s_omap;
+	struct object *s_reaper;
 	unsigned long s_blocksize;
 	unsigned char s_blocksize_bits;
 	u64 s_block_count; /* Number of blocks in the container */
