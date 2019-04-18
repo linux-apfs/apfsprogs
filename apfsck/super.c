@@ -691,10 +691,22 @@ static void free_cpoint_map(union htable_entry *entry)
 {
 	struct cpoint_map *map = &entry->mapping;
 	u32 blk_count = map->m_size >> sb->s_blocksize_bits;
+	u64 obj_start = map->m_paddr;
+	u64 obj_end = map->m_paddr + blk_count; /* Objects can't wrap, right? */
+	u64 data_start = sb->s_data_base;
+	u64 data_end = sb->s_data_base + sb->s_data_blocks;
+	u64 valid_start;
 
-	if (map->m_paddr < sb->s_data_base ||
-	    map->m_paddr + blk_count > sb->s_data_base + sb->s_data_blocks)
+	if (obj_start < data_start || obj_end > data_end)
 		report("Checkpoint map", "block number is out of range.");
+
+	/* Not all blocks in the data area belong to the current checkpoint */
+	valid_start = sb->s_data_base + sb->s_data_index;
+	if (obj_start >= valid_start && obj_end > valid_start + sb->s_data_len)
+		report("Checkpoint map", "block number outside valid range.");
+	if (obj_start < valid_start &&
+	    obj_end + sb->s_data_blocks > valid_start + sb->s_data_len)
+		report("Checkpoint map", "block number outside valid range.");
 
 	free(entry);
 }
