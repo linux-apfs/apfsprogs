@@ -708,6 +708,11 @@ static void free_cpoint_map(union htable_entry *entry)
 	    obj_end + sb->s_data_blocks > valid_start + sb->s_data_len)
 		report("Checkpoint map", "block number outside valid range.");
 
+	if (map->m_oid < APFS_OID_RESERVED_COUNT)
+		report("Checkpoint map", "reserved object id.");
+	if (map->m_oid >= sb->s_next_oid)
+		report("Checkpoint map", "unassigned object id.");
+
 	free(entry);
 }
 
