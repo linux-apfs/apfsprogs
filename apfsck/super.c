@@ -994,6 +994,8 @@ static struct object *parse_reaper(u64 oid)
 	    raw->nr_rlcount || raw->nr_type || raw->nr_size ||
 	    raw->nr_oid || raw->nr_xid)
 		report_unknown("Nonempty reaper");
+	if (le64_to_cpu(raw->nr_next_reap_id) != 1)
+		report_unknown("Nonempty reaper");
 
 	if (raw->nr_fs_oid)
 		report_unknown("Reaper belonging to a volume");
