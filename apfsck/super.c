@@ -978,6 +978,7 @@ static void *read_ephemeral_object(u64 oid, struct object *obj)
  */
 static struct object *parse_reaper(u64 oid)
 {
+	struct apfs_nx_reaper_phys *raw;
 	struct object *reaper;
 
 	reaper = calloc(1, sizeof(*reaper));
@@ -986,6 +987,16 @@ static struct object *parse_reaper(u64 oid)
 		exit(1);
 	}
 
-	read_ephemeral_object(oid, reaper);
+	raw = read_ephemeral_object(oid, reaper);
+
+	/* Docs on the reaper are very incomplete, so let's hope it's empty */
+	if (raw->nr_completed_id || raw->nr_head || raw->nr_tail ||
+	    raw->nr_rlcount || raw->nr_type || raw->nr_size ||
+	    raw->nr_oid || raw->nr_xid)
+		report_unknown("Nonempty reaper");
+
+	if (raw->nr_fs_oid)
+		report_unknown("Reaper belonging to a volume");
+
 	return reaper;
 }

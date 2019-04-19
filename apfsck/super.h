@@ -20,6 +20,27 @@ struct apfs_prange {
 	__le64 pr_block_count;
 } __packed;
 
+/*
+ * On-disk reaper structure
+ */
+struct apfs_nx_reaper_phys {
+	struct apfs_obj_phys	nr_o;
+	__le64			nr_next_reap_id;
+	__le64			nr_completed_id;
+	__le64			nr_head;
+	__le64			nr_tail;
+	__le32			nr_flags;
+	__le32			nr_rlcount;
+	__le32			nr_type;
+	__le32			nr_size;
+	__le64			nr_fs_oid;
+	__le64			nr_oid;
+	__le64			nr_xid;
+	__le32			nr_nrle_flags;
+	__le32			nr_state_buffer_size;
+	u8			nr_state_buffer[];
+};
+
 /* EFI constants */
 #define APFS_NX_EFI_JUMPSTART_MAGIC	0x5244534A
 #define APFS_NX_EFI_JUMPSTART_VERSION	1
