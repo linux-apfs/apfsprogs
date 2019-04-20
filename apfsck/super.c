@@ -980,6 +980,7 @@ static struct object *parse_reaper(u64 oid)
 {
 	struct apfs_nx_reaper_phys *raw;
 	struct object *reaper;
+	u32 flags;
 
 	reaper = calloc(1, sizeof(*reaper));
 	if (!reaper) {
@@ -995,6 +996,14 @@ static struct object *parse_reaper(u64 oid)
 	    raw->nr_oid || raw->nr_xid)
 		report_unknown("Nonempty reaper");
 	if (le64_to_cpu(raw->nr_next_reap_id) != 1)
+		report_unknown("Nonempty reaper");
+
+	flags = le32_to_cpu(raw->nr_flags);
+	if ((flags & APFS_NR_FLAGS_VALID_MASK) != flags)
+		report("Reaper", "invalid flag in use.");
+	if (!(flags & APFS_NR_BHM_FLAG))
+		report("Reaper", "reserved flag must always be set.");
+	if (flags & APFS_NR_CONTINUE)
 		report_unknown("Nonempty reaper");
 
 	if (raw->nr_fs_oid)

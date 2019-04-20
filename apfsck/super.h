@@ -20,6 +20,11 @@ struct apfs_prange {
 	__le64 pr_block_count;
 } __packed;
 
+/* Reaper flags */
+#define	APFS_NR_BHM_FLAG		0x00000001
+#define	APFS_NR_CONTINUE		0x00000002
+#define APFS_NR_FLAGS_VALID_MASK	(APFS_NR_BHM_FLAG | APFS_NR_CONTINUE)
+
 /*
  * On-disk reaper structure
  */
