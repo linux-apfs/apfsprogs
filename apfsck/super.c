@@ -980,7 +980,8 @@ static struct object *parse_reaper(u64 oid)
 {
 	struct apfs_nx_reaper_phys *raw;
 	struct object *reaper;
-	u32 flags;
+	u32 flags, buffer_size;
+	int i;
 
 	reaper = calloc(1, sizeof(*reaper));
 	if (!reaper) {
@@ -1008,6 +1009,14 @@ static struct object *parse_reaper(u64 oid)
 
 	if (raw->nr_fs_oid)
 		report_unknown("Reaper belonging to a volume");
+
+	buffer_size = le32_to_cpu(raw->nr_state_buffer_size);
+	if (buffer_size != sb->s_blocksize - sizeof(*raw))
+		report("Reaper", "wrong state buffer size.");
+	for (i = 0; i < buffer_size; ++i) {
+		if (raw->nr_state_buffer[i])
+			report_unknown("Nonempty reaper");
+	}
 
 	return reaper;
 }
