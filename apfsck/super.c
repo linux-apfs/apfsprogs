@@ -993,7 +993,7 @@ static struct object *parse_reaper(u64 oid)
 	/* Docs on the reaper are very incomplete, so let's hope it's empty */
 	if (raw->nr_completed_id || raw->nr_head || raw->nr_tail ||
 	    raw->nr_rlcount || raw->nr_type || raw->nr_size ||
-	    raw->nr_oid || raw->nr_xid)
+	    raw->nr_oid || raw->nr_xid || raw->nr_nrle_flags)
 		report_unknown("Nonempty reaper");
 	if (le64_to_cpu(raw->nr_next_reap_id) != 1)
 		report_unknown("Nonempty reaper");
