@@ -885,6 +885,7 @@ void parse_filesystem(void)
 	index = desc_index;
 	valid_blocks = (desc_blocks + desc_next - desc_index) % desc_blocks;
 	while (valid_blocks > 0) {
+		struct object obj;
 		struct apfs_nx_superblock *raw;
 		u64 bno;
 		u32 map_blocks;
@@ -901,17 +902,10 @@ void parse_filesystem(void)
 		valid_blocks -= map_blocks;
 
 		bno = desc_base + index;
-		raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-			   fd, bno * sb->s_blocksize);
-		if (raw == MAP_FAILED) {
-			perror(NULL);
-			exit(1);
-		}
+		raw = read_object_nocheck(bno, &obj);
 
 		if (le32_to_cpu(raw->nx_magic) != APFS_NX_MAGIC)
 			report("Checkpoint superblock", "wrong magic.");
-		if (!obj_verify_csum(&raw->nx_o))
-			report("Checkpoint superblock", "bad checksum.");
 		if (le32_to_cpu(raw->nx_xp_desc_len) != map_blocks + 1)
 			report("Checkpoint superblock",
 			       "wrong checkpoint descriptor block count.");
