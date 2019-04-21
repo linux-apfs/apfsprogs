@@ -992,6 +992,10 @@ static struct object *parse_reaper(u64 oid)
 	}
 
 	raw = read_ephemeral_object(oid, reaper);
+	if (reaper->type != APFS_OBJECT_TYPE_NX_REAPER)
+		report("Reaper", "wrong object type.");
+	if (reaper->subtype != APFS_OBJECT_TYPE_INVALID)
+		report("Reaper", "wrong object subtype.");
 
 	/* Docs on the reaper are very incomplete, so let's hope it's empty */
 	if (raw->nr_completed_id || raw->nr_head || raw->nr_tail ||
