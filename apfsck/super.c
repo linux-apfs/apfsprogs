@@ -903,6 +903,12 @@ void parse_filesystem(void)
 
 		bno = desc_base + index;
 		raw = read_object_nocheck(bno, &obj);
+		if (parse_object_flags(obj.flags) != APFS_OBJ_EPHEMERAL)
+			report("Checkpoint superblock", "bad storage type.");
+		if (obj.type != APFS_OBJECT_TYPE_NX_SUPERBLOCK)
+			report("Checkpoint superblock", "bad object type.");
+		if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
+			report("Checkpoint superblock", "bad object subtype.");
 
 		if (le32_to_cpu(raw->nx_magic) != APFS_NX_MAGIC)
 			report("Checkpoint superblock", "wrong magic.");
