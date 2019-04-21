@@ -13,6 +13,18 @@
 struct super_block;
 struct extref_record;
 
+/* Flags for the object map structure */
+#define APFS_OMAP_MANUALLY_MANAGED	0x00000001
+#define APFS_OMAP_ENCRYPTING		0x00000002
+#define APFS_OMAP_DECRYPTING		0x00000004
+#define APFS_OMAP_KEYROLLING		0x00000008
+#define APFS_OMAP_CRYPTO_GENERATION	0x00000010
+#define APFS_OMAP_FLAGS_VALID_MASK	(APFS_OMAP_MANUALLY_MANAGED \
+					| APFS_OMAP_ENCRYPTING \
+					| APFS_OMAP_DECRYPTING \
+					| APFS_OMAP_KEYROLLING \
+					| APFS_OMAP_CRYPTO_GENERATION)
+
 /*
  * On-disk representation of an object map
  */

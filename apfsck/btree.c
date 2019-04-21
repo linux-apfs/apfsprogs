@@ -812,6 +812,25 @@ struct btree *parse_cat_btree(u64 oid, struct node *omap_root)
 }
 
 /**
+ * check_omap_flags - Check consistency of object map flags
+ * @flags: the flags
+ */
+static void check_omap_flags(u32 flags)
+{
+	if ((flags & APFS_OMAP_FLAGS_VALID_MASK) != flags)
+		report("Object map", "invalid flag in use.");
+
+	if (flags & (APFS_OMAP_ENCRYPTING | APFS_OMAP_DECRYPTING |
+		     APFS_OMAP_KEYROLLING | APFS_OMAP_CRYPTO_GENERATION))
+		report_unknown("Encryption");
+
+	if (vsb && (flags & APFS_OMAP_MANUALLY_MANAGED))
+		report("Volume object map", "is manually managed.");
+	if (!vsb && !(flags & APFS_OMAP_MANUALLY_MANAGED))
+		report("Container object map", "isn't manually managed.");
+}
+
+/**
  * parse_omap_btree - Parse an object map and check for corruption
  * @oid:	object id for the omap
  *
@@ -830,6 +849,8 @@ struct btree *parse_omap_btree(u64 oid)
 		report("Object map", "wrong object type.");
 	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
 		report("Object map", "wrong object subtype.");
+
+	check_omap_flags(le32_to_cpu(raw->om_flags));
 
 	omap = calloc(1, sizeof(*omap));
 	if (!omap) {
