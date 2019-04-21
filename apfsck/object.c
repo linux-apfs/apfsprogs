@@ -145,7 +145,7 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 		       "transaction id in omap key doesn't match block 0x%llx.",
 		       (unsigned long long)bno);
 
-	/* TODO: ephemeral objects? */
+	/* Ephemeral objects are handled by read_ephemeral_object() */
 	storage_type = parse_object_flags(obj->flags);
 	if (omap && storage_type != APFS_OBJ_VIRTUAL)
 		report("Object header", "wrong flag for virtual object.");
