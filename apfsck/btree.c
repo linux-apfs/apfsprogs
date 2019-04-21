@@ -852,6 +852,15 @@ struct btree *parse_omap_btree(u64 oid)
 
 	check_omap_flags(le32_to_cpu(raw->om_flags));
 
+	if (raw->om_snap_count || raw->om_snapshot_tree_oid ||
+	    raw->om_most_recent_snap)
+		report_unknown("Snapshots");
+
+	/* Oddly, the type is still reported even when the tree is not set */
+	if (le64_to_cpu(raw->om_snapshot_tree_type) !=
+				(APFS_OBJECT_TYPE_BTREE | APFS_OBJ_PHYSICAL))
+		report("Object map", "wrong type for snapshot tree.");
+
 	omap = calloc(1, sizeof(*omap));
 	if (!omap) {
 		perror(NULL);
