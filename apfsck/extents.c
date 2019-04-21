@@ -130,7 +130,7 @@ static void free_dstream(union htable_entry *entry)
 }
 
 /**
- * free_dstream_table - Free the dstream hash table and all its dentries
+ * free_dstream_table - Free the dstream hash table and all its entries
  * @table: table to free
  */
 void free_dstream_table(union htable_entry **table)
