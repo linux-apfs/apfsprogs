@@ -873,6 +873,10 @@ struct btree *parse_omap_btree(u64 oid)
 	omap->omap_root = NULL; /* The omap doesn't have an omap of its own */
 	omap->root = read_node(le64_to_cpu(raw->om_tree_oid), omap);
 
+	/* The tree type reported by the omap must match the root node */
+	if (raw->om_tree_type != omap->root->raw->btn_o.o_type)
+		report("Object map", "wrong type for tree.");
+
 	parse_subtree(omap->root, &last_key, NULL /* name_buf */);
 
 	check_btree_footer(omap);
