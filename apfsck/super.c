@@ -266,6 +266,8 @@ static void check_efi_information(u64 oid)
 		report("EFI info", "driver doesn't fit in extents.");
 	if (file_length <= (block_count - 1) * sb->s_blocksize)
 		report("EFI info", "wasted space in driver extents.");
+
+	munmap(efi, sb->s_blocksize);
 }
 
 /**
@@ -1018,5 +1020,6 @@ static struct object *parse_reaper(u64 oid)
 			report_unknown("Nonempty reaper");
 	}
 
+	munmap(raw, sb->s_blocksize);
 	return reaper;
 }

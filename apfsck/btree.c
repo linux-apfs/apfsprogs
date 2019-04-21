@@ -843,6 +843,7 @@ struct btree *parse_omap_btree(u64 oid)
 	parse_subtree(omap->root, &last_key, NULL /* name_buf */);
 
 	check_btree_footer(omap);
+	munmap(raw, sb->s_blocksize);
 	return omap;
 }
 
