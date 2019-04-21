@@ -861,6 +861,9 @@ struct btree *parse_omap_btree(u64 oid)
 				(APFS_OBJECT_TYPE_BTREE | APFS_OBJ_PHYSICAL))
 		report("Object map", "wrong type for snapshot tree.");
 
+	if (raw->om_pending_revert_min || raw->om_pending_revert_max)
+		report_unknown("Revert in progress");
+
 	omap = calloc(1, sizeof(*omap));
 	if (!omap) {
 		perror(NULL);
