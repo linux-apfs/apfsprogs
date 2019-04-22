@@ -714,7 +714,7 @@ static void check_btree_footer(struct btree *btree)
 
 	info = (void *)root->raw + sb->s_blocksize - sizeof(*info);
 	if (le32_to_cpu(info->bt_fixed.bt_node_size) != sb->s_blocksize)
-		report(ctx, "nodes with more than a block are not supported.");
+		report_unknown("Objects with more than one block");
 
 	if (le64_to_cpu(info->bt_key_count) != btree->key_count)
 		report(ctx, "wrong key count in info footer.");
