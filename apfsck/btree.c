@@ -548,6 +548,9 @@ static void parse_omap_record(struct apfs_omap_key *key,
 	u32 flags;
 	u32 size;
 
+	if (len != sizeof(*val))
+		report("Omap record", "wrong size of value.");
+
 	flags = le32_to_cpu(val->ov_flags);
 	if ((flags & APFS_OMAP_VAL_FLAGS_VALID_MASK) != flags)
 		report("Omap record", "invalid flag in use.");
