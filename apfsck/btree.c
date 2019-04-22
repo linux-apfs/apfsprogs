@@ -535,6 +535,26 @@ static void parse_cat_record(void *key, void *val, int len)
 }
 
 /**
+ * parse_omap_record - Parse an object map record value and check for corruption
+ * @key:	pointer to the raw key
+ * @val:	pointer to the raw value
+ * @len:	length of the raw value
+ *
+ * Internal consistency of @key must be checked before calling this function.
+ */
+static void parse_omap_record(struct apfs_omap_key *key,
+			      struct apfs_omap_val *val, int len)
+{
+	u32 size;
+
+	size = le32_to_cpu(val->ov_size);
+	if (size & (sb->s_blocksize - 1))
+		report("Omap record", "size isn't multiple of block size.");
+	if (size != sb->s_blocksize)
+		report_unknown("Objects with more than one block");
+}
+
+/**
  * parse_subtree - Parse a subtree and check for corruption
  * @root:	root node of the subtree
  * @last_key:	parent key, that must come before all the keys in this subtree;
@@ -618,6 +638,8 @@ static void parse_subtree(struct node *root,
 				btree->longest_val = len;
 			if (btree_is_catalog(btree))
 				parse_cat_record(raw_key, raw_val, len);
+			if (btree_is_omap(btree))
+				parse_omap_record(raw_key, raw_val, len);
 			if (btree_is_extentref(btree))
 				/* Physical extents must not overlap */
 				last_key->id = parse_phys_ext_record(raw_key,
