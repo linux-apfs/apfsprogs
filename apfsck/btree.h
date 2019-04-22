@@ -41,6 +41,18 @@ struct apfs_omap_phys {
 	__le64 om_pending_revert_max;
 } __packed;
 
+/* Object map value flags */
+#define APFS_OMAP_VAL_DELETED		0x00000001
+#define APFS_OMAP_VAL_SAVED		0x00000002
+#define APFS_OMAP_VAL_ENCRYPTED		0x00000004
+#define APFS_OMAP_VAL_NOHEADER		0x00000008
+#define APFS_OMAP_VAL_CRYPTO_GENERATION	0x00000010
+#define APFS_OMAP_VAL_FLAGS_VALID_MASK	(APFS_OMAP_VAL_DELETED \
+					| APFS_OMAP_VAL_SAVED \
+					| APFS_OMAP_VAL_ENCRYPTED \
+					| APFS_OMAP_VAL_NOHEADER \
+					| APFS_OMAP_VAL_CRYPTO_GENERATION)
+
 /*
  * Structure of a value in an object map B-tree
  */

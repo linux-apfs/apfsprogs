@@ -545,7 +545,20 @@ static void parse_cat_record(void *key, void *val, int len)
 static void parse_omap_record(struct apfs_omap_key *key,
 			      struct apfs_omap_val *val, int len)
 {
+	u32 flags;
 	u32 size;
+
+	flags = le32_to_cpu(val->ov_flags);
+	if ((flags & APFS_OMAP_VAL_FLAGS_VALID_MASK) != flags)
+		report("Omap record", "invalid flag in use.");
+	if (flags & APFS_OMAP_VAL_DELETED)
+		report_unknown("Deleted omap records");
+	if (flags & APFS_OMAP_VAL_SAVED)
+		report("Omap record", "saved flag is set.");
+	if (flags & APFS_OMAP_VAL_NOHEADER)
+		report_unknown("Virtual objects with no header");
+	if (flags & (APFS_OMAP_VAL_ENCRYPTED | APFS_OMAP_VAL_CRYPTO_GENERATION))
+		report_unknown("Encryption");
 
 	size = le32_to_cpu(val->ov_size);
 	if (size & (sb->s_blocksize - 1))
