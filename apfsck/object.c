@@ -99,23 +99,30 @@ u32 parse_object_flags(u32 flags)
 /**
  * read_object - Read an object header from disk and run some checks
  * @oid:	object id
- * @omap:	root of the object map (NULL if no translation is needed)
+ * @omap_table:	hash table for the object map (NULL if no translation is needed)
  * @obj:	object struct to receive the results
  *
  * Returns a pointer to the raw data of the object in memory, after checking
  * the consistency of some of its fields.
  */
-void *read_object(u64 oid, struct node *omap, struct object *obj)
+void *read_object(u64 oid, union htable_entry **omap_table, struct object *obj)
 {
 	struct apfs_obj_phys *raw;
-	struct omap_record omap_rec;
+	struct omap_record *omap_rec;
 	u64 bno;
 	u64 xid;
 	u32 storage_type;
 
-	if (omap) {
-		omap_lookup(omap, oid, &omap_rec);
-		bno = omap_rec.bno;
+	if (omap_table) {
+		omap_rec = get_omap_record(oid, omap_table);
+		if (omap_rec->o_seen)
+			report("Object map record", "oid was used twice.");
+		omap_rec->o_seen = true;
+
+		bno = omap_rec->o_bno;
+		if (!bno)
+			report("Object map", "record missing for id 0x%llx.",
+			       (unsigned long long)oid);
 	} else {
 		bno = oid;
 	}
@@ -128,7 +135,7 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 	if (oid < APFS_OID_RESERVED_COUNT)
 		report("Object header", "reserved object id in block 0x%llx.",
 		       (unsigned long long)bno);
-	if (omap && oid >= sb->s_next_oid)
+	if (omap_table && oid >= sb->s_next_oid)
 		report("Object header", "unassigned object id in block 0x%llx.",
 		       (unsigned long long)bno);
 
@@ -140,16 +147,16 @@ void *read_object(u64 oid, struct node *omap, struct object *obj)
 		report("Object header",
 		       "transaction id in block 0x%llx is older than volume.",
 		       (unsigned long long)bno);
-	if (omap && xid != omap_rec.xid)
+	if (omap_table && xid != omap_rec->o_xid)
 		report("Object header",
 		       "transaction id in omap key doesn't match block 0x%llx.",
 		       (unsigned long long)bno);
 
 	/* Ephemeral objects are handled by read_ephemeral_object() */
 	storage_type = parse_object_flags(obj->flags);
-	if (omap && storage_type != APFS_OBJ_VIRTUAL)
+	if (omap_table && storage_type != APFS_OBJ_VIRTUAL)
 		report("Object header", "wrong flag for virtual object.");
-	if (!omap && storage_type != APFS_OBJ_PHYSICAL)
+	if (!omap_table && storage_type != APFS_OBJ_PHYSICAL)
 		report("Object header", "wrong flag for physical object.");
 
 	return raw;

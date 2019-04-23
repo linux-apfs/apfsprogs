@@ -7,6 +7,7 @@
 #ifndef _HTABLE_H
 #define _HTABLE_H
 
+#include "btree.h"
 #include "extents.h"
 #include "inode.h"
 #include "key.h"
@@ -51,6 +52,7 @@ union htable_entry {
 	struct listed_cnid		listed_cnid;	/* Catalog id data */
 	struct extent			extent;		/* Extent data */
 	struct cpoint_map		mapping;	/* Checkpoint map */
+	struct omap_record		omap_rec;	/* Object map record */
 };
 
 extern union htable_entry **alloc_htable();

@@ -11,6 +11,7 @@
 
 struct super_block;
 struct node;
+union htable_entry;
 
 /* Object identifiers constants */
 #define APFS_OID_NX_SUPERBLOCK			1
@@ -89,6 +90,7 @@ struct object {
 extern int obj_verify_csum(struct apfs_obj_phys *obj);
 extern void *read_object_nocheck(u64 bno, struct object *obj);
 extern u32 parse_object_flags(u32 flags);
-extern void *read_object(u64 oid, struct node *omap, struct object *obj);
+extern void *read_object(u64 oid, union htable_entry **omap_table,
+			 struct object *obj);
 
 #endif	/* _OBJECT_H */

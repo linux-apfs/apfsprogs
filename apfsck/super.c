@@ -233,7 +233,7 @@ static void check_efi_information(u64 oid)
 	if (!oid) /* Not all containers can be booted from, of course */
 		return;
 
-	efi = read_object(oid, NULL /* omap */, &obj);
+	efi = read_object(oid, NULL /* omap_table */, &obj);
 	if (obj.type != APFS_OBJECT_TYPE_EFI_JUMPSTART)
 		report("EFI info", "wrong object type.");
 	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
@@ -467,7 +467,7 @@ static struct apfs_superblock *map_volume_super(int vol,
 		return NULL;
 	}
 
-	vsb->v_raw = read_object(vol_id, sb->s_omap->root, &vsb->v_obj);
+	vsb->v_raw = read_object(vol_id, sb->s_omap_table, &vsb->v_obj);
 	if (vsb->v_obj.type != APFS_OBJECT_TYPE_FS)
 		report("Volume superblock", "wrong object type.");
 	if (vsb->v_obj.subtype != APFS_OBJECT_TYPE_INVALID)
@@ -535,6 +535,8 @@ static void check_container(struct super_block *sb)
 {
 	int vol;
 
+	sb->s_omap_table = alloc_htable();
+
 	/* Check for corruption in the container object map... */
 	sb->s_omap = parse_omap_btree(le64_to_cpu(sb->s_raw->nx_omap_oid));
 	/* ...and in the reaper */
@@ -548,6 +550,7 @@ static void check_container(struct super_block *sb)
 			perror(NULL);
 			exit(1);
 		}
+		vsb->v_omap_table = alloc_htable();
 		vsb->v_extent_table = alloc_htable();
 		vsb->v_cnid_table = alloc_htable();
 		vsb->v_dstream_table = alloc_htable();
@@ -568,7 +571,7 @@ static void check_container(struct super_block *sb)
 		/* ...in the catalog... */
 		vsb->v_cat = parse_cat_btree(
 				le64_to_cpu(vsb_raw->apfs_root_tree_oid),
-				vsb->v_omap->root);
+				vsb->v_omap_table);
 		/* ...and in the snapshot metadata tree */
 		vsb->v_snap_meta = parse_snap_meta_btree(
 				le64_to_cpu(vsb_raw->apfs_snap_meta_tree_oid));
@@ -581,6 +584,8 @@ static void check_container(struct super_block *sb)
 		vsb->v_cnid_table = NULL;
 		free_extent_table(vsb->v_extent_table);
 		vsb->v_extent_table = NULL;
+		free_omap_table(vsb->v_omap_table);
+		vsb->v_omap_table = NULL;
 
 		if (!vsb->v_has_root)
 			report("Catalog", "the root directory is missing.");
@@ -603,6 +608,10 @@ static void check_container(struct super_block *sb)
 
 		sb->s_volumes[vol] = vsb;
 	}
+	vsb = NULL;
+
+	free_omap_table(sb->s_omap_table);
+	sb->s_omap_table = NULL;
 }
 
 /**

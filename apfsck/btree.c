@@ -13,6 +13,7 @@
 #include "btree.h"
 #include "dir.h"
 #include "extents.h"
+#include "htable.h"
 #include "inode.h"
 #include "key.h"
 #include "object.h"
@@ -223,7 +224,7 @@ static void node_prepare_bitmaps(struct node *node)
 /**
  * read_node - Read a node header from disk
  * @oid:	object id for the node
- * @btree:	tree structure, with the omap_root already set
+ * @btree:	tree structure, with the omap_table already set
  *
  * Returns a pointer to the resulting node structure.
  */
@@ -240,7 +241,7 @@ static struct node *read_node(u64 oid, struct btree *btree)
 	}
 	node->btree = btree;
 
-	raw = node->raw = read_object(oid, btree->omap_root, &node->object);
+	raw = node->raw = read_object(oid, btree->omap_table, &node->object);
 
 	node->level = le16_to_cpu(raw->btn_level);
 	node->flags = le16_to_cpu(raw->btn_flags);
@@ -535,6 +536,44 @@ static void parse_cat_record(void *key, void *val, int len)
 }
 
 /**
+ * free_omap_record - Free an object map record structure after a final check
+ * @entry: the entry to free
+ */
+static void free_omap_record(union htable_entry *entry)
+{
+	struct omap_record *omap_rec = &entry->omap_rec;
+
+	if (!omap_rec->o_seen)
+		report("Omap record", "object id is never used.");
+
+	free(entry);
+}
+
+/**
+ * free_omap_table - Free a hash table for omap records, and all its entries
+ * @table: table to free
+ */
+void free_omap_table(union htable_entry **table)
+{
+	free_htable(table, free_omap_record);
+}
+
+/**
+ * get_omap_record - Find or create an omap record structure in a hash table
+ * @oid:	object id to be mapped
+ * @table:	the hash table of omap records to be searched
+ *
+ * Returns the omap record structure, after creating it if necessary.
+ */
+struct omap_record *get_omap_record(u64 oid, union htable_entry **table)
+{
+	union htable_entry *entry;
+
+	entry = get_htable_entry(oid, sizeof(struct omap_record), table);
+	return &entry->omap_rec;
+}
+
+/**
  * parse_omap_record - Parse an object map record value and check for corruption
  * @key:	pointer to the raw key
  * @val:	pointer to the raw value
@@ -545,11 +584,27 @@ static void parse_cat_record(void *key, void *val, int len)
 static void parse_omap_record(struct apfs_omap_key *key,
 			      struct apfs_omap_val *val, int len)
 {
+	struct omap_record *omap_rec;
 	u32 flags;
 	u32 size;
 
 	if (len != sizeof(*val))
 		report("Omap record", "wrong size of value.");
+
+	if (vsb) {
+		/* We are parsing a volume's object map */
+		omap_rec = get_omap_record(le64_to_cpu(key->ok_oid),
+					   vsb->v_omap_table);
+	} else {
+		/* We are parsing the container's object map */
+		omap_rec = get_omap_record(le64_to_cpu(key->ok_oid),
+					   sb->s_omap_table);
+	}
+
+	if (omap_rec->o_xid) /* More than one omap record for the same oid */
+		report_unknown("Snapshots");
+	omap_rec->o_xid = le64_to_cpu(key->ok_xid);
+	omap_rec->o_bno = le64_to_cpu(val->ov_paddr);
 
 	flags = le32_to_cpu(val->ov_flags);
 	if ((flags & APFS_OMAP_VAL_FLAGS_VALID_MASK) != flags)
@@ -811,7 +866,7 @@ struct btree *parse_snap_meta_btree(u64 oid)
 		exit(1);
 	}
 	snap->type = BTREE_TYPE_SNAP_META;
-	snap->omap_root = NULL; /* These are physical objects */
+	snap->omap_table = NULL; /* These are physical objects */
 	snap->root = read_node(oid, snap);
 
 	parse_subtree(snap->root, &last_key, NULL /* name_buf */);
@@ -823,11 +878,11 @@ struct btree *parse_snap_meta_btree(u64 oid)
 /**
  * parse_cat_btree - Parse a catalog tree and check for corruption
  * @oid:	object id for the catalog root
- * @omap_root:	root of the object map for the b-tree
+ * @omap_table:	hash table of object map records for the b-tree
  *
  * Returns a pointer to the btree struct for the catalog.
  */
-struct btree *parse_cat_btree(u64 oid, struct node *omap_root)
+struct btree *parse_cat_btree(u64 oid, union htable_entry **omap_table)
 {
 	struct btree *cat;
 	struct key last_key = {0};
@@ -840,7 +895,7 @@ struct btree *parse_cat_btree(u64 oid, struct node *omap_root)
 	}
 
 	cat->type = BTREE_TYPE_CATALOG;
-	cat->omap_root = omap_root;
+	cat->omap_table = omap_table;
 	cat->root = read_node(oid, cat);
 
 	parse_subtree(cat->root, &last_key, name_buf);
@@ -882,7 +937,7 @@ struct btree *parse_omap_btree(u64 oid)
 	struct object obj;
 
 	/* Many checks are missing, of course */
-	raw = read_object(oid, NULL /* omap */, &obj);
+	raw = read_object(oid, NULL /* omap_table */, &obj);
 	if (obj.type != APFS_OBJECT_TYPE_OMAP)
 		report("Object map", "wrong object type.");
 	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
@@ -908,7 +963,7 @@ struct btree *parse_omap_btree(u64 oid)
 		exit(1);
 	}
 	omap->type = BTREE_TYPE_OMAP;
-	omap->omap_root = NULL; /* The omap doesn't have an omap of its own */
+	omap->omap_table = NULL; /* The omap doesn't have an omap of its own */
 	omap->root = read_node(le64_to_cpu(raw->om_tree_oid), omap);
 
 	/* The tree type reported by the omap must match the root node */
@@ -939,7 +994,7 @@ struct btree *parse_extentref_btree(u64 oid)
 		exit(1);
 	}
 	extref->type = BTREE_TYPE_EXTENTREF;
-	extref->omap_root = NULL; /* These are phyisical objects */
+	extref->omap_table = NULL; /* These are physical objects */
 	extref->root = read_node(oid, extref);
 
 	parse_subtree(extref->root, &last_key, NULL /* name_buf */);
@@ -963,54 +1018,6 @@ static u64 child_from_query(struct query *query)
 		report("B-tree", "wrong size of nonleaf record value.");
 
 	return le64_to_cpu(*(__le64 *)(raw + query->off));
-}
-
-/**
- * omap_rec_from_query - Read the omap information found by a successful query
- * @query:	the query for the omap record
- * @omap_rec:	omap record struct to receive the result
- */
-static void omap_rec_from_query(struct query *query,
-				struct omap_record *omap_rec)
-{
-	struct apfs_omap_val *omap_val;
-	struct apfs_omap_key *omap_key;
-	void *raw = query->node->raw;
-
-	if (query->len != sizeof(*omap_val))
-		report("Object map record", "wrong size of value.");
-
-	omap_val = (struct apfs_omap_val *)(raw + query->off);
-	omap_key = (struct apfs_omap_key *)(raw + query->key_off);
-
-	omap_rec->bno = le64_to_cpu(omap_val->ov_paddr);
-	omap_rec->xid = le64_to_cpu(omap_key->ok_xid);
-}
-
-/**
- * omap_lookup - Find the object map record for an object id
- * @tbl:	Root of the object map to be searched
- * @id:		id of the node
- * @omap_rec:	omap record struct to receive the result
- */
-void omap_lookup(struct node *tbl, u64 id, struct omap_record *omap_rec)
-{
-	struct query *query;
-	struct key key;
-
-	query = alloc_query(tbl, NULL /* parent */);
-
-	init_omap_key(id, sb->s_xid, &key);
-	query->key = &key;
-	query->flags |= QUERY_OMAP;
-
-	if (btree_query(&query)) { /* Omap queries shouldn't fail */
-		report("Object map", "record missing for id 0x%llx.",
-		       (unsigned long long)id);
-	}
-
-	omap_rec_from_query(query, omap_rec);
-	free_query(query);
 }
 
 /**

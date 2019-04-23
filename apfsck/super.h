@@ -336,6 +336,7 @@ struct volume_superblock {
 	struct btree *v_cat;
 	struct btree *v_extent_ref;
 	struct btree *v_snap_meta;
+	union htable_entry **v_omap_table;	/* Hash table of omap records */
 	union htable_entry **v_inode_table;	/* Hash table of all inodes */
 	union htable_entry **v_dstream_table;	/* Hash table of all dstreams */
 	union htable_entry **v_cnid_table;	/* Hash table of all cnids */
@@ -375,6 +376,8 @@ struct super_block {
 
 	/* Hash table of ephemeral object mappings for the checkpoint */
 	union htable_entry **s_cpoint_map_table;
+	/* Hash table of virtual object mappings for the container */
+	union htable_entry **s_omap_table;
 
 	/* This is excessive in most cases.  TODO: switch to a linked list? */
 	struct volume_superblock *s_volumes[APFS_NX_MAX_FILE_SYSTEMS];

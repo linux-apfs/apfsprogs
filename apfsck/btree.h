@@ -62,14 +62,6 @@ struct apfs_omap_val {
 	__le64 ov_paddr;
 } __packed;
 
-/*
- * Object map record data in memory
- */
-struct omap_record {
-	u64 bno;
-	u64 xid;
-};
-
 /* B-tree node flags */
 #define APFS_BTNODE_ROOT		0x0001
 #define APFS_BTNODE_LEAF		0x0002
@@ -142,6 +134,21 @@ struct apfs_btree_info {
 	__le64 bt_key_count;
 	__le64 bt_node_count;
 } __packed;
+
+/*
+ * Omap record data in memory
+ */
+struct omap_record {
+	/* Hash table entry header (struct htable_entry_header from htable.h) */
+	struct {
+		union htable_entry      *o_next;
+		u64                     o_oid;  /* Object id */
+	};
+
+	bool	o_seen;	/* Has this oid been seen in use? */
+	u64	o_xid;	/* Transaction id (snapshots are not supported) */
+	u64	o_bno;	/* Block number */
+};
 
 /*
  * In-memory representation of an APFS node
@@ -235,7 +242,9 @@ struct query {
 struct btree {
 	u8 type;		/* Type of the tree */
 	struct node *root;	/* Root of this b-tree */
-	struct node *omap_root;	/* Root of its object map (can be NULL) */
+
+	/* Hash table for the tree's object map (can be NULL) */
+	union htable_entry **omap_table;
 
 	/* B-tree stats as measured by the fsck */
 	u64 key_count;		/* Number of keys */
@@ -283,12 +292,13 @@ static inline bool btree_is_extentref(struct btree *btree)
 extern struct btree *parse_snap_meta_btree(u64 oid);
 extern struct btree *parse_extentref_btree(u64 oid);
 extern struct btree *parse_omap_btree(u64 oid);
-extern struct btree *parse_cat_btree(u64 oid, struct node *omap_root);
+extern struct btree *parse_cat_btree(u64 oid, union htable_entry **omap_table);
 extern struct query *alloc_query(struct node *node, struct query *parent);
 extern void free_query(struct query *query);
 extern int btree_query(struct query **query);
 extern struct node *omap_read_node(u64 id);
-extern void omap_lookup(struct node *tbl, u64 id, struct omap_record *omap_rec);
+extern void free_omap_table(union htable_entry **table);
+extern struct omap_record *get_omap_record(u64 oid, union htable_entry **table);
 extern void extentref_lookup(struct node *tbl, u64 bno,
 			     struct extref_record *extref);
 
