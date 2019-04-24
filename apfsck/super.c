@@ -780,7 +780,7 @@ static void parse_cpoint_map(struct apfs_checkpoint_mapping *raw)
 	if (raw->cpm_pad)
 		report("Checkpoint map", "non-zero padding.");
 	if (raw->cpm_fs_oid)
-		report_unknown("Ephmeral object belonging to a volume");
+		report_unknown("Ephemeral object belonging to a volume");
 }
 
 /**
