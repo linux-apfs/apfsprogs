@@ -805,7 +805,7 @@ static void check_btree_footer(struct btree *btree)
 		ctx = "Extent reference tree";
 		break;
 	case BTREE_TYPE_SNAP_META:
-		ctx = "Extent reference tree";
+		ctx = "Snapshot metadata tree";
 		break;
 	default:
 		report(NULL, "Bug!");
