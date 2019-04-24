@@ -588,6 +588,10 @@ static void parse_omap_record(struct apfs_omap_key *key,
 	u32 flags;
 	u32 size;
 
+	/* In the omap, keys and values must be aligned to eight bytes */
+	if ((u64)key & 7 || (u64)val & 7)
+		report("Omap record", "bad alignment for key or value.");
+
 	if (len != sizeof(*val))
 		report("Omap record", "wrong size of value.");
 
