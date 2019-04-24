@@ -112,6 +112,22 @@ struct apfs_btree_node_phys {
 /*38*/	__le64 btn_data[];
 } __packed;
 
+/* B-tree info flags */
+#define APFS_BTREE_UINT64_KEYS		0x00000001
+#define APFS_BTREE_SEQUENTIAL_INSERT	0x00000002
+#define APFS_BTREE_ALLOW_GHOSTS		0x00000004
+#define APFS_BTREE_EPHEMERAL		0x00000008
+#define APFS_BTREE_PHYSICAL		0x00000010
+#define APFS_BTREE_NONPERSISTENT	0x00000020
+#define APFS_BTREE_KV_NONALIGNED	0x00000040
+#define APFS_BTREE_FLAGS_VALID_MASK	(APFS_BTREE_UINT64_KEYS \
+					| APFS_BTREE_SEQUENTIAL_INSERT \
+					| APFS_BTREE_ALLOW_GHOSTS \
+					| APFS_BTREE_EPHEMERAL \
+					| APFS_BTREE_PHYSICAL \
+					| APFS_BTREE_NONPERSISTENT \
+					| APFS_BTREE_KV_NONALIGNED)
+
 /*
  * Structure used to store information about a B-tree that won't change
  * over time

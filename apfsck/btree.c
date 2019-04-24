@@ -753,6 +753,34 @@ static void parse_subtree(struct node *root,
 }
 
 /**
+ * check_btree_footer_flags - Check consistency of b-tree footer flags
+ * @flags:	the flags
+ * @btree:	the b-tree being checked
+ * @ctx:	context string for corruption reports
+ */
+static void check_btree_footer_flags(u32 flags, struct btree *btree, char *ctx)
+{
+	if ((flags & APFS_BTREE_FLAGS_VALID_MASK) != flags)
+		report(ctx, "invalid flag in use.");
+	if (flags & (APFS_BTREE_NONPERSISTENT))
+		report(ctx, "nonpersistent flag is set.");
+
+	/* TODO: are these really the only allowed settings for the flag? */
+	if (btree_is_omap(btree) && (flags & APFS_BTREE_KV_NONALIGNED))
+		report(ctx, "unaligned keys/values.");
+	if (!btree_is_omap(btree) && !(flags & APFS_BTREE_KV_NONALIGNED))
+		report(ctx, "aligned keys/values.");
+
+	if (flags & (APFS_BTREE_ALLOW_GHOSTS | APFS_BTREE_EPHEMERAL))
+		report(ctx, "space manager flag in use.");
+
+	if (!btree_is_catalog(btree) && !(flags & APFS_BTREE_PHYSICAL))
+		report(ctx, "physical flag not set in info footer.");
+	if (btree_is_catalog(btree) && (flags & APFS_BTREE_PHYSICAL))
+		report(ctx, "physical flag set in info footer.");
+}
+
+/**
  * check_btree_footer - Check that btree_info matches the collected stats
  * @btree: b-tree to check
  */
@@ -779,13 +807,16 @@ static void check_btree_footer(struct btree *btree)
 		report(NULL, "Bug!");
 	}
 
-	/* Flags are not part of the footer, but this check fits best here */
+	/* This flag is not part of the footer, but its check fits best here */
 	if (!node_is_root(root))
 		report(ctx, "wrong flag in root node.");
 
 	info = (void *)root->raw + sb->s_blocksize - sizeof(*info);
 	if (le32_to_cpu(info->bt_fixed.bt_node_size) != sb->s_blocksize)
 		report_unknown("Objects with more than one block");
+
+	check_btree_footer_flags(le32_to_cpu(info->bt_fixed.bt_flags),
+				 btree, ctx);
 
 	if (le64_to_cpu(info->bt_key_count) != btree->key_count)
 		report(ctx, "wrong key count in info footer.");
