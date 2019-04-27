@@ -699,63 +699,6 @@ static void parse_main_super(struct super_block *sb)
 }
 
 /**
- * free_cpoint_map - Free a map structure after performing some final checks
- * @entry: the entry to free
- */
-static void free_cpoint_map(union htable_entry *entry)
-{
-	struct cpoint_map *map = &entry->mapping;
-	u32 blk_count = map->m_size >> sb->s_blocksize_bits;
-	u64 obj_start = map->m_paddr;
-	u64 obj_end = map->m_paddr + blk_count; /* Objects can't wrap, right? */
-	u64 data_start = sb->s_data_base;
-	u64 data_end = sb->s_data_base + sb->s_data_blocks;
-	u64 valid_start;
-
-	if (obj_start < data_start || obj_end > data_end)
-		report("Checkpoint map", "block number is out of range.");
-
-	/* Not all blocks in the data area belong to the current checkpoint */
-	valid_start = sb->s_data_base + sb->s_data_index;
-	if (obj_start >= valid_start && obj_end > valid_start + sb->s_data_len)
-		report("Checkpoint map", "block number outside valid range.");
-	if (obj_start < valid_start &&
-	    obj_end + sb->s_data_blocks > valid_start + sb->s_data_len)
-		report("Checkpoint map", "block number outside valid range.");
-
-	if (map->m_oid < APFS_OID_RESERVED_COUNT)
-		report("Checkpoint map", "reserved object id.");
-	if (map->m_oid >= sb->s_next_oid)
-		report("Checkpoint map", "unassigned object id.");
-
-	free(entry);
-}
-
-/**
- * free_cpoint_map_table - Free the checkpoint map table and all its entries
- * @table: table to free
- */
-static void free_cpoint_map_table(union htable_entry **table)
-{
-	free_htable(table, free_cpoint_map);
-}
-
-/**
- * get_cpoint_map - Find or create a map structure in the checkpoint map table
- * @oid: ephemeral object id
- *
- * Returns the checkpoint mapping structure, after creating it if necessary.
- */
-static struct cpoint_map *get_cpoint_map(u64 oid)
-{
-	union htable_entry *entry;
-
-	entry = get_htable_entry(oid, sizeof(struct cpoint_map),
-				 sb->s_cpoint_map_table);
-	return &entry->mapping;
-}
-
-/**
  * parse_cpoint_map - Parse and verify a checkpoint mapping
  * @raw: the raw checkpoint mapping
  */
@@ -944,41 +887,6 @@ void parse_filesystem(void)
 		report("Checkpoint descriptor area", "no valid superblocks.");
 	main_super_compare(sb->s_raw, msb_raw);
 	munmap(msb_raw, sb->s_blocksize);
-}
-
-/**
- * read_ephemeral_object - Read an ephemeral object header from disk
- * @oid:	object id
- * @obj:	object struct to receive the results
- *
- * Returns a pointer to the raw data of the object in memory, after checking
- * the consistency of some of its fields.
- */
-static void *read_ephemeral_object(u64 oid, struct object *obj)
-{
-	struct apfs_obj_phys *raw;
-	struct cpoint_map *map;
-	u32 storage_type;
-
-	assert(sb->s_cpoint_map_table);
-	assert(sb->s_xid);
-
-	map = get_cpoint_map(oid);
-	if (!map->m_paddr)
-		report("Ephemeral object", "missing checkpoint mapping.");
-
-	/* Multiblock ephemeral objects may exist, but are not supported yet */
-	raw = read_object_nocheck(map->m_paddr, obj);
-	if (obj->oid != oid)
-		report("Ephemeral object", "wrong object id.");
-	if (obj->xid != sb->s_xid)
-		report("Ephemeral object", "not part of latest transaction.");
-
-	storage_type = parse_object_flags(obj->flags);
-	if (storage_type != APFS_OBJ_EPHEMERAL)
-		report("Object header", "wrong flag for ephemeral object.");
-
-	return raw;
 }
 
 /**
