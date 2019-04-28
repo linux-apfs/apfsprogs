@@ -45,6 +45,7 @@ void check_spaceman(u64 oid)
 {
 	struct object obj;
 	struct apfs_spaceman_phys *raw;
+	u32 flags;
 
 	raw = read_ephemeral_object(oid, &obj);
 	if (obj.type != APFS_OBJECT_TYPE_SPACEMAN)
@@ -55,6 +56,11 @@ void check_spaceman(u64 oid)
 	if (le32_to_cpu(raw->sm_block_size) != sb->s_blocksize)
 		report("Space manager", "wrong block size.");
 	parse_spaceman_chunk_counts(raw);
+
+	/* TODO: handle the undocumented 'versioned' flag */
+	flags = le32_to_cpu(raw->sm_flags);
+	if ((flags & APFS_SM_FLAGS_VALID_MASK) != flags)
+		report("Space manager", "invalid flag in use.");
 
 	munmap(raw, sb->s_blocksize);
 }
