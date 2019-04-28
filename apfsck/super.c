@@ -20,6 +20,7 @@
 #include "htable.h"
 #include "inode.h"
 #include "object.h"
+#include "spaceman.h"
 #include "types.h"
 #include "super.h"
 
@@ -612,6 +613,8 @@ static void check_container(struct super_block *sb)
 
 	free_omap_table(sb->s_omap_table);
 	sb->s_omap_table = NULL;
+
+	check_spaceman(le64_to_cpu(sb->s_raw->nx_spaceman_oid));
 }
 
 /**

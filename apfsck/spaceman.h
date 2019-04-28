@@ -156,4 +156,6 @@ struct apfs_spaceman_phys {
 	struct apfs_spaceman_datazone_info_phys	sm_datazone;
 } __packed;
 
+extern void check_spaceman(u64 oid);
+
 #endif	/* _SPACEMAN_H */
