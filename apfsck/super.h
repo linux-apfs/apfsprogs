@@ -379,6 +379,11 @@ struct super_block {
 	/* Hash table of virtual object mappings for the container */
 	union htable_entry **s_omap_table;
 
+	/* Fields for the space manager */
+	u32 sm_blocks_per_chunk;
+	u32 sm_chunks_per_cib;
+	u32 sm_cibs_per_cab;
+
 	/* This is excessive in most cases.  TODO: switch to a linked list? */
 	struct volume_superblock *s_volumes[APFS_NX_MAX_FILE_SYSTEMS];
 };
