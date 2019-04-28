@@ -24,5 +24,9 @@ void check_spaceman(u64 oid)
 		report("Space manager", "wrong object type.");
 	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
 		report("Space manager", "wrong object subtype.");
+
+	if (le32_to_cpu(raw->sm_block_size) != sb->s_blocksize)
+		report("Space manager", "wrong block size.");
+
 	munmap(raw, sb->s_blocksize);
 }
