@@ -38,6 +38,59 @@ static void parse_spaceman_chunk_counts(struct apfs_spaceman_phys *sm)
 }
 
 /**
+ * get_cib_address - Get the block number of a device's cib (or of its cab)
+ * @sm:		pointer to the raw space manager
+ * @offset:	offset of the cib address in @sm
+ */
+static u64 get_cib_address(struct apfs_spaceman_phys *sm, u32 offset)
+{
+	char *addr_p = (char *)sm + offset;
+
+	if (offset & 0x7)
+		report("Spaceman device", "address is not aligned to 8 bytes.");
+	return *((u64 *)addr_p);
+}
+
+/**
+ * parse_spaceman_main_device - Parse and check the spaceman main device struct
+ * @sm: pointer to the raw space manager
+ */
+static void parse_spaceman_main_device(struct apfs_spaceman_phys *sm)
+{
+	struct apfs_spaceman_device *dev = &sm->sm_dev[APFS_SD_MAIN];
+	struct object obj;
+	void *raw; /* May be a cib or a cab */
+	u32 addr_off;
+
+	addr_off = le64_to_cpu(dev->sm_addr_offset);
+	raw = read_object(get_cib_address(sm, addr_off), NULL, &obj);
+	munmap(raw, sb->s_blocksize);
+
+	if (dev->sm_reserved || dev->sm_reserved2)
+		report("Spaceman device", "non-zero padding.");
+}
+
+/**
+ * check_spaceman_tier2_device - Check that the second-tier device is empty
+ * @sm: pointer to the raw space manager
+ */
+static void check_spaceman_tier2_device(struct apfs_spaceman_phys *sm)
+{
+	struct apfs_spaceman_device *dev = &sm->sm_dev[APFS_SD_TIER2];
+	u32 addr_off;
+
+	addr_off = le64_to_cpu(dev->sm_addr_offset);
+	if (get_cib_address(sm, addr_off)) /* Empty device has no cib */
+		report_unknown("Fusion drive");
+
+	if (dev->sm_block_count || dev->sm_chunk_count || dev->sm_cib_count ||
+	    dev->sm_cab_count || dev->sm_free_count)
+		report_unknown("Fusion drive");
+	if (dev->sm_reserved || dev->sm_reserved2)
+		report("Spaceman device", "non-zero padding.");
+}
+
+/**
  * check_spaceman - Check the space manager structures for a container
  * @oid: ephemeral object id for the spaceman structure
  */
@@ -56,6 +109,9 @@ void check_spaceman(u64 oid)
 	if (le32_to_cpu(raw->sm_block_size) != sb->s_blocksize)
 		report("Space manager", "wrong block size.");
 	parse_spaceman_chunk_counts(raw);
+
+	parse_spaceman_main_device(raw);
+	check_spaceman_tier2_device(raw);
 
 	/* TODO: handle the undocumented 'versioned' flag */
 	flags = le32_to_cpu(raw->sm_flags);
