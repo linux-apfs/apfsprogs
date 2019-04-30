@@ -38,6 +38,16 @@ static void parse_spaceman_chunk_counts(struct apfs_spaceman_phys *sm)
 }
 
 /**
+ * parse_chunk_info_block - Parse and check a chunk-info block
+ * @cib: the raw chunk-info block
+ */
+static void parse_chunk_info_block(struct apfs_chunk_info_block *cib)
+{
+	if (cib->cib_index) /* The cib's index in the nonexistent cab */
+		report("Chunk-info block", "wrong index.");
+}
+
+/**
  * get_cib_address - Get the block number of a device's cib (or of its cab)
  * @sm:		pointer to the raw space manager
  * @offset:	offset of the cib address in @sm
@@ -73,6 +83,8 @@ static void parse_spaceman_main_device(struct apfs_spaceman_phys *sm)
 	}
 	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
 		report("Chunk-info block", "wrong object subtype.");
+
+	parse_chunk_info_block(raw);
 	munmap(raw, sb->s_blocksize);
 
 	if (dev->sm_reserved || dev->sm_reserved2)
