@@ -64,6 +64,15 @@ static void parse_spaceman_main_device(struct apfs_spaceman_phys *sm)
 
 	addr_off = le64_to_cpu(dev->sm_addr_offset);
 	raw = read_object(get_cib_address(sm, addr_off), NULL, &obj);
+	if (obj.type != APFS_OBJECT_TYPE_SPACEMAN_CIB) {
+		/* No chunk-info address blocks have been encountered so far */
+		if (obj.type == APFS_OBJECT_TYPE_SPACEMAN_CAB)
+			report_unknown("Chunk-info address block");
+		else
+			report("Chunk-info block", "wrong object type.");
+	}
+	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
+		report("Chunk-info block", "wrong object subtype.");
 	munmap(raw, sb->s_blocksize);
 
 	if (dev->sm_reserved || dev->sm_reserved2)
