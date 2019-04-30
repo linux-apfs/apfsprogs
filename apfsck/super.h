@@ -383,6 +383,8 @@ struct super_block {
 	u32 sm_blocks_per_chunk;
 	u32 sm_chunks_per_cib;
 	u32 sm_cibs_per_cab;
+	u32 sm_cib_count;
+	u32 sm_chunk_count;
 
 	/* This is excessive in most cases.  TODO: switch to a linked list? */
 	struct volume_superblock *s_volumes[APFS_NX_MAX_FILE_SYSTEMS];

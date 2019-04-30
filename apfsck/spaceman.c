@@ -15,7 +15,8 @@
  * @sm: pointer to the raw spaceman structure
  *
  * Checks the counts of blocks per chunk, chunks per cib, and cibs per cab, and
- * reads them into the in-memory container superblock.
+ * reads them into the in-memory container superblock.  Also calculates the
+ * total number of chunks and cibs in the container.
  */
 static void parse_spaceman_chunk_counts(struct apfs_spaceman_phys *sm)
 {
@@ -35,6 +36,11 @@ static void parse_spaceman_chunk_counts(struct apfs_spaceman_phys *sm)
 	sb->sm_cibs_per_cab = (sb->s_blocksize - cab_size) / sizeof(__le64);
 	if (le32_to_cpu(sm->sm_cibs_per_cab) != sb->sm_cibs_per_cab)
 		report("Space manager", "wrong count of cibs per cab.");
+
+	sb->sm_chunk_count = DIV_ROUND_UP(sb->s_block_count,
+					  sb->sm_blocks_per_chunk);
+	sb->sm_cib_count = DIV_ROUND_UP(sb->sm_chunk_count,
+					sb->sm_chunks_per_cib);
 }
 
 /**
@@ -71,6 +77,15 @@ static void parse_spaceman_main_device(struct apfs_spaceman_phys *sm)
 	struct object obj;
 	void *raw; /* May be a cib or a cab */
 	u32 addr_off;
+
+	if (dev->sm_cab_count)
+		report_unknown("Chunk-info address block");
+	if (le32_to_cpu(dev->sm_cib_count) != sb->sm_cib_count)
+		report("Spaceman device", "wrong count of chunk-info blocks.");
+	if (le32_to_cpu(dev->sm_chunk_count) != sb->sm_chunk_count)
+		report("Spaceman device", "wrong count of chunks.");
+	if (le32_to_cpu(dev->sm_block_count) != sb->s_block_count)
+		report("Spaceman device", "wrong block count.");
 
 	addr_off = le64_to_cpu(dev->sm_addr_offset);
 	raw = read_object(get_cib_address(sm, addr_off), NULL, &obj);
