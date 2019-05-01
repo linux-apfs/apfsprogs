@@ -45,12 +45,23 @@ static void parse_spaceman_chunk_counts(struct apfs_spaceman_phys *sm)
 
 /**
  * parse_chunk_info_block - Parse and check a chunk-info block
- * @cib: the raw chunk-info block
+ * @bno:	block number of the chunk-info block
+ * @index:	index of the chunk-info block
  */
-static void parse_chunk_info_block(struct apfs_chunk_info_block *cib)
+static void parse_chunk_info_block(u64 bno, int index)
 {
-	if (cib->cib_index) /* The cib's index in the nonexistent cab */
+	struct object obj;
+	struct apfs_chunk_info_block *cib;
+
+	cib = read_object(bno, NULL, &obj);
+	if (obj.type != APFS_OBJECT_TYPE_SPACEMAN_CIB)
+		report("Chunk-info block", "wrong object type.");
+	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
+		report("Chunk-info block", "wrong object subtype.");
+
+	if (le32_to_cpu(cib->cib_index) != index)
 		report("Chunk-info block", "wrong index.");
+	munmap(cib, sb->s_blocksize);
 }
 
 /**
@@ -76,9 +87,8 @@ static u64 get_cib_address(struct apfs_spaceman_phys *sm, u32 offset)
 static void parse_spaceman_main_device(struct apfs_spaceman_phys *sm)
 {
 	struct apfs_spaceman_device *dev = &sm->sm_dev[APFS_SD_MAIN];
-	struct object obj;
-	void *raw; /* May be a cib or a cab */
 	u32 addr_off;
+	int i;
 
 	if (dev->sm_cab_count)
 		report_unknown("Chunk-info address block");
@@ -90,19 +100,11 @@ static void parse_spaceman_main_device(struct apfs_spaceman_phys *sm)
 		report("Spaceman device", "wrong block count.");
 
 	addr_off = le64_to_cpu(dev->sm_addr_offset);
-	raw = read_object(get_cib_address(sm, addr_off), NULL, &obj);
-	if (obj.type != APFS_OBJECT_TYPE_SPACEMAN_CIB) {
-		/* No chunk-info address blocks have been encountered so far */
-		if (obj.type == APFS_OBJECT_TYPE_SPACEMAN_CAB)
-			report_unknown("Chunk-info address block");
-		else
-			report("Chunk-info block", "wrong object type.");
-	}
-	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
-		report("Chunk-info block", "wrong object subtype.");
+	for (i = 0; i < sb->sm_cib_count; ++i) {
+		u64 bno = get_cib_address(sm, addr_off + i * sizeof(u64));
 
-	parse_chunk_info_block(raw);
-	munmap(raw, sb->s_blocksize);
+		parse_chunk_info_block(bno, i);
+	}
 
 	if (dev->sm_reserved || dev->sm_reserved2)
 		report("Spaceman device", "non-zero padding.");
