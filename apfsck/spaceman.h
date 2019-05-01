@@ -156,6 +156,16 @@ struct apfs_spaceman_phys {
 	struct apfs_spaceman_datazone_info_phys	sm_datazone;
 } __packed;
 
+/* Space manager data in memory */
+struct spaceman {
+	/* Spaceman info read from the on-disk structures */
+	u32 sm_blocks_per_chunk;
+	u32 sm_chunks_per_cib;
+	u32 sm_cibs_per_cab;
+	u32 sm_cib_count;
+	u32 sm_chunk_count;
+};
+
 extern void check_spaceman(u64 oid);
 
 #endif	/* _SPACEMAN_H */

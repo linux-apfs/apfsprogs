@@ -12,35 +12,36 @@
 
 /**
  * parse_spaceman_chunk_counts - Parse spaceman fields for chunk-related counts
- * @sm: pointer to the raw spaceman structure
+ * @raw: pointer to the raw spaceman structure
  *
  * Checks the counts of blocks per chunk, chunks per cib, and cibs per cab, and
  * reads them into the in-memory container superblock.  Also calculates the
  * total number of chunks and cibs in the container.
  */
-static void parse_spaceman_chunk_counts(struct apfs_spaceman_phys *sm)
+static void parse_spaceman_chunk_counts(struct apfs_spaceman_phys *raw)
 {
+	struct spaceman *sm = &sb->s_spaceman;
 	int chunk_info_size = sizeof(struct apfs_chunk_info);
 	int cib_size = sizeof(struct apfs_chunk_info_block);
 	int cab_size = sizeof(struct apfs_cib_addr_block);
 
-	sb->sm_blocks_per_chunk = le32_to_cpu(sm->sm_blocks_per_chunk);
-	if (sb->sm_blocks_per_chunk != 8 * sb->s_blocksize)
+	sm->sm_blocks_per_chunk = le32_to_cpu(raw->sm_blocks_per_chunk);
+	if (sm->sm_blocks_per_chunk != 8 * sb->s_blocksize)
 		/* One bitmap block for each chunk */
 		report("Space manager", "wrong count of blocks per chunk.");
 
-	sb->sm_chunks_per_cib = (sb->s_blocksize - cib_size) / chunk_info_size;
-	if (le32_to_cpu(sm->sm_chunks_per_cib) != sb->sm_chunks_per_cib)
+	sm->sm_chunks_per_cib = (sb->s_blocksize - cib_size) / chunk_info_size;
+	if (le32_to_cpu(raw->sm_chunks_per_cib) != sm->sm_chunks_per_cib)
 		report("Space manager", "wrong count of chunks per cib.");
 
-	sb->sm_cibs_per_cab = (sb->s_blocksize - cab_size) / sizeof(__le64);
-	if (le32_to_cpu(sm->sm_cibs_per_cab) != sb->sm_cibs_per_cab)
+	sm->sm_cibs_per_cab = (sb->s_blocksize - cab_size) / sizeof(__le64);
+	if (le32_to_cpu(raw->sm_cibs_per_cab) != sm->sm_cibs_per_cab)
 		report("Space manager", "wrong count of cibs per cab.");
 
-	sb->sm_chunk_count = DIV_ROUND_UP(sb->s_block_count,
-					  sb->sm_blocks_per_chunk);
-	sb->sm_cib_count = DIV_ROUND_UP(sb->sm_chunk_count,
-					sb->sm_chunks_per_cib);
+	sm->sm_chunk_count = DIV_ROUND_UP(sb->s_block_count,
+					  sm->sm_blocks_per_chunk);
+	sm->sm_cib_count = DIV_ROUND_UP(sm->sm_chunk_count,
+					sm->sm_chunks_per_cib);
 }
 
 /**
@@ -66,12 +67,12 @@ static void parse_chunk_info_block(u64 bno, int index)
 
 /**
  * get_cib_address - Get the block number of a device's cib (or of its cab)
- * @sm:		pointer to the raw space manager
- * @offset:	offset of the cib address in @sm
+ * @raw:	pointer to the raw space manager
+ * @offset:	offset of the cib address in @raw
  */
-static u64 get_cib_address(struct apfs_spaceman_phys *sm, u32 offset)
+static u64 get_cib_address(struct apfs_spaceman_phys *raw, u32 offset)
 {
-	char *addr_p = (char *)sm + offset;
+	char *addr_p = (char *)raw + offset;
 
 	if (offset & 0x7)
 		report("Spaceman device", "address is not aligned to 8 bytes.");
@@ -82,26 +83,27 @@ static u64 get_cib_address(struct apfs_spaceman_phys *sm, u32 offset)
 
 /**
  * parse_spaceman_main_device - Parse and check the spaceman main device struct
- * @sm: pointer to the raw space manager
+ * @raw: pointer to the raw space manager
  */
-static void parse_spaceman_main_device(struct apfs_spaceman_phys *sm)
+static void parse_spaceman_main_device(struct apfs_spaceman_phys *raw)
 {
-	struct apfs_spaceman_device *dev = &sm->sm_dev[APFS_SD_MAIN];
+	struct spaceman *sm = &sb->s_spaceman;
+	struct apfs_spaceman_device *dev = &raw->sm_dev[APFS_SD_MAIN];
 	u32 addr_off;
 	int i;
 
 	if (dev->sm_cab_count)
 		report_unknown("Chunk-info address block");
-	if (le32_to_cpu(dev->sm_cib_count) != sb->sm_cib_count)
+	if (le32_to_cpu(dev->sm_cib_count) != sm->sm_cib_count)
 		report("Spaceman device", "wrong count of chunk-info blocks.");
-	if (le32_to_cpu(dev->sm_chunk_count) != sb->sm_chunk_count)
+	if (le32_to_cpu(dev->sm_chunk_count) != sm->sm_chunk_count)
 		report("Spaceman device", "wrong count of chunks.");
 	if (le32_to_cpu(dev->sm_block_count) != sb->s_block_count)
 		report("Spaceman device", "wrong block count.");
 
 	addr_off = le64_to_cpu(dev->sm_addr_offset);
-	for (i = 0; i < sb->sm_cib_count; ++i) {
-		u64 bno = get_cib_address(sm, addr_off + i * sizeof(u64));
+	for (i = 0; i < sm->sm_cib_count; ++i) {
+		u64 bno = get_cib_address(raw, addr_off + i * sizeof(u64));
 
 		parse_chunk_info_block(bno, i);
 	}
@@ -112,19 +114,20 @@ static void parse_spaceman_main_device(struct apfs_spaceman_phys *sm)
 
 /**
  * check_spaceman_tier2_device - Check that the second-tier device is empty
- * @sm: pointer to the raw space manager
+ * @raw: pointer to the raw space manager
  */
-static void check_spaceman_tier2_device(struct apfs_spaceman_phys *sm)
+static void check_spaceman_tier2_device(struct apfs_spaceman_phys *raw)
 {
-	struct apfs_spaceman_device *main_dev = &sm->sm_dev[APFS_SD_MAIN];
-	struct apfs_spaceman_device *dev = &sm->sm_dev[APFS_SD_TIER2];
+	struct spaceman *sm = &sb->s_spaceman;
+	struct apfs_spaceman_device *main_dev = &raw->sm_dev[APFS_SD_MAIN];
+	struct apfs_spaceman_device *dev = &raw->sm_dev[APFS_SD_TIER2];
 	u32 addr_off, main_addr_off;
 
 	addr_off = le64_to_cpu(dev->sm_addr_offset);
 	main_addr_off = le32_to_cpu(main_dev->sm_addr_offset);
-	if (addr_off != main_addr_off + sb->sm_cib_count * sizeof(u64))
+	if (addr_off != main_addr_off + sm->sm_cib_count * sizeof(u64))
 		report("Spaceman device", "not consecutive address offsets.");
-	if (get_cib_address(sm, addr_off)) /* Empty device has no cib */
+	if (get_cib_address(raw, addr_off)) /* Empty device has no cib */
 		report_unknown("Fusion drive");
 
 	if (dev->sm_block_count || dev->sm_chunk_count || dev->sm_cib_count ||
