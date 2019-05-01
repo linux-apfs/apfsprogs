@@ -114,10 +114,14 @@ static void parse_spaceman_main_device(struct apfs_spaceman_phys *sm)
  */
 static void check_spaceman_tier2_device(struct apfs_spaceman_phys *sm)
 {
+	struct apfs_spaceman_device *main_dev = &sm->sm_dev[APFS_SD_MAIN];
 	struct apfs_spaceman_device *dev = &sm->sm_dev[APFS_SD_TIER2];
-	u32 addr_off;
+	u32 addr_off, main_addr_off;
 
 	addr_off = le64_to_cpu(dev->sm_addr_offset);
+	main_addr_off = le32_to_cpu(main_dev->sm_addr_offset);
+	if (addr_off != main_addr_off + sb->sm_cib_count * sizeof(u64))
+		report("Spaceman device", "not consecutive address offsets.");
 	if (get_cib_address(sm, addr_off)) /* Empty device has no cib */
 		report_unknown("Fusion drive");
 
