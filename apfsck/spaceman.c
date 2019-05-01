@@ -64,6 +64,8 @@ static u64 get_cib_address(struct apfs_spaceman_phys *sm, u32 offset)
 
 	if (offset & 0x7)
 		report("Spaceman device", "address is not aligned to 8 bytes.");
+	if (offset >= sb->s_blocksize || offset + sizeof(u64) > sb->s_blocksize)
+		report("Spaceman device", "address is out of bounds.");
 	return *((u64 *)addr_p);
 }
 
