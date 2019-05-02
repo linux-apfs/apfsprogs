@@ -167,6 +167,7 @@ struct spaceman {
 
 	/* Spaceman info measured by the fsck */
 	u32 sm_chunks;	/* Number of chunks */
+	u32 sm_blocks;	/* Number of blocks */
 };
 
 extern void check_spaceman(u64 oid);

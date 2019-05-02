@@ -61,6 +61,7 @@ static void parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last)
 		report("Chunk-info", "too many blocks.");
 	if (!is_last && block_count != sm->sm_blocks_per_chunk)
 		report("Chunk-info", "too few blocks.");
+	sm->sm_blocks += block_count;
 }
 
 /**
@@ -147,6 +148,8 @@ static void parse_spaceman_main_device(struct apfs_spaceman_phys *raw)
 
 	if (sm->sm_chunk_count != sm->sm_chunks)
 		report("Spaceman device", "bad total number of chunks.");
+	if (sb->s_block_count != sm->sm_blocks)
+		report("Spaceman device", "bad total number of blocks.");
 
 	if (dev->sm_reserved || dev->sm_reserved2)
 		report("Spaceman device", "non-zero padding.");
