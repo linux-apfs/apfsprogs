@@ -51,8 +51,10 @@ static void parse_spaceman_chunk_counts(struct apfs_spaceman_phys *raw)
  */
 static void parse_chunk_info_block(u64 bno, int index)
 {
+	struct spaceman *sm = &sb->s_spaceman;
 	struct object obj;
 	struct apfs_chunk_info_block *cib;
+	u32 chunk_count;
 
 	cib = read_object(bno, NULL, &obj);
 	if (obj.type != APFS_OBJECT_TYPE_SPACEMAN_CIB)
@@ -62,6 +64,14 @@ static void parse_chunk_info_block(u64 bno, int index)
 
 	if (le32_to_cpu(cib->cib_index) != index)
 		report("Chunk-info block", "wrong index.");
+
+	chunk_count = le32_to_cpu(cib->cib_chunk_info_count);
+	if (chunk_count > sm->sm_chunks_per_cib)
+		report("Chunk-info block", "too many chunks.");
+	if (index != sm->sm_cib_count - 1 &&
+	    chunk_count != sm->sm_chunks_per_cib)
+		report("Chunk-info block", "too few chunks.");
+
 	munmap(cib, sb->s_blocksize);
 }
 
