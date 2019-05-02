@@ -164,6 +164,9 @@ struct spaceman {
 	u32 sm_cibs_per_cab;
 	u32 sm_cib_count;
 	u32 sm_chunk_count;
+
+	/* Spaceman info measured by the fsck */
+	u32 sm_chunks;	/* Number of chunks */
 };
 
 extern void check_spaceman(u64 oid);

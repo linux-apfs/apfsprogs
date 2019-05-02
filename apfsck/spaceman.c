@@ -71,6 +71,7 @@ static void parse_chunk_info_block(u64 bno, int index)
 	if (index != sm->sm_cib_count - 1 &&
 	    chunk_count != sm->sm_chunks_per_cib)
 		report("Chunk-info block", "too few chunks.");
+	sm->sm_chunks += chunk_count;
 
 	munmap(cib, sb->s_blocksize);
 }
@@ -117,6 +118,9 @@ static void parse_spaceman_main_device(struct apfs_spaceman_phys *raw)
 
 		parse_chunk_info_block(bno, i);
 	}
+
+	if (sm->sm_chunk_count != sm->sm_chunks)
+		report("Spaceman device", "bad total number of chunks.");
 
 	if (dev->sm_reserved || dev->sm_reserved2)
 		report("Spaceman device", "non-zero padding.");
