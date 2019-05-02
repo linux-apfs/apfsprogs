@@ -45,6 +45,23 @@ static void parse_spaceman_chunk_counts(struct apfs_spaceman_phys *raw)
 }
 
 /**
+ * parse_chunk_info - Parse and check a chunk info structure
+ * @chunk:	pointer to the raw chunk info structure
+ * @is_last:	is this the last chunk of the device?
+ */
+static void parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last)
+{
+	struct spaceman *sm = &sb->s_spaceman;
+	u32 block_count;
+
+	block_count = le32_to_cpu(chunk->ci_block_count);
+	if (block_count > sm->sm_blocks_per_chunk)
+		report("Chunk-info", "too many blocks.");
+	if (!is_last && block_count != sm->sm_blocks_per_chunk)
+		report("Chunk-info", "too few blocks.");
+}
+
+/**
  * parse_chunk_info_block - Parse and check a chunk-info block
  * @bno:	block number of the chunk-info block
  * @index:	index of the chunk-info block
@@ -55,6 +72,8 @@ static void parse_chunk_info_block(u64 bno, int index)
 	struct object obj;
 	struct apfs_chunk_info_block *cib;
 	u32 chunk_count;
+	bool last_cib = index == sm->sm_cib_count - 1;
+	int i;
 
 	cib = read_object(bno, NULL, &obj);
 	if (obj.type != APFS_OBJECT_TYPE_SPACEMAN_CIB)
@@ -68,10 +87,13 @@ static void parse_chunk_info_block(u64 bno, int index)
 	chunk_count = le32_to_cpu(cib->cib_chunk_info_count);
 	if (chunk_count > sm->sm_chunks_per_cib)
 		report("Chunk-info block", "too many chunks.");
-	if (index != sm->sm_cib_count - 1 &&
-	    chunk_count != sm->sm_chunks_per_cib)
+	if (!last_cib && chunk_count != sm->sm_chunks_per_cib)
 		report("Chunk-info block", "too few chunks.");
 	sm->sm_chunks += chunk_count;
+
+	for (i = 0; i < chunk_count - 1; ++i)
+		parse_chunk_info(&cib->cib_chunk_info[i], false /* is_last */);
+	parse_chunk_info(&cib->cib_chunk_info[chunk_count - 1], last_cib);
 
 	munmap(cib, sb->s_blocksize);
 }
