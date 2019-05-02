@@ -55,6 +55,8 @@ static void parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last)
 	u32 block_count;
 
 	block_count = le32_to_cpu(chunk->ci_block_count);
+	if (!block_count)
+		report("Chunk-info", "has no blocks.");
 	if (block_count > sm->sm_blocks_per_chunk)
 		report("Chunk-info", "too many blocks.");
 	if (!is_last && block_count != sm->sm_blocks_per_chunk)
@@ -85,6 +87,8 @@ static void parse_chunk_info_block(u64 bno, int index)
 		report("Chunk-info block", "wrong index.");
 
 	chunk_count = le32_to_cpu(cib->cib_chunk_info_count);
+	if (!chunk_count)
+		report("Chunk-info block", "has no chunks.");
 	if (chunk_count > sm->sm_chunks_per_cib)
 		report("Chunk-info block", "too many chunks.");
 	if (!last_cib && chunk_count != sm->sm_chunks_per_cib)
