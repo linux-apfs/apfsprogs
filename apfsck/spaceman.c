@@ -4,7 +4,11 @@
  * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */
 
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <sys/mman.h>
+#include <unistd.h>
 #include "apfsck.h"
 #include "object.h"
 #include "spaceman.h"
@@ -45,6 +49,68 @@ static void parse_spaceman_chunk_counts(struct apfs_spaceman_phys *raw)
 }
 
 /**
+ * read_chunk_bitmap - Read a chunk's bitmap into memory
+ * @addr: first block number for the chunk
+ * @bmap: block number for the chunk's bitmap, or zero if the chunk is all free
+ *
+ * Returns a pointer to the chunk's bitmap, read into its proper position
+ * within the in-memory bitmap for the container.
+ */
+static void *read_chunk_bitmap(u64 addr, u64 bmap)
+{
+	struct spaceman *sm = &sb->s_spaceman;
+	ssize_t read_bytes;
+	void *buf, *ret;
+	size_t count;
+	off_t offset;
+	u32 chunk_number;
+
+	assert(sm->sm_bitmap);
+
+	/* Prevent out-of-bounds writes to sm->sm_bitmap */
+	if (addr & (sm->sm_blocks_per_chunk - 1))
+		report("Chunk-info", "chunk address isn't multiple of size.");
+	chunk_number = addr / sm->sm_blocks_per_chunk;
+	if (addr >= sb->s_block_count)
+		report("Chunk-info", "chunk address is out of bounds.");
+
+	ret = buf = sm->sm_bitmap + chunk_number * sb->s_blocksize;
+	if (!bmap) /* The whole chunk is free, so leave this block as zero */
+		return ret;
+
+	count = sb->s_blocksize;
+	offset = bmap * sb->s_blocksize;
+	do {
+		read_bytes = pread(fd, buf, count, offset);
+		if (read_bytes < 0) {
+			perror(NULL);
+			exit(1);
+		}
+		buf += read_bytes;
+		count -= read_bytes;
+		offset += read_bytes;
+	} while (read_bytes > 0);
+
+	return ret;
+}
+
+/**
+ * count_chunk_free - Count the free blocks in a chunk
+ * @bmap: pointer to the chunk's bitmap
+ * @blks: number of blocks in the chunk
+ */
+static int count_chunk_free(void *bmap, u32 blks)
+{
+	unsigned long long *curr, *end;
+	int free = blks;
+
+	end = bmap + sb->s_blocksize;
+	for (curr = bmap; curr < end; ++curr)
+		free -= __builtin_popcountll(*curr);
+	return free;
+}
+
+/**
  * parse_chunk_info - Parse and check a chunk info structure
  * @chunk:	pointer to the raw chunk info structure
  * @is_last:	is this the last chunk of the device?
@@ -53,6 +119,7 @@ static void parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last)
 {
 	struct spaceman *sm = &sb->s_spaceman;
 	u32 block_count;
+	void *bitmap;
 
 	block_count = le32_to_cpu(chunk->ci_block_count);
 	if (!block_count)
@@ -62,6 +129,13 @@ static void parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last)
 	if (!is_last && block_count != sm->sm_blocks_per_chunk)
 		report("Chunk-info", "too few blocks.");
 	sm->sm_blocks += block_count;
+
+	bitmap = read_chunk_bitmap(le64_to_cpu(chunk->ci_addr),
+				   le64_to_cpu(chunk->ci_bitmap_addr));
+
+	if (le32_to_cpu(chunk->ci_free_count) != count_chunk_free(bitmap,
+								  block_count))
+		report("Chunk-info", "wrong count of free blocks.");
 }
 
 /**
@@ -186,6 +260,7 @@ static void check_spaceman_tier2_device(struct apfs_spaceman_phys *raw)
  */
 void check_spaceman(u64 oid)
 {
+	struct spaceman *sm = &sb->s_spaceman;
 	struct object obj;
 	struct apfs_spaceman_phys *raw;
 	u32 flags;
@@ -199,6 +274,13 @@ void check_spaceman(u64 oid)
 	if (le32_to_cpu(raw->sm_block_size) != sb->s_blocksize)
 		report("Space manager", "wrong block size.");
 	parse_spaceman_chunk_counts(raw);
+
+	/* All bitmaps will need to be read into memory */
+	sm->sm_bitmap = calloc(sm->sm_chunk_count, sb->s_blocksize);
+	if (!sm->sm_bitmap) {
+		perror(NULL);
+		exit(1);
+	}
 
 	parse_spaceman_main_device(raw);
 	check_spaceman_tier2_device(raw);

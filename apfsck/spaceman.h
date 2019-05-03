@@ -158,6 +158,8 @@ struct apfs_spaceman_phys {
 
 /* Space manager data in memory */
 struct spaceman {
+	void *sm_bitmap; /* Allocation bitmap for the whole container */
+
 	/* Spaceman info read from the on-disk structures */
 	u32 sm_blocks_per_chunk;
 	u32 sm_chunks_per_cib;
