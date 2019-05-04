@@ -114,10 +114,13 @@ static int count_chunk_free(void *bmap, u32 blks)
  * parse_chunk_info - Parse and check a chunk info structure
  * @chunk:	pointer to the raw chunk info structure
  * @is_last:	is this the last chunk of the device?
+ * @start:	expected first block number for the chunk
  * @xid:	on return, the transaction id of the chunk
+ *
+ * Returns the first block number for the next chunk.
  */
-static void parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last,
-			     u64 *xid)
+static u64 parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last,
+			    u64 start, u64 *xid)
 {
 	struct spaceman *sm = &sb->s_spaceman;
 	u32 block_count;
@@ -133,8 +136,9 @@ static void parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last,
 		report("Chunk-info", "too few blocks.");
 	sm->sm_blocks += block_count;
 
-	bitmap = read_chunk_bitmap(le64_to_cpu(chunk->ci_addr),
-				   le64_to_cpu(chunk->ci_bitmap_addr));
+	if (le64_to_cpu(chunk->ci_addr) != start)
+		report("Chunk-info block", "chunks are not consecutive.");
+	bitmap = read_chunk_bitmap(start, le64_to_cpu(chunk->ci_bitmap_addr));
 
 	free_count = le32_to_cpu(chunk->ci_free_count);
 	if (free_count != count_chunk_free(bitmap, block_count))
@@ -144,14 +148,18 @@ static void parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last,
 	*xid = le64_to_cpu(chunk->ci_xid);
 	if (!*xid)
 		report("Chunk-info", "bad transaction id.");
+	return start + block_count;
 }
 
 /**
  * parse_chunk_info_block - Parse and check a chunk-info block
  * @bno:	block number of the chunk-info block
  * @index:	index of the chunk-info block
+ * @start:	expected first block number for the first chunk
+ *
+ * Returns the first block number for the first chunk of the next cib.
  */
-static void parse_chunk_info_block(u64 bno, int index)
+static u64 parse_chunk_info_block(u64 bno, int index, u64 start)
 {
 	struct spaceman *sm = &sb->s_spaceman;
 	struct object obj;
@@ -187,8 +195,8 @@ static void parse_chunk_info_block(u64 bno, int index)
 
 		if (last_cib && i == chunk_count - 1)
 			last_block = true;
-		parse_chunk_info(&cib->cib_chunk_info[i], last_block,
-				 &chunk_xid);
+		start = parse_chunk_info(&cib->cib_chunk_info[i], last_block,
+					 start, &chunk_xid);
 
 		if (chunk_xid > obj.xid)
 			report("Chunk-info", "xid is too recent.");
@@ -199,6 +207,7 @@ static void parse_chunk_info_block(u64 bno, int index)
 		report("Chunk-info block", "xid is too recent.");
 
 	munmap(cib, sb->s_blocksize);
+	return start;
 }
 
 /**
@@ -226,6 +235,7 @@ static void parse_spaceman_main_device(struct apfs_spaceman_phys *raw)
 	struct spaceman *sm = &sb->s_spaceman;
 	struct apfs_spaceman_device *dev = &raw->sm_dev[APFS_SD_MAIN];
 	u32 addr_off;
+	u64 start = 0;
 	int i;
 
 	if (dev->sm_cab_count)
@@ -241,7 +251,7 @@ static void parse_spaceman_main_device(struct apfs_spaceman_phys *raw)
 	for (i = 0; i < sm->sm_cib_count; ++i) {
 		u64 bno = get_cib_address(raw, addr_off + i * sizeof(u64));
 
-		parse_chunk_info_block(bno, i);
+		start = parse_chunk_info_block(bno, i, start);
 	}
 
 	if (sm->sm_chunk_count != sm->sm_chunks)
