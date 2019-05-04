@@ -114,8 +114,10 @@ static int count_chunk_free(void *bmap, u32 blks)
  * parse_chunk_info - Parse and check a chunk info structure
  * @chunk:	pointer to the raw chunk info structure
  * @is_last:	is this the last chunk of the device?
+ * @xid:	on return, the transaction id of the chunk
  */
-static void parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last)
+static void parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last,
+			     u64 *xid)
 {
 	struct spaceman *sm = &sb->s_spaceman;
 	u32 block_count;
@@ -138,6 +140,10 @@ static void parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last)
 	if (free_count != count_chunk_free(bitmap, block_count))
 		report("Chunk-info", "wrong count of free blocks.");
 	sm->sm_free += free_count;
+
+	*xid = le64_to_cpu(chunk->ci_xid);
+	if (!*xid)
+		report("Chunk-info", "bad transaction id.");
 }
 
 /**
@@ -152,6 +158,7 @@ static void parse_chunk_info_block(u64 bno, int index)
 	struct apfs_chunk_info_block *cib;
 	u32 chunk_count;
 	bool last_cib = index == sm->sm_cib_count - 1;
+	u64 max_chunk_xid = 0;
 	int i;
 
 	cib = read_object(bno, NULL, &obj);
@@ -172,9 +179,22 @@ static void parse_chunk_info_block(u64 bno, int index)
 		report("Chunk-info block", "too few chunks.");
 	sm->sm_chunks += chunk_count;
 
-	for (i = 0; i < chunk_count - 1; ++i)
-		parse_chunk_info(&cib->cib_chunk_info[i], false /* is_last */);
-	parse_chunk_info(&cib->cib_chunk_info[chunk_count - 1], last_cib);
+	for (i = 0; i < chunk_count; ++i) {
+		bool last_block = false;
+		u64 chunk_xid;
+
+		if (last_cib && i == chunk_count - 1)
+			last_block = true;
+		parse_chunk_info(&cib->cib_chunk_info[i], last_block,
+				 &chunk_xid);
+
+		if (chunk_xid > obj.xid)
+			report("Chunk-info", "xid is too recent.");
+		if (chunk_xid > max_chunk_xid)
+			max_chunk_xid = chunk_xid;
+	}
+	if (obj.xid != max_chunk_xid) /* Cib only changes if a chunk changes */
+		report("Chunk-info block", "xid is too recent.");
 
 	munmap(cib, sb->s_blocksize);
 }
