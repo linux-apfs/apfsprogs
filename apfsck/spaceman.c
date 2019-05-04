@@ -166,6 +166,8 @@ static void parse_chunk_info_block(u64 bno, int index)
 		report("Chunk-info block", "wrong object type.");
 	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
 		report("Chunk-info block", "wrong object subtype.");
+	if (obj.xid > sm->sm_xid) /* Cib address is stored in the spaceman */
+		report("Chunk-info block", "xid is more recent than spaceman.");
 
 	if (le32_to_cpu(cib->cib_index) != index)
 		report("Chunk-info block", "wrong index.");
@@ -294,6 +296,7 @@ void check_spaceman(u64 oid)
 		report("Space manager", "wrong object type.");
 	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
 		report("Space manager", "wrong object subtype.");
+	sm->sm_xid = obj.xid;
 
 	if (le32_to_cpu(raw->sm_block_size) != sb->s_blocksize)
 		report("Space manager", "wrong block size.");
