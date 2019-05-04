@@ -120,6 +120,7 @@ static void parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last)
 	struct spaceman *sm = &sb->s_spaceman;
 	u32 block_count;
 	void *bitmap;
+	u32 free_count;
 
 	block_count = le32_to_cpu(chunk->ci_block_count);
 	if (!block_count)
@@ -133,9 +134,10 @@ static void parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last)
 	bitmap = read_chunk_bitmap(le64_to_cpu(chunk->ci_addr),
 				   le64_to_cpu(chunk->ci_bitmap_addr));
 
-	if (le32_to_cpu(chunk->ci_free_count) != count_chunk_free(bitmap,
-								  block_count))
+	free_count = le32_to_cpu(chunk->ci_free_count);
+	if (free_count != count_chunk_free(bitmap, block_count))
 		report("Chunk-info", "wrong count of free blocks.");
+	sm->sm_free += free_count;
 }
 
 /**
@@ -224,6 +226,8 @@ static void parse_spaceman_main_device(struct apfs_spaceman_phys *raw)
 		report("Spaceman device", "bad total number of chunks.");
 	if (sb->s_block_count != sm->sm_blocks)
 		report("Spaceman device", "bad total number of blocks.");
+	if (le64_to_cpu(dev->sm_free_count) != sm->sm_free)
+		report("Spaceman device", "bad total number of free blocks.");
 
 	if (dev->sm_reserved || dev->sm_reserved2)
 		report("Spaceman device", "non-zero padding.");
