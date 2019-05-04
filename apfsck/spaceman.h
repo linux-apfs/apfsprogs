@@ -165,11 +165,11 @@ struct spaceman {
 	u32 sm_chunks_per_cib;
 	u32 sm_cibs_per_cab;
 	u32 sm_cib_count;
-	u32 sm_chunk_count;
+	u64 sm_chunk_count;
 
 	/* Spaceman info measured by the fsck */
-	u32 sm_chunks;	/* Number of chunks */
-	u32 sm_blocks;	/* Number of blocks */
+	u64 sm_chunks;	/* Number of chunks */
+	u64 sm_blocks;	/* Number of blocks */
 	u64 sm_free;	/* Number of free blocks */
 };
 
