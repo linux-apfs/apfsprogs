@@ -291,6 +291,65 @@ static void check_spaceman_tier2_device(struct apfs_spaceman_phys *raw)
 }
 
 /**
+ * check_allocation_boundaries - Check the boundaries of an allocation zone
+ * @azb: pointer to the raw boundaries structure
+ * @dev: index for the device
+ *
+ * Allocation zones are undocumented, so we can't do much more than report them
+ * as unsupported if they are in use.
+ */
+static void check_allocation_boundaries(
+		struct apfs_spaceman_allocation_zone_boundaries *azb, int dev)
+{
+	if (!azb->saz_zone_start && !azb->saz_zone_end)
+		return;
+
+	/*
+	 * Zone boundaries are sometimes set even if the id was not; no idea
+	 * what any of this means yet, so just print a report (TODO).
+	 */
+	if (dev == APFS_SD_MAIN)
+		report_weird("Allocation zones");
+	else
+		report_unknown("Fusion drive");
+}
+
+/**
+ * check_spaceman_datazone - Check the spaceman allocation zones
+ * @dz: pointer to the raw datazone structure
+ *
+ * Allocation zones are undocumented, so we can't do much more than report them
+ * as unsupported if they are in use.
+ */
+static void check_spaceman_datazone(struct apfs_spaceman_datazone_info_phys *dz)
+{
+	int i, dev;
+
+	for (dev = 0; dev < APFS_SD_COUNT; ++dev) {
+		for (i = 0; i < APFS_SM_DATAZONE_ALLOCZONE_COUNT; ++i) {
+			struct apfs_spaceman_allocation_zone_info_phys *az;
+			struct apfs_spaceman_allocation_zone_boundaries *azb;
+			int j;
+
+			az = &dz->sdz_allocation_zones[dev][i];
+			if (az->saz_zone_id || az->saz_previous_boundary_index)
+				report_unknown("Allocation zones");
+			if (az->saz_reserved)
+				report("Datazone", "reserved field in use.");
+
+			azb = &az->saz_current_boundaries;
+			check_allocation_boundaries(azb, dev);
+			for (j = 0;
+			     j < APFS_SM_ALLOCZONE_NUM_PREVIOUS_BOUNDARIES;
+			     ++j) {
+				azb = &az->saz_previous_boundaries[j];
+				check_allocation_boundaries(azb, dev);
+			}
+		}
+	}
+}
+
+/**
  * check_spaceman - Check the space manager structures for a container
  * @oid: ephemeral object id for the spaceman structure
  */
@@ -321,6 +380,7 @@ void check_spaceman(u64 oid)
 
 	parse_spaceman_main_device(raw);
 	check_spaceman_tier2_device(raw);
+	check_spaceman_datazone(&raw->sm_datazone);
 
 	/* TODO: handle the undocumented 'versioned' flag */
 	flags = le32_to_cpu(raw->sm_flags);
