@@ -350,6 +350,22 @@ static void check_spaceman_datazone(struct apfs_spaceman_datazone_info_phys *dz)
 }
 
 /**
+ * check_spaceman_free_queues - Check the spaceman free queues
+ * @sfq: pointer to the raw free queue array
+ */
+static void check_spaceman_free_queues(struct apfs_spaceman_free_queue *sfq)
+{
+	int i;
+
+	for (i = 0; i < APFS_SFQ_COUNT; ++i) {
+		if (sfq[i].sfq_pad16 || sfq[i].sfq_pad32)
+			report("Spaceman free queue", "non-zero padding.");
+		if (sfq[i].sfq_reserved)
+			report("Spaceman free queue", "reserved field in use.");
+	}
+}
+
+/**
  * check_spaceman - Check the space manager structures for a container
  * @oid: ephemeral object id for the spaceman structure
  */
@@ -381,6 +397,7 @@ void check_spaceman(u64 oid)
 	parse_spaceman_main_device(raw);
 	check_spaceman_tier2_device(raw);
 	check_spaceman_datazone(&raw->sm_datazone);
+	check_spaceman_free_queues(raw->sm_fq);
 
 	/* TODO: handle the undocumented 'versioned' flag */
 	flags = le32_to_cpu(raw->sm_flags);

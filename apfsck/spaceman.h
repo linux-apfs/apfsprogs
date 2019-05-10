@@ -54,7 +54,7 @@ struct apfs_spaceman_free_queue {
 	__le64	sfq_oldest_xid;
 	__le16	sfq_tree_node_limit;
 	__le16	sfq_pad16;
-	__le16	sfq_pad32;
+	__le32	sfq_pad32;
 	__le64	sfq_reserved;
 } __packed;
 
