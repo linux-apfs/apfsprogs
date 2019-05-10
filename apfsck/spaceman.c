@@ -357,6 +357,11 @@ static void check_spaceman_free_queues(struct apfs_spaceman_free_queue *sfq)
 {
 	int i;
 
+	if (sfq[APFS_SFQ_TIER2].sfq_count || sfq[APFS_SFQ_TIER2].sfq_tree_oid ||
+	    sfq[APFS_SFQ_TIER2].sfq_oldest_xid ||
+	    sfq[APFS_SFQ_TIER2].sfq_tree_node_limit)
+		report_unknown("Fusion drive");
+
 	for (i = 0; i < APFS_SFQ_COUNT; ++i) {
 		if (sfq[i].sfq_pad16 || sfq[i].sfq_pad32)
 			report("Spaceman free queue", "non-zero padding.");
