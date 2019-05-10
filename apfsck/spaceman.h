@@ -159,6 +159,8 @@ struct apfs_spaceman_phys {
 /* Space manager data in memory */
 struct spaceman {
 	void *sm_bitmap; /* Allocation bitmap for the whole container */
+	struct btree *sm_ip_fq; /* Free queue for internal pool */
+	struct btree *sm_main_fq; /* Free queue for main device */
 
 	/* Spaceman info read from the on-disk structures */
 	u64 sm_xid;

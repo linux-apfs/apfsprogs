@@ -241,7 +241,12 @@ static struct node *read_node(u64 oid, struct btree *btree)
 	}
 	node->btree = btree;
 
-	raw = node->raw = read_object(oid, btree->omap_table, &node->object);
+	/* The free-space queue is the only tree with ephemeral nodes so far */
+	if (btree_is_free_queue(btree))
+		raw = read_ephemeral_object(oid, &node->object);
+	else
+		raw = read_object(oid, btree->omap_table, &node->object);
+	node->raw = raw;
 
 	node->level = le16_to_cpu(raw->btn_level);
 	node->flags = le16_to_cpu(raw->btn_flags);
@@ -273,6 +278,9 @@ static struct node *read_node(u64 oid, struct btree *btree)
 	if (btree_is_snap_meta(btree) && obj_subtype !=
 						APFS_OBJECT_TYPE_SNAPMETATREE)
 		report("Snapshot metadata node", "wrong object subtype.");
+	if (btree_is_free_queue(btree) && obj_subtype !=
+					 APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE)
+		report("Free queue node", "wrong object subtype.");
 
 	node_prepare_bitmaps(node);
 
@@ -882,6 +890,27 @@ static void check_btree_footer(struct btree *btree)
 		    longest_val != sizeof(struct apfs_phys_ext_val))
 			report(ctx, "wrong maximum val size in info footer.");
 	}
+}
+
+/**
+ * parse_free_queue_btree - Parse and check a free-space queue tree
+ * @oid:	object id for the b-tree root
+ *
+ * Returns a pointer to the btree struct for the free queue tree.
+ */
+struct btree *parse_free_queue_btree(u64 oid)
+{
+	struct btree *sfq;
+
+	sfq = calloc(1, sizeof(*sfq));
+	if (!sfq) {
+		perror(NULL);
+		exit(1);
+	}
+	sfq->type = BTREE_TYPE_FREE_QUEUE;
+	sfq->omap_table = NULL; /* These are ephemeral objects */
+	sfq->root = read_node(oid, sfq);
+	return sfq;
 }
 
 /**

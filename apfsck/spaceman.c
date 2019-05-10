@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include "apfsck.h"
+#include "btree.h"
 #include "object.h"
 #include "spaceman.h"
 #include "super.h"
@@ -355,6 +356,7 @@ static void check_spaceman_datazone(struct apfs_spaceman_datazone_info_phys *dz)
  */
 static void check_spaceman_free_queues(struct apfs_spaceman_free_queue *sfq)
 {
+	struct spaceman *sm = &sb->s_spaceman;
 	int i;
 
 	if (sfq[APFS_SFQ_TIER2].sfq_count || sfq[APFS_SFQ_TIER2].sfq_tree_oid ||
@@ -368,6 +370,11 @@ static void check_spaceman_free_queues(struct apfs_spaceman_free_queue *sfq)
 		if (sfq[i].sfq_reserved)
 			report("Spaceman free queue", "reserved field in use.");
 	}
+
+	sm->sm_ip_fq = parse_free_queue_btree(
+				le64_to_cpu(sfq[APFS_SFQ_IP].sfq_tree_oid));
+	sm->sm_main_fq = parse_free_queue_btree(
+				le64_to_cpu(sfq[APFS_SFQ_MAIN].sfq_tree_oid));
 }
 
 /**

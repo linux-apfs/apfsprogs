@@ -253,6 +253,7 @@ struct query {
 #define BTREE_TYPE_CATALOG	2 /* The tree is a catalog */
 #define BTREE_TYPE_EXTENTREF	3 /* The tree is for extent references */
 #define BTREE_TYPE_SNAP_META	4 /* The tree is for snapshot metadata */
+#define BTREE_TYPE_FREE_QUEUE	5 /* The tree is for a free-space queue */
 
 /* In-memory structure representing a b-tree */
 struct btree {
@@ -268,6 +269,15 @@ struct btree {
 	int longest_key;	/* Length of longest key */
 	int longest_val;	/* Length of longest value */
 };
+
+/**
+ * btree_is_free_queue - Check if a b-tree is a free-space queue
+ * @btree: the b-tree to check
+ */
+static inline bool btree_is_free_queue(struct btree *btree)
+{
+	return btree->type == BTREE_TYPE_FREE_QUEUE;
+}
 
 /**
  * btree_is_omap - Check if a b-tree is an object map
@@ -305,6 +315,7 @@ static inline bool btree_is_extentref(struct btree *btree)
 	return btree->type == BTREE_TYPE_EXTENTREF;
 }
 
+extern struct btree *parse_free_queue_btree(u64 oid);
 extern struct btree *parse_snap_meta_btree(u64 oid);
 extern struct btree *parse_extentref_btree(u64 oid);
 extern struct btree *parse_omap_btree(u64 oid);
