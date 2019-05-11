@@ -19,6 +19,14 @@ struct apfs_omap_key {
 	__le64 ok_xid;
 } __packed;
 
+/*
+ * Structure of a key in a free-space queue b-tree
+ */
+struct apfs_spaceman_free_queue_key {
+	__le64 sfqk_xid;
+	__le64 sfqk_paddr;
+} __packed;
+
 /* Catalog records types */
 enum {
 	APFS_TYPE_ANY			= 0,
@@ -242,5 +250,6 @@ extern int keycmp(struct key *k1, struct key *k2);
 extern void read_cat_key(void *raw, int size, struct key *key);
 extern void read_omap_key(void *raw, int size, struct key *key);
 extern void read_extentref_key(void *raw, int size, struct key *key);
+extern void read_free_queue_key(void *raw, int size, struct key *key);
 
 #endif	/* _KEY_H */

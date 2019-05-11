@@ -374,10 +374,18 @@ static int node_locate_data(struct node *node, int index, int *off)
 	if (node_has_fixed_kv_size(node)) {
 		/* These node types have fixed length keys and data */
 		struct apfs_kvoff *entry;
+		struct btree *btree = node->btree;
 
 		entry = (struct apfs_kvoff *)raw->btn_data + index;
-		/* Node type decides length */
-		len = node_is_leaf(node) ? 16 : 8;
+
+		if (btree_is_free_queue(btree)) {
+			/* A free-space queue record may have no value */
+			if (le16_to_cpu(entry->v) == APFS_BTOFF_INVALID)
+				return 0;
+			len = 8;
+		}
+		if (btree_is_omap(btree))
+			len = node_is_leaf(node) ? 16 : 8;
 
 		/* Value offsets are backwards from the end of the value area */
 		off_in_area = area_len - le16_to_cpu(entry->v);
@@ -664,6 +672,8 @@ static void parse_subtree(struct node *root,
 		report("Object map", "key size should be fixed.");
 	if (btree_is_catalog(btree) && node_has_fixed_kv_size(root))
 		report("Catalog", "key size should not be fixed.");
+	if (btree_is_free_queue(btree) && !node_has_fixed_kv_size(root))
+		report("Free-space queue", "key size should be fixed.");
 
 	/* This makes little sense, but it appears to be true */
 	if (btree_is_extentref(btree) && node_has_fixed_kv_size(root))
@@ -703,6 +713,8 @@ static void parse_subtree(struct node *root,
 			read_cat_key(raw_key, len, &curr_key);
 		if (btree_is_extentref(btree))
 			read_extentref_key(raw_key, len, &curr_key);
+		if (btree_is_free_queue(btree))
+			read_free_queue_key(raw_key, len, &curr_key);
 
 		if (keycmp(last_key, &curr_key) > 0)
 			report("B-tree", "keys are out of order.");
@@ -772,24 +784,27 @@ static void parse_subtree(struct node *root,
  */
 static void check_btree_footer_flags(u32 flags, struct btree *btree, char *ctx)
 {
+	bool aligned, is_free_queue, is_physical;
+
 	if ((flags & APFS_BTREE_FLAGS_VALID_MASK) != flags)
 		report(ctx, "invalid flag in use.");
 	if (flags & (APFS_BTREE_NONPERSISTENT))
 		report(ctx, "nonpersistent flag is set.");
 
 	/* TODO: are these really the only allowed settings for the flag? */
-	if (btree_is_omap(btree) && (flags & APFS_BTREE_KV_NONALIGNED))
-		report(ctx, "unaligned keys/values.");
-	if (!btree_is_omap(btree) && !(flags & APFS_BTREE_KV_NONALIGNED))
-		report(ctx, "aligned keys/values.");
+	aligned = btree_is_omap(btree) || btree_is_free_queue(btree);
+	if (aligned != !(flags & APFS_BTREE_KV_NONALIGNED))
+		report(ctx, "wrong alignment flag.");
 
-	if (flags & (APFS_BTREE_ALLOW_GHOSTS | APFS_BTREE_EPHEMERAL))
-		report(ctx, "space manager flag in use.");
+	is_free_queue = btree_is_free_queue(btree);
+	if (is_free_queue != (bool)(flags & (APFS_BTREE_ALLOW_GHOSTS)))
+		report(ctx, "wrong setting of ghosts flag.");
+	if (is_free_queue != (bool)(flags & (APFS_BTREE_EPHEMERAL)))
+		report(ctx, "wrong setting of ephemeral flag.");
 
-	if (!btree_is_catalog(btree) && !(flags & APFS_BTREE_PHYSICAL))
-		report(ctx, "physical flag not set in info footer.");
-	if (btree_is_catalog(btree) && (flags & APFS_BTREE_PHYSICAL))
-		report(ctx, "physical flag set in info footer.");
+	is_physical = !(btree_is_catalog(btree) || btree_is_free_queue(btree));
+	if (is_physical != (bool)(flags & APFS_BTREE_PHYSICAL))
+		report(ctx, "wrong setting of physical flag.");
 }
 
 /**
@@ -814,6 +829,9 @@ static void check_btree_footer(struct btree *btree)
 		break;
 	case BTREE_TYPE_SNAP_META:
 		ctx = "Snapshot metadata tree";
+		break;
+	case BTREE_TYPE_FREE_QUEUE:
+		ctx = "Free-space queue";
 		break;
 	default:
 		report(NULL, "Bug!");
@@ -855,7 +873,27 @@ static void check_btree_footer(struct btree *btree)
 		return;
 	}
 
-	/* For now, only the omap reports fixed key/value sizes */
+	if (btree_is_free_queue(btree)) {
+		if (le32_to_cpu(info->bt_fixed.bt_key_size) !=
+				sizeof(struct apfs_spaceman_free_queue_key))
+			report(ctx, "wrong key size in info footer.");
+
+		/* I don't know what this value is yet */
+		if (le32_to_cpu(info->bt_fixed.bt_val_size) != 8)
+			report(ctx, "wrong value size in info footer.");
+
+		if (le32_to_cpu(info->bt_longest_key) !=
+				sizeof(struct apfs_spaceman_free_queue_key))
+			report(ctx, "wrong maximum key size in info footer.");
+
+		/* TODO: could this be zero if all records are ghosts? */
+		if (le32_to_cpu(info->bt_longest_val) != 8)
+			report(ctx, "wrong maximum value size in info footer.");
+
+		return;
+	}
+
+	/* For now, only the omap and free queue report fixed key/value sizes */
 	if (le32_to_cpu(info->bt_fixed.bt_key_size) != 0)
 		report(ctx, "key size should not be set.");
 	if (le32_to_cpu(info->bt_fixed.bt_val_size) != 0)
@@ -901,6 +939,7 @@ static void check_btree_footer(struct btree *btree)
 struct btree *parse_free_queue_btree(u64 oid)
 {
 	struct btree *sfq;
+	struct key last_key = {0};
 
 	sfq = calloc(1, sizeof(*sfq));
 	if (!sfq) {
@@ -910,6 +949,9 @@ struct btree *parse_free_queue_btree(u64 oid)
 	sfq->type = BTREE_TYPE_FREE_QUEUE;
 	sfq->omap_table = NULL; /* These are ephemeral objects */
 	sfq->root = read_node(oid, sfq);
+	parse_subtree(sfq->root, &last_key, NULL /* name_buf */);
+
+	check_btree_footer(sfq);
 	return sfq;
 }
 

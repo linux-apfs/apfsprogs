@@ -38,6 +38,31 @@ void read_omap_key(void *raw, int size, struct key *key)
 }
 
 /**
+ * read_free_queue_key - Parse an on-disk free-space queue key
+ * @raw:	pointer to the raw key
+ * @size:	size of the raw key
+ * @key:	key structure to store the result
+ */
+void read_free_queue_key(void *raw, int size, struct key *key)
+{
+	struct apfs_spaceman_free_queue_key *sfqk;
+	u64 xid;
+
+	if (size != sizeof(*sfqk))
+		report("Free-space queue", "wrong size of key.");
+	sfqk = (struct apfs_spaceman_free_queue_key *)raw;
+
+	xid = le64_to_cpu(sfqk->sfqk_xid);
+	if (!xid)
+		report("Free-space queue", "transaction id for key is zero.");
+
+	key->id = xid;
+	key->type = 0;
+	key->number = le64_to_cpu(sfqk->sfqk_paddr);
+	key->name = NULL;
+}
+
+/**
  * keycmp - Compare two keys
  * @k1, @k2:	keys to compare
  *
