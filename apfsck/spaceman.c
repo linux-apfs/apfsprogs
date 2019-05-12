@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include "apfsck.h"
 #include "btree.h"
+#include "key.h"
 #include "object.h"
 #include "spaceman.h"
 #include "super.h"
@@ -373,14 +374,25 @@ static void check_spaceman_free_queues(struct apfs_spaceman_free_queue *sfq)
 
 	sm->sm_ip_fq = parse_free_queue_btree(
 				le64_to_cpu(sfq[APFS_SFQ_IP].sfq_tree_oid));
+	if (le64_to_cpu(sfq[APFS_SFQ_IP].sfq_count) != sm->sm_ip_fq->sfq_count)
+		report("Spaceman free queue", "wrong block count.");
+	if (le64_to_cpu(sfq[APFS_SFQ_IP].sfq_oldest_xid) !=
+					sm->sm_ip_fq->sfq_oldest_xid)
+		report("Spaceman free queue", "oldest xid is wrong.");
 	if (le64_to_cpu(sfq[APFS_SFQ_IP].sfq_tree_node_limit) <
-						sm->sm_ip_fq->node_count)
+					sm->sm_ip_fq->sfq_btree.node_count)
 		report("Spaceman free queue", "node count above limit.");
 
 	sm->sm_main_fq = parse_free_queue_btree(
 				le64_to_cpu(sfq[APFS_SFQ_MAIN].sfq_tree_oid));
+	if (le64_to_cpu(sfq[APFS_SFQ_MAIN].sfq_count) !=
+					sm->sm_main_fq->sfq_count)
+		report("Spaceman free queue", "wrong block count.");
+	if (le64_to_cpu(sfq[APFS_SFQ_MAIN].sfq_oldest_xid) !=
+					sm->sm_main_fq->sfq_oldest_xid)
+		report("Spaceman free queue", "oldest xid is wrong.");
 	if (le64_to_cpu(sfq[APFS_SFQ_MAIN].sfq_tree_node_limit) <
-						sm->sm_main_fq->node_count)
+					sm->sm_main_fq->sfq_btree.node_count)
 		report("Spaceman free queue", "node count above limit.");
 }
 
@@ -431,13 +443,15 @@ void check_spaceman(u64 oid)
  * @key:	pointer to the raw key
  * @val:	pointer to the raw value
  * @len:	length of the raw value
+ * @btree:	the free queue btree structure
  *
  * Internal consistency of @key must be checked before calling this function.
  */
 void parse_free_queue_record(struct apfs_spaceman_free_queue_key *key,
-			     void *val, int len)
+			     void *val, int len, struct btree *btree)
 {
-	u64 length;
+	struct free_queue *sfq = (struct free_queue *)btree;
+	u64 length, xid;
 
 	if (!len) {
 		length = 1; /* Ghost records are for one block long extents */
@@ -452,4 +466,9 @@ void parse_free_queue_record(struct apfs_spaceman_free_queue_key *key,
 	} else {
 		report("Free queue record", "wrong size of value.");
 	}
+	sfq->sfq_count += length;
+
+	xid = le64_to_cpu(key->sfqk_xid);
+	if (!sfq->sfq_oldest_xid || xid < sfq->sfq_oldest_xid)
+		sfq->sfq_oldest_xid = xid;
 }

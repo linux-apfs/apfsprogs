@@ -737,7 +737,8 @@ static void parse_subtree(struct node *root,
 			if (btree_is_omap(btree))
 				parse_omap_record(raw_key, raw_val, len);
 			if (btree_is_free_queue(btree))
-				parse_free_queue_record(raw_key, raw_val, len);
+				parse_free_queue_record(raw_key, raw_val, len,
+							btree);
 			if (btree_is_extentref(btree))
 				/* Physical extents must not overlap */
 				last_key->id = parse_phys_ext_record(raw_key,
@@ -937,11 +938,12 @@ static void check_btree_footer(struct btree *btree)
  * parse_free_queue_btree - Parse and check a free-space queue tree
  * @oid:	object id for the b-tree root
  *
- * Returns a pointer to the btree struct for the free queue tree.
+ * Returns a pointer to the free queue structure.
  */
-struct btree *parse_free_queue_btree(u64 oid)
+struct free_queue *parse_free_queue_btree(u64 oid)
 {
-	struct btree *sfq;
+	struct free_queue *sfq;
+	struct btree *btree;
 	struct key last_key = {0};
 
 	sfq = calloc(1, sizeof(*sfq));
@@ -949,12 +951,14 @@ struct btree *parse_free_queue_btree(u64 oid)
 		perror(NULL);
 		exit(1);
 	}
-	sfq->type = BTREE_TYPE_FREE_QUEUE;
-	sfq->omap_table = NULL; /* These are ephemeral objects */
-	sfq->root = read_node(oid, sfq);
-	parse_subtree(sfq->root, &last_key, NULL /* name_buf */);
+	btree = &sfq->sfq_btree;
 
-	check_btree_footer(sfq);
+	btree->type = BTREE_TYPE_FREE_QUEUE;
+	btree->omap_table = NULL; /* These are ephemeral objects */
+	btree->root = read_node(oid, btree);
+	parse_subtree(btree->root, &last_key, NULL /* name_buf */);
+
+	check_btree_footer(btree);
 	return sfq;
 }
 

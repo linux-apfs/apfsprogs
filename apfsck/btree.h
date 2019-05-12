@@ -12,6 +12,7 @@
 
 struct super_block;
 struct extref_record;
+struct free_queue;
 
 /* Flags for the object map structure */
 #define APFS_OMAP_MANUALLY_MANAGED	0x00000001
@@ -315,7 +316,7 @@ static inline bool btree_is_extentref(struct btree *btree)
 	return btree->type == BTREE_TYPE_EXTENTREF;
 }
 
-extern struct btree *parse_free_queue_btree(u64 oid);
+extern struct free_queue *parse_free_queue_btree(u64 oid);
 extern struct btree *parse_snap_meta_btree(u64 oid);
 extern struct btree *parse_extentref_btree(u64 oid);
 extern struct btree *parse_omap_btree(u64 oid);
