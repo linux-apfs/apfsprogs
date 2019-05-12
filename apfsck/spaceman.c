@@ -425,3 +425,31 @@ void check_spaceman(u64 oid)
 
 	munmap(raw, sb->s_blocksize);
 }
+
+/**
+ * parse_free_queue_record - Parse a free queue record and check for corruption
+ * @key:	pointer to the raw key
+ * @val:	pointer to the raw value
+ * @len:	length of the raw value
+ *
+ * Internal consistency of @key must be checked before calling this function.
+ */
+void parse_free_queue_record(struct apfs_spaceman_free_queue_key *key,
+			     void *val, int len)
+{
+	u64 length;
+
+	if (!len) {
+		length = 1; /* Ghost records are for one block long extents */
+	} else if (len == 8) {
+		__le64 *val64 = (__le64 *)val;
+
+		length = le64_to_cpu(*val64);
+		if (!length)
+			report("Free queue record", "length is zero.");
+		if (length == 1)
+			report("Free queue record", "value is unnecessary.");
+	} else {
+		report("Free queue record", "wrong size of value.");
+	}
+}

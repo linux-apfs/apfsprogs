@@ -17,6 +17,7 @@
 #include "inode.h"
 #include "key.h"
 #include "object.h"
+#include "spaceman.h"
 #include "super.h"
 #include "types.h"
 #include "xattr.h"
@@ -735,6 +736,8 @@ static void parse_subtree(struct node *root,
 				parse_cat_record(raw_key, raw_val, len);
 			if (btree_is_omap(btree))
 				parse_omap_record(raw_key, raw_val, len);
+			if (btree_is_free_queue(btree))
+				parse_free_queue_record(raw_key, raw_val, len);
 			if (btree_is_extentref(btree))
 				/* Physical extents must not overlap */
 				last_key->id = parse_phys_ext_record(raw_key,

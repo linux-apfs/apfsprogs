@@ -10,6 +10,8 @@
 #include "types.h"
 #include "object.h"
 
+struct apfs_spaceman_free_queue_key;
+
 /*
  * On-disk allocation info for a chunk of blocks
  */
@@ -177,5 +179,7 @@ struct spaceman {
 };
 
 extern void check_spaceman(u64 oid);
+extern void parse_free_queue_record(struct apfs_spaceman_free_queue_key *key,
+				    void *val, int len);
 
 #endif	/* _SPACEMAN_H */
