@@ -373,8 +373,15 @@ static void check_spaceman_free_queues(struct apfs_spaceman_free_queue *sfq)
 
 	sm->sm_ip_fq = parse_free_queue_btree(
 				le64_to_cpu(sfq[APFS_SFQ_IP].sfq_tree_oid));
+	if (le64_to_cpu(sfq[APFS_SFQ_IP].sfq_tree_node_limit) <
+						sm->sm_ip_fq->node_count)
+		report("Spaceman free queue", "node count above limit.");
+
 	sm->sm_main_fq = parse_free_queue_btree(
 				le64_to_cpu(sfq[APFS_SFQ_MAIN].sfq_tree_oid));
+	if (le64_to_cpu(sfq[APFS_SFQ_MAIN].sfq_tree_node_limit) <
+						sm->sm_main_fq->node_count)
+		report("Spaceman free queue", "node count above limit.");
 }
 
 /**
