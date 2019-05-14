@@ -192,6 +192,7 @@ struct free_queue {
 	u64 sfq_oldest_xid;	/* First transaction id in the queue */
 };
 
+extern void container_bmap_mark_as_used(u64 paddr, u64 length);
 extern void check_spaceman(u64 oid);
 extern void parse_free_queue_record(struct apfs_spaceman_free_queue_key *key,
 				    void *val, int len, struct btree *btree);

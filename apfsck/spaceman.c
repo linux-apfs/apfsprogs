@@ -418,6 +418,34 @@ static void compare_container_bitmaps(u64 *sm_bmap, u64 *real_bmap, u64 chunks)
 }
 
 /**
+ * container_bmap_mark_as_used - Mark a range as used in the allocation bitmap
+ * @paddr:	first block number
+ * @length:	block count
+ *
+ * Checks that the given address range is still marked as free in the
+ * container's allocation bitmap, and then switches those bits.
+ */
+void container_bmap_mark_as_used(u64 paddr, u64 length)
+{
+	u64 *bitmap = sb->s_bitmap;
+	u64 *byte;
+	u64 flag;
+	u64 i;
+
+	/* Avoid out-of-bounds writes to the allocation bitmap */
+	if (paddr + length >= sb->s_block_count || paddr + length < paddr)
+		report(NULL /* context */, "Out-of-range block number.");
+
+	for (i = paddr; i < paddr + length; ++i) {
+		byte = bitmap + i / 64;
+		flag = 1ULL << i % 64;
+		if (*byte & flag)
+			report(NULL /* context */, "A block is used twice.");
+		*byte |= flag;
+	}
+}
+
+/**
  * check_spaceman - Check the space manager structures for a container
  * @oid: ephemeral object id for the spaceman structure
  */
@@ -494,4 +522,10 @@ void parse_free_queue_record(struct apfs_spaceman_free_queue_key *key,
 	xid = le64_to_cpu(key->sfqk_xid);
 	if (!sfq->sfq_oldest_xid || xid < sfq->sfq_oldest_xid)
 		sfq->sfq_oldest_xid = xid;
+
+	/*
+	 * These blocks are free, but still not marked as such.  The point
+	 * seems to be the preservation of recent checkpoints.
+	 */
+	container_bmap_mark_as_used(le64_to_cpu(key->sfqk_paddr), length);
 }
