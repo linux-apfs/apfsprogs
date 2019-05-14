@@ -397,6 +397,27 @@ static void check_spaceman_free_queues(struct apfs_spaceman_free_queue *sfq)
 }
 
 /**
+ * compare_container_bitmaps - Verify the container's allocation bitmap
+ * @sm_bmap:	allocation bitmap reported by the space manager
+ * @real_bmap:	allocation bitmap assembled by the fsck
+ * @chunks:	container chunk count, i.e., block count for the bitmaps
+ *
+ * For now this function only checks that used blocks are marked as such
+ * in @sm_bmap.  The converse will be left for later, because identifying
+ * every block in use may have some complications.
+ */
+static void compare_container_bitmaps(u64 *sm_bmap, u64 *real_bmap, u64 chunks)
+{
+	unsigned long long count64;
+	u64 i;
+
+	count64 = (sb->s_blocksize / sizeof(count64)) * chunks;
+	for (i = 0; i < count64; ++i)
+		if ((sm_bmap[i] | real_bmap[i]) != sm_bmap[i])
+			report("Space manager", "bad allocation bitmap.");
+}
+
+/**
  * check_spaceman - Check the space manager structures for a container
  * @oid: ephemeral object id for the spaceman structure
  */
@@ -435,6 +456,8 @@ void check_spaceman(u64 oid)
 	if ((flags & APFS_SM_FLAGS_VALID_MASK) != flags)
 		report("Space manager", "invalid flag in use.");
 
+	compare_container_bitmaps(sm->sm_bitmap, sb->s_bitmap,
+				  sm->sm_chunk_count);
 	munmap(raw, sb->s_blocksize);
 }
 

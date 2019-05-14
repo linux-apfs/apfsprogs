@@ -362,6 +362,7 @@ struct volume_superblock {
 /* Superblock data in memory */
 struct super_block {
 	struct apfs_nx_superblock *s_raw;
+	void *s_bitmap;	/* Allocation bitmap for the whole container */
 	struct btree *s_omap;
 	struct object *s_reaper;
 	unsigned long s_blocksize;

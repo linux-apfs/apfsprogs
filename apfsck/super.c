@@ -623,6 +623,7 @@ static void check_container(struct super_block *sb)
  */
 static void parse_main_super(struct super_block *sb)
 {
+	u64 chunk_count;
 	int i;
 
 	assert(sb->s_raw);
@@ -642,6 +643,19 @@ static void parse_main_super(struct super_block *sb)
 		report("Container superblock", "reports no block count.");
 	if (sb->s_block_count > get_device_size(sb->s_blocksize))
 		report("Container superblock", "too many blocks for device.");
+
+	/*
+	 * A chunk is the disk section covered by a single block in the
+	 * allocation bitmap.
+	 */
+	chunk_count = DIV_ROUND_UP(sb->s_block_count, 8 * sb->s_blocksize);
+	sb->s_bitmap = calloc(chunk_count, sb->s_blocksize);
+	if (!sb->s_bitmap) {
+		perror(NULL);
+		exit(1);
+	}
+	((char *)sb->s_bitmap)[0] = 0x01; /* Block zero is always used */
+
 	sb->s_max_vols = get_max_volumes(sb->s_block_count * sb->s_blocksize);
 	if (sb->s_max_vols != le32_to_cpu(sb->s_raw->nx_max_file_systems))
 		report("Container superblock", "bad maximum volume number.");
@@ -850,6 +864,7 @@ void parse_filesystem(void)
 			munmap(sb->s_raw, sb->s_blocksize);
 		sb->s_raw = NULL;
 		sb->s_xid = 0;
+		free(sb->s_bitmap);
 
 		/* The checkpoint-mapping blocks come before the superblock */
 		map_blocks = parse_cpoint_map_blocks(desc_base, desc_blocks,
