@@ -130,6 +130,8 @@ void *read_object(u64 oid, union htable_entry **omap_table, struct object *obj)
 	}
 
 	raw = read_object_nocheck(bno, obj);
+	if (!ongoing_query) /* Query code will revisit already parsed nodes */
+		container_bmap_mark_as_used(bno, 1 /* length */);
 
 	if (oid != obj->oid)
 		report("Object header", "wrong object id in block 0x%llx.",

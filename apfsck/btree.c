@@ -22,6 +22,8 @@
 #include "types.h"
 #include "xattr.h"
 
+bool ongoing_query;
+
 /**
  * node_is_valid - Check basic sanity of the node index
  * @node:	node to check
@@ -1176,11 +1178,18 @@ void extentref_lookup(struct node *tbl, u64 bno, struct extref_record *extref)
 	query->key = &key;
 	query->flags |= QUERY_EXTENTREF;
 
+	/*
+	 * The extentref nodes have already been parsed, and the allocation
+	 * bitmap has been updated accordingly.  This global variable tells
+	 * read_object() to ignore the bitmap this time.
+	 */
+	ongoing_query = true;
 	if (btree_query(&query)) {
 		report("Extent reference tree",
 		       "record missing for block number 0x%llx.",
 		       (unsigned long long)bno);
 	}
+	ongoing_query = false;
 
 	extref_rec_from_query(query, extref);
 	free_query(query);
@@ -1413,6 +1422,8 @@ int btree_query(struct query **query)
 	struct btree *btree = node->btree;
 	u64 child_id;
 	int err;
+
+	assert(ongoing_query);
 
 next_node:
 	if ((*query)->depth >= 12) {

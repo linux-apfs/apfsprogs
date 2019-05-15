@@ -7,11 +7,14 @@
 #ifndef _APFSCK_H
 #define _APFSCK_H
 
+#include <stdbool.h>
+
 /* Declarations for global variables */
 extern unsigned int options;		/* Command line options */
 extern struct super_block *sb;		/* Filesystem superblock */
 extern struct volume_superblock *vsb;	/* Volume superblock */
 extern int fd;				/* File descriptor for the device */
+extern bool ongoing_query;		/* Are we currently running a query? */
 
 /* Option flags */
 #define	OPT_REPORT_CRASH	1 /* Report on-disk signs of a past crash */
