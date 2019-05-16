@@ -254,10 +254,13 @@ static void check_efi_information(u64 oid)
 		report("EFI info", "number of extents cannot fit.");
 	for (i = 0; i < num_extents; ++i) {
 		struct apfs_prange *ext = &efi->nej_rec_extents[i];
+		u64 ext_blocks = le64_to_cpu(ext->pr_block_count);
+		u64 ext_bno = le64_to_cpu(ext->pr_start_paddr);
 
-		if (!ext->pr_block_count)
+		if (!ext_blocks)
 			report("EFI info", "empty extent.");
-		block_count += le64_to_cpu(ext->pr_block_count);
+		container_bmap_mark_as_used(ext_bno, ext_blocks);
+		block_count += ext_blocks;
 	}
 
 	file_length = le32_to_cpu(efi->nej_efi_file_len);
