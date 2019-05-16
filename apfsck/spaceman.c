@@ -93,6 +93,8 @@ static void *read_chunk_bitmap(u64 addr, u64 bmap)
 		offset += read_bytes;
 	} while (read_bytes > 0);
 
+	/* Mark the bitmap block as used in the actual allocation bitmap */
+	container_bmap_mark_as_used(bmap, 1 /* length */);
 	return ret;
 }
 
