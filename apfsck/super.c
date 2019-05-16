@@ -627,6 +627,7 @@ static void check_container(struct super_block *sb)
 static void parse_main_super(struct super_block *sb)
 {
 	u64 chunk_count;
+	u64 keybag_bno, keybag_blocks;
 	int i;
 
 	assert(sb->s_raw);
@@ -704,9 +705,11 @@ static void parse_main_super(struct super_block *sb)
 	}
 
 	/* Containers with no encryption may still have a value here, why? */
-	if (sb->s_raw->nx_keylocker.pr_start_paddr ||
-	    sb->s_raw->nx_keylocker.pr_block_count)
+	keybag_bno = le64_to_cpu(sb->s_raw->nx_keylocker.pr_start_paddr);
+	keybag_blocks = le64_to_cpu(sb->s_raw->nx_keylocker.pr_block_count);
+	if (keybag_bno || keybag_blocks)
 		report_weird("Container keybag");
+	container_bmap_mark_as_used(keybag_bno, keybag_blocks);
 
 	if (sb->s_raw->nx_fusion_mt_oid || sb->s_raw->nx_fusion_wbc_oid ||
 	    sb->s_raw->nx_fusion_wbc.pr_start_paddr ||
