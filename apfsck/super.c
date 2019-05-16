@@ -888,6 +888,11 @@ void parse_filesystem(void)
 
 		sb->s_raw = raw;
 		parse_main_super(sb);
+
+		/* Do this now, after parse_main_super() allocated the bitmap */
+		container_bmap_mark_as_used(desc_base, desc_blocks);
+		container_bmap_mark_as_used(sb->s_data_base, sb->s_data_blocks);
+
 		check_container(sb);
 
 		free_cpoint_map_table(sb->s_cpoint_map_table);
