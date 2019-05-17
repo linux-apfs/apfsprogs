@@ -486,6 +486,10 @@ void check_spaceman(u64 oid)
 	if ((flags & APFS_SM_FLAGS_VALID_MASK) != flags)
 		report("Space manager", "invalid flag in use.");
 
+	if (le32_to_cpu(raw->sm_ip_bm_tx_multiplier) !=
+					APFS_SPACEMAN_IP_BM_TX_MULTIPLIER)
+		report("Space manager", "bad tx multiplier for internal pool.");
+
 	compare_container_bitmaps(sm->sm_bitmap, sb->s_bitmap,
 				  sm->sm_chunk_count);
 	munmap(raw, sb->s_blocksize);
