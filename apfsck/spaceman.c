@@ -246,12 +246,12 @@ static void parse_spaceman_main_device(struct apfs_spaceman_phys *raw)
 		report_unknown("Chunk-info address block");
 	if (le32_to_cpu(dev->sm_cib_count) != sm->sm_cib_count)
 		report("Spaceman device", "wrong count of chunk-info blocks.");
-	if (le32_to_cpu(dev->sm_chunk_count) != sm->sm_chunk_count)
+	if (le64_to_cpu(dev->sm_chunk_count) != sm->sm_chunk_count)
 		report("Spaceman device", "wrong count of chunks.");
-	if (le32_to_cpu(dev->sm_block_count) != sb->s_block_count)
+	if (le64_to_cpu(dev->sm_block_count) != sb->s_block_count)
 		report("Spaceman device", "wrong block count.");
 
-	addr_off = le64_to_cpu(dev->sm_addr_offset);
+	addr_off = le32_to_cpu(dev->sm_addr_offset);
 	for (i = 0; i < sm->sm_cib_count; ++i) {
 		u64 bno = get_cib_address(raw, addr_off + i * sizeof(u64));
 
@@ -280,7 +280,7 @@ static void check_spaceman_tier2_device(struct apfs_spaceman_phys *raw)
 	struct apfs_spaceman_device *dev = &raw->sm_dev[APFS_SD_TIER2];
 	u32 addr_off, main_addr_off;
 
-	addr_off = le64_to_cpu(dev->sm_addr_offset);
+	addr_off = le32_to_cpu(dev->sm_addr_offset);
 	main_addr_off = le32_to_cpu(main_dev->sm_addr_offset);
 	if (addr_off != main_addr_off + sm->sm_cib_count * sizeof(u64))
 		report("Spaceman device", "not consecutive address offsets.");
@@ -381,7 +381,7 @@ static void check_spaceman_free_queues(struct apfs_spaceman_free_queue *sfq)
 	if (le64_to_cpu(sfq[APFS_SFQ_IP].sfq_oldest_xid) !=
 					sm->sm_ip_fq->sfq_oldest_xid)
 		report("Spaceman free queue", "oldest xid is wrong.");
-	if (le64_to_cpu(sfq[APFS_SFQ_IP].sfq_tree_node_limit) <
+	if (le16_to_cpu(sfq[APFS_SFQ_IP].sfq_tree_node_limit) <
 					sm->sm_ip_fq->sfq_btree.node_count)
 		report("Spaceman free queue", "node count above limit.");
 
@@ -393,7 +393,7 @@ static void check_spaceman_free_queues(struct apfs_spaceman_free_queue *sfq)
 	if (le64_to_cpu(sfq[APFS_SFQ_MAIN].sfq_oldest_xid) !=
 					sm->sm_main_fq->sfq_oldest_xid)
 		report("Spaceman free queue", "oldest xid is wrong.");
-	if (le64_to_cpu(sfq[APFS_SFQ_MAIN].sfq_tree_node_limit) <
+	if (le16_to_cpu(sfq[APFS_SFQ_MAIN].sfq_tree_node_limit) <
 					sm->sm_main_fq->sfq_btree.node_count)
 		report("Spaceman free queue", "node count above limit.");
 }

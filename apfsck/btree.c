@@ -1065,7 +1065,7 @@ struct btree *parse_omap_btree(u64 oid)
 		report_unknown("Snapshots");
 
 	/* Oddly, the type is still reported even when the tree is not set */
-	if (le64_to_cpu(raw->om_snapshot_tree_type) !=
+	if (le32_to_cpu(raw->om_snapshot_tree_type) !=
 				(APFS_OBJECT_TYPE_BTREE | APFS_OBJ_PHYSICAL))
 		report("Object map", "wrong type for snapshot tree.");
 

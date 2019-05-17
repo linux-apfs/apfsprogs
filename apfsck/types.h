@@ -9,7 +9,9 @@
 #ifndef _TYPES_H
 #define _TYPES_H
 
+#define __CHECK_ENDIAN__ /* Required by linux/types.h when running sparse */
 #include <linux/types.h>
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
