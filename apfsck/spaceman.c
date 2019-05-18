@@ -496,6 +496,9 @@ static void check_internal_pool(struct apfs_spaceman_phys *raw, u64 *real_bmap)
 		if ((bool)(pool_bmap[pool_index] & pool_flag) !=
 		    (bool)(real_bmap[real_index] & real_flag))
 			report("Internal pool", "bad allocation bitmap.");
+
+		/* In the container bitmap, the whole pool is marked as used */
+		real_bmap[real_index] |= real_flag;
 	}
 
 	munmap(pool_bmap, sb->s_blocksize);
