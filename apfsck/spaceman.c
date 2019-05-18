@@ -215,19 +215,22 @@ static u64 parse_chunk_info_block(u64 bno, int index, u64 start)
 }
 
 /**
- * get_cib_address - Get the block number of a device's cib (or of its cab)
+ * spaceman_val_from_off - Get the value stored on a given spaceman offset
  * @raw:	pointer to the raw space manager
- * @offset:	offset of the cib address in @raw
+ * @offset:	offset of the value in @raw
+ *
+ * This is not in the official documentation and I didn't figure it out myself.
+ * Credit should go to Joachim Metz: <https://github.com/libyal/libfsapfs>.
  */
-static u64 get_cib_address(struct apfs_spaceman_phys *raw, u32 offset)
+static u64 spaceman_val_from_off(struct apfs_spaceman_phys *raw, u32 offset)
 {
-	char *addr_p = (char *)raw + offset;
+	char *value_p = (char *)raw + offset;
 
 	if (offset & 0x7)
-		report("Spaceman device", "address is not aligned to 8 bytes.");
+		report("Spaceman", "offset is not aligned to 8 bytes.");
 	if (offset >= sb->s_blocksize || offset + sizeof(u64) > sb->s_blocksize)
-		report("Spaceman device", "address is out of bounds.");
-	return *((u64 *)addr_p);
+		report("Spaceman", "offset is out of bounds.");
+	return *((u64 *)value_p);
 }
 
 /**
@@ -253,7 +256,8 @@ static void parse_spaceman_main_device(struct apfs_spaceman_phys *raw)
 
 	addr_off = le32_to_cpu(dev->sm_addr_offset);
 	for (i = 0; i < sm->sm_cib_count; ++i) {
-		u64 bno = get_cib_address(raw, addr_off + i * sizeof(u64));
+		u64 bno = spaceman_val_from_off(raw,
+						addr_off + i * sizeof(u64));
 
 		start = parse_chunk_info_block(bno, i, start);
 	}
@@ -284,7 +288,7 @@ static void check_spaceman_tier2_device(struct apfs_spaceman_phys *raw)
 	main_addr_off = le32_to_cpu(main_dev->sm_addr_offset);
 	if (addr_off != main_addr_off + sm->sm_cib_count * sizeof(u64))
 		report("Spaceman device", "not consecutive address offsets.");
-	if (get_cib_address(raw, addr_off)) /* Empty device has no cib */
+	if (spaceman_val_from_off(raw, addr_off)) /* Empty device has no cib */
 		report_unknown("Fusion drive");
 
 	if (dev->sm_block_count || dev->sm_chunk_count || dev->sm_cib_count ||
@@ -468,7 +472,8 @@ static void check_internal_pool(struct apfs_spaceman_phys *raw, u64 *real_bmap)
 	 * So far all internal pool bitmaps encountered had only one block; the
 	 * bitmap area is larger than that because it keeps some old versions.
 	 */
-	bmap_off = get_cib_address(raw, le32_to_cpu(raw->sm_ip_bitmap_offset));
+	bmap_off = spaceman_val_from_off(raw,
+					 le32_to_cpu(raw->sm_ip_bitmap_offset));
 	if (bmap_off >= bmap_blocks)
 		report("Internal pool", "bitmap block is out-of-bounds.");
 	if (le32_to_cpu(raw->sm_ip_bm_size_in_blocks) != 1)
