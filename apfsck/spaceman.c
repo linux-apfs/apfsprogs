@@ -448,6 +448,59 @@ void container_bmap_mark_as_used(u64 paddr, u64 length)
 }
 
 /**
+ * check_internal_pool - Check the internal pool of blocks
+ * @raw:	pointer to the raw space manager
+ * @real_bmap:	container allocation bitmap assembled by the fsck
+ */
+static void check_internal_pool(struct apfs_spaceman_phys *raw, u64 *real_bmap)
+{
+	u64 *pool_bmap;
+	u64 bmap_base = le64_to_cpu(raw->sm_ip_bm_base);
+	u32 bmap_blocks = le32_to_cpu(raw->sm_ip_bm_block_count);
+	u64 bmap_off;
+	u64 pool_base = le64_to_cpu(raw->sm_ip_base);
+	u64 pool_blocks = le64_to_cpu(raw->sm_ip_block_count);
+	u64 i;
+
+	container_bmap_mark_as_used(bmap_base, bmap_blocks);
+
+	/*
+	 * So far all internal pool bitmaps encountered had only one block; the
+	 * bitmap area is larger than that because it keeps some old versions.
+	 */
+	bmap_off = get_cib_address(raw, le32_to_cpu(raw->sm_ip_bitmap_offset));
+	if (bmap_off >= bmap_blocks)
+		report("Internal pool", "bitmap block is out-of-bounds.");
+	if (le32_to_cpu(raw->sm_ip_bm_size_in_blocks) != 1)
+		report_unknown("Multiblock bitmap in internal pool");
+
+	pool_bmap = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
+			 fd, (bmap_base + bmap_off) * sb->s_blocksize);
+	if (pool_bmap == MAP_FAILED) {
+		perror(NULL);
+		exit(1);
+	}
+
+	for (i = 0; i < pool_blocks; ++i) {
+		u64 bno = pool_base + i;
+		u64 real_index = bno / 64;
+		u64 real_flag = 1ULL << bno % 64;
+		u64 pool_index = i / 64;
+		u64 pool_flag = 1ULL << i % 64;
+
+		if ((bool)(pool_bmap[pool_index] & pool_flag) !=
+		    (bool)(real_bmap[real_index] & real_flag))
+			report("Internal pool", "bad allocation bitmap.");
+	}
+
+	munmap(pool_bmap, sb->s_blocksize);
+
+	if (le32_to_cpu(raw->sm_ip_bm_tx_multiplier) !=
+					APFS_SPACEMAN_IP_BM_TX_MULTIPLIER)
+		report("Space manager", "bad tx multiplier for internal pool.");
+}
+
+/**
  * check_spaceman - Check the space manager structures for a container
  * @oid: ephemeral object id for the spaceman structure
  */
@@ -480,15 +533,12 @@ void check_spaceman(u64 oid)
 	check_spaceman_tier2_device(raw);
 	check_spaceman_datazone(&raw->sm_datazone);
 	check_spaceman_free_queues(raw->sm_fq);
+	check_internal_pool(raw, sb->s_bitmap);
 
 	/* TODO: handle the undocumented 'versioned' flag */
 	flags = le32_to_cpu(raw->sm_flags);
 	if ((flags & APFS_SM_FLAGS_VALID_MASK) != flags)
 		report("Space manager", "invalid flag in use.");
-
-	if (le32_to_cpu(raw->sm_ip_bm_tx_multiplier) !=
-					APFS_SPACEMAN_IP_BM_TX_MULTIPLIER)
-		report("Space manager", "bad tx multiplier for internal pool.");
 
 	compare_container_bitmaps(sm->sm_bitmap, sb->s_bitmap,
 				  sm->sm_chunk_count);
