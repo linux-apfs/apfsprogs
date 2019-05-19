@@ -511,7 +511,7 @@ static void check_internal_pool(struct apfs_spaceman_phys *raw, u64 *real_bmap)
 	u64 *pool_bmap;
 	u64 pool_base = le64_to_cpu(raw->sm_ip_base);
 	u64 pool_blocks = le64_to_cpu(raw->sm_ip_block_count);
-	u64 xid;
+	u64 xid, free_next;
 	u64 i;
 
 	pool_bmap = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
@@ -545,6 +545,12 @@ static void check_internal_pool(struct apfs_spaceman_phys *raw, u64 *real_bmap)
 	xid = spaceman_val_from_off(raw, le32_to_cpu(raw->sm_ip_bm_xid_offset));
 	if (xid > sb->s_xid)
 		report("Internal pool", "bad transaction id.");
+
+	/* TODO: actually figure out the sm_ip_bm_free_next_offset field */
+	free_next = spaceman_val_from_off(raw,
+				le32_to_cpu(raw->sm_ip_bm_free_next_offset));
+	if (free_next != 0x0004000300020001)
+		report_weird("Free next field of the space manager");
 }
 
 /**
