@@ -459,22 +459,17 @@ void container_bmap_mark_as_used(u64 paddr, u64 length)
 }
 
 /**
- * check_internal_pool - Check the internal pool of blocks
- * @raw:	pointer to the raw space manager
- * @real_bmap:	container allocation bitmap assembled by the fsck
+ * parse_ip_bitmap_list - Check consistency of the internal pool bitmap list
+ * @raw: pointer to the raw space manager
+ *
+ * Returns the block number for the current bitmap.
  */
-static void check_internal_pool(struct apfs_spaceman_phys *raw, u64 *real_bmap)
+static u64 parse_ip_bitmap_list(struct apfs_spaceman_phys *raw)
 {
-	u64 *pool_bmap;
 	u64 bmap_base = le64_to_cpu(raw->sm_ip_bm_base);
-	u32 bmap_blocks = le32_to_cpu(raw->sm_ip_bm_block_count);
 	u64 bmap_off;
-	u64 pool_base = le64_to_cpu(raw->sm_ip_base);
-	u64 pool_blocks = le64_to_cpu(raw->sm_ip_block_count);
-	u64 xid;
-	u64 i;
-
-	container_bmap_mark_as_used(bmap_base, bmap_blocks);
+	u32 bmap_length = le32_to_cpu(raw->sm_ip_bm_block_count);
+	u16 free_head, free_tail, free_length;
 
 	/*
 	 * So far all internal pool bitmaps encountered had only one block; the
@@ -482,13 +477,45 @@ static void check_internal_pool(struct apfs_spaceman_phys *raw, u64 *real_bmap)
 	 */
 	bmap_off = spaceman_val_from_off(raw,
 					 le32_to_cpu(raw->sm_ip_bitmap_offset));
-	if (bmap_off >= bmap_blocks)
+	if (bmap_off >= bmap_length)
 		report("Internal pool", "bitmap block is out-of-bounds.");
 	if (le32_to_cpu(raw->sm_ip_bm_size_in_blocks) != 1)
 		report_unknown("Multiblock bitmap in internal pool");
 
+	/* The head and tail fit in 16-bit fields, so the length also should */
+	if (bmap_length > (u16)(~0U))
+		report("Internal pool", "bitmap list is too long.");
+
+	free_head = le16_to_cpu(raw->sm_ip_bm_free_head);
+	free_tail = le16_to_cpu(raw->sm_ip_bm_free_tail);
+	free_length = (bmap_length + free_tail + 1 - free_head) % bmap_length;
+
+	if (free_head >= bmap_length || free_tail >= bmap_length)
+		report("Internal pool", "free bitmaps are out-of-bounds.");
+	if ((bmap_length + bmap_off - free_head) % bmap_length < free_length)
+		report("Internal pool", "current bitmap listed as free.");
+	if (free_length != bmap_length - 1)
+		report_unknown("Multiple internal pool bitmaps in use");
+
+	container_bmap_mark_as_used(bmap_base, bmap_length);
+	return bmap_base + bmap_off;
+}
+
+/**
+ * check_internal_pool - Check the internal pool of blocks
+ * @raw:	pointer to the raw space manager
+ * @real_bmap:	container allocation bitmap assembled by the fsck
+ */
+static void check_internal_pool(struct apfs_spaceman_phys *raw, u64 *real_bmap)
+{
+	u64 *pool_bmap;
+	u64 pool_base = le64_to_cpu(raw->sm_ip_base);
+	u64 pool_blocks = le64_to_cpu(raw->sm_ip_block_count);
+	u64 xid;
+	u64 i;
+
 	pool_bmap = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-			 fd, (bmap_base + bmap_off) * sb->s_blocksize);
+			 fd, parse_ip_bitmap_list(raw) * sb->s_blocksize);
 	if (pool_bmap == MAP_FAILED) {
 		perror(NULL);
 		exit(1);
