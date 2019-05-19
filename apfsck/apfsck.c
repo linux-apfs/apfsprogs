@@ -16,6 +16,7 @@
 
 int fd;
 unsigned int options;
+static bool weird_state;
 
 /**
  * usage - Print usage information and exit
@@ -76,7 +77,7 @@ void report_unknown(const char *feature)
 }
 
 /**
- * report_weird - Report unexplained inconsistencies and exit
+ * report_weird - Report unexplained inconsistencies
  * @context: structure where the inconsistency was found
  *
  * Does nothing unless the -w cli option was used.  This function should
@@ -85,8 +86,15 @@ void report_unknown(const char *feature)
  */
 void report_weird(const char *context)
 {
-	if (options & OPT_REPORT_WEIRD)
-		report(context, "odd inconsistency (may not be corruption).");
+	if (!(options & OPT_REPORT_WEIRD))
+		return;
+
+	/*
+	 * Several of my test images have 'weird' issues, so don't exit right
+	 * away.  Remember that an issue was found, for the exit code.
+	 */
+	printf("%s: odd inconsistency (may not be corruption).\n", context);
+	weird_state = true;
 }
 
 int main(int argc, char *argv[])
@@ -125,5 +133,7 @@ int main(int argc, char *argv[])
 	}
 
 	parse_filesystem();
+	if (weird_state)
+		return 1;
 	return 0;
 }
