@@ -555,6 +555,9 @@ void check_spaceman(u64 oid)
 	if ((flags & APFS_SM_FLAGS_VALID_MASK) != flags)
 		report("Space manager", "invalid flag in use.");
 
+	if (raw->sm_fs_reserve_block_count || raw->sm_fs_reserve_alloc_count)
+		report_unknown("Reserved allocation blocks");
+
 	compare_container_bitmaps(sm->sm_bitmap, sb->s_bitmap,
 				  sm->sm_chunk_count);
 	munmap(raw, sb->s_blocksize);
