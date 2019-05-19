@@ -591,6 +591,8 @@ void parse_free_queue_record(struct apfs_spaceman_free_queue_key *key,
 	sfq->sfq_count += length;
 
 	xid = le64_to_cpu(key->sfqk_xid);
+	if (xid > sb->s_xid)
+		report("Free queue record", "bad transaction id.");
 	if (!sfq->sfq_oldest_xid || xid < sfq->sfq_oldest_xid)
 		sfq->sfq_oldest_xid = xid;
 
