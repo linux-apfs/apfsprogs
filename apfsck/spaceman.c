@@ -222,13 +222,20 @@ static u64 parse_chunk_info_block(u64 bno, int index, u64 start)
  *
  * This is not in the official documentation and I didn't figure it out myself.
  * Credit should go to Joachim Metz: <https://github.com/libyal/libfsapfs>.
+ *
+ * TODO: check that no values found by this function overlap with each other.
  */
 static u64 spaceman_val_from_off(struct apfs_spaceman_phys *raw, u32 offset)
 {
+	struct spaceman *sm = &sb->s_spaceman;
 	char *value_p = (char *)raw + offset;
+
+	assert(sm->sm_struct_size);
 
 	if (offset & 0x7)
 		report("Spaceman", "offset is not aligned to 8 bytes.");
+	if (offset < sm->sm_struct_size)
+		report("Spaceman", "offset overlaps with structure.");
 	if (offset >= sb->s_blocksize || offset + sizeof(u64) > sb->s_blocksize)
 		report("Spaceman", "offset is out of bounds.");
 	return *((u64 *)value_p);
@@ -313,12 +320,8 @@ static void check_allocation_boundaries(
 	if (!azb->saz_zone_start && !azb->saz_zone_end)
 		return;
 
-	/*
-	 * Zone boundaries are sometimes set even if the id was not; no idea
-	 * what any of this means yet, so just print a report (TODO).
-	 */
 	if (dev == APFS_SD_MAIN)
-		report_weird("Allocation zones");
+		report_unknown("Allocation zones");
 	else
 		report_unknown("Fusion drive");
 }
@@ -571,6 +574,21 @@ void check_spaceman(u64 oid)
 		report("Space manager", "wrong object subtype.");
 	sm->sm_xid = obj.xid;
 
+	flags = le32_to_cpu(raw->sm_flags);
+	if ((flags & APFS_SM_FLAGS_VALID_MASK) != flags)
+		report("Space manager", "invalid flag in use.");
+	if (flags & APFS_SM_FLAG_VERSIONED) {
+		sm->sm_struct_size = le32_to_cpu(raw->sm_struct_size);
+		if (sm->sm_struct_size != sizeof(*raw))
+			report("Space manager", "wrong reported struct size.");
+		check_spaceman_datazone(&raw->sm_datazone);
+	} else {
+		/* Some fields are missing in the non-versioned structure */
+		sm->sm_struct_size = sizeof(*raw) - sizeof(raw->sm_datazone) -
+				     sizeof(raw->sm_struct_size) -
+				     sizeof(raw->sm_version);
+	}
+
 	if (le32_to_cpu(raw->sm_block_size) != sb->s_blocksize)
 		report("Space manager", "wrong block size.");
 	parse_spaceman_chunk_counts(raw);
@@ -584,14 +602,8 @@ void check_spaceman(u64 oid)
 
 	parse_spaceman_main_device(raw);
 	check_spaceman_tier2_device(raw);
-	check_spaceman_datazone(&raw->sm_datazone);
 	check_spaceman_free_queues(raw->sm_fq);
 	check_internal_pool(raw, sb->s_bitmap);
-
-	/* TODO: handle the undocumented 'versioned' flag */
-	flags = le32_to_cpu(raw->sm_flags);
-	if ((flags & APFS_SM_FLAGS_VALID_MASK) != flags)
-		report("Space manager", "invalid flag in use.");
 
 	if (raw->sm_fs_reserve_block_count || raw->sm_fs_reserve_alloc_count)
 		report_unknown("Reserved allocation blocks");

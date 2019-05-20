@@ -164,6 +164,7 @@ struct spaceman {
 	void *sm_bitmap; /* Allocation bitmap for the whole container */
 	struct free_queue *sm_ip_fq; /* Free queue for internal pool */
 	struct free_queue *sm_main_fq; /* Free queue for main device */
+	int sm_struct_size; /* Size of the spaceman structure on disk */
 
 	/* Spaceman info read from the on-disk structures */
 	u64 sm_xid;
