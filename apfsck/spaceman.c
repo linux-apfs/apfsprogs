@@ -505,6 +505,51 @@ static u64 parse_ip_bitmap_list(struct apfs_spaceman_phys *raw)
 }
 
 /**
+ * check_ip_bitmap_blocks - Check that the bitmap blocks are properly zeroed
+ * @raw: pointer to the raw space manager
+ *
+ * For most internal pool bitmap blocks this is the only check needed; the
+ * current one also needs to be compared against the actual allocation bitmap.
+ */
+static void check_ip_bitmap_blocks(struct apfs_spaceman_phys *raw)
+{
+	u64 bmap_base = le64_to_cpu(raw->sm_ip_bm_base);
+	u32 bmap_length = le32_to_cpu(raw->sm_ip_bm_block_count);
+	u64 pool_blocks = le64_to_cpu(raw->sm_ip_block_count);
+	int i;
+
+	for (i = 0; i < bmap_length; ++i) {
+		char *bmap;
+		int edge, j;
+
+		bmap = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
+			    fd, (bmap_base + i) * sb->s_blocksize);
+		if (bmap == MAP_FAILED) {
+			perror(NULL);
+			exit(1);
+		}
+
+		/*
+		 * The edge is the last byte inside the allocation bitmap;
+		 * everything that comes afterwards must be zeroed.
+		 */
+		edge = pool_blocks / 8;
+		for (j = pool_blocks % 8; j < 8; ++j) {
+			u8 flag = 1 << j;
+
+			if (bmap[edge] & flag)
+				report("Internal pool", "non-zeroed bitmap.");
+		}
+		for (j = edge + 1; j < sb->s_blocksize; ++j) {
+			if (bmap[j])
+				report("Internal pool", "non-zeroed bitmap.");
+		}
+
+		munmap(bmap, sb->s_blocksize);
+	}
+}
+
+/**
  * check_internal_pool - Check the internal pool of blocks
  * @raw:	pointer to the raw space manager
  * @real_bmap:	container allocation bitmap assembled by the fsck
@@ -554,6 +599,8 @@ static void check_internal_pool(struct apfs_spaceman_phys *raw, u64 *real_bmap)
 				le32_to_cpu(raw->sm_ip_bm_free_next_offset));
 	if (free_next != 0x0004000300020001)
 		report_weird("Free next field of the space manager");
+
+	check_ip_bitmap_blocks(raw);
 }
 
 /**
