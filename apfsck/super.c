@@ -14,6 +14,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <apfs/raw.h>
+#include <apfs/types.h>
 #include "apfsck.h"
 #include "btree.h"
 #include "extents.h"
@@ -21,7 +23,6 @@
 #include "inode.h"
 #include "object.h"
 #include "spaceman.h"
-#include "types.h"
 #include "super.h"
 
 struct super_block *sb;

@@ -6,10 +6,10 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <apfs/types.h>
 #include "apfsck.h"
 #include "htable.h"
 #include "super.h"
-#include "types.h"
 
 /**
  * alloc_htable - Allocates and returns an empty hash table

@@ -10,6 +10,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <apfs/raw.h>
 #include "apfsck.h"
 #include "btree.h"
 #include "key.h"

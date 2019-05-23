@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <apfs/raw.h>
 #include "apfsck.h"
 #include "dir.h"
 #include "inode.h"

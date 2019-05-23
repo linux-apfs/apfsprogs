@@ -7,67 +7,11 @@
 #ifndef _EXTENTS_H
 #define _EXTENTS_H
 
-#include "types.h"
+#include <apfs/types.h>
 
 struct apfs_file_extent_key;
 struct apfs_dstream_id_key;
 struct apfs_phys_ext_key;
-
-/* Physical extent records */
-#define APFS_PEXT_LEN_MASK	0x0fffffffffffffffULL
-#define APFS_PEXT_KIND_MASK	0xf000000000000000ULL
-#define APFS_PEXT_KIND_SHIFT	60
-
-/* The kind of a physical extent record */
-enum {
-	APFS_KIND_ANY		= 0,
-	APFS_KIND_NEW		= 1,
-	APFS_KIND_UPDATE	= 2,
-	APFS_KIND_DEAD		= 3,
-	APFS_KIND_UPDATE_REFCNT	= 4,
-
-	APFS_KIND_INVALID	= 255 /* This is weird, won't fit in 4 bits */
-};
-
-/*
- * Structure of a physical extent record
- */
-struct apfs_phys_ext_val {
-	__le64 len_and_kind;
-	__le64 owning_obj_id;
-	__le32 refcnt;
-} __packed;
-
-/*
- * Physical extent record data in memory
- */
-struct extref_record {
-	u64 phys_addr;	/* First block number */
-	u64 blocks;	/* Block count */
-	u64 owner;	/* Owning object id */
-	u32 refcnt;	/* Reference count */
-};
-
-/* File extent records */
-#define APFS_FILE_EXTENT_LEN_MASK	0x00ffffffffffffffULL
-#define APFS_FILE_EXTENT_FLAG_MASK	0xff00000000000000ULL
-#define APFS_FILE_EXTENT_FLAG_SHIFT	56
-
-/*
- * Structure of a file extent record
- */
-struct apfs_file_extent_val {
-	__le64 len_and_flags;
-	__le64 phys_block_num;
-	__le64 crypto_id;
-} __packed;
-
-/*
- * Structure of a data stream record
- */
-struct apfs_dstream_id_val {
-	__le32 refcnt;
-} __packed;
 
 /*
  * Physical extent data in memory

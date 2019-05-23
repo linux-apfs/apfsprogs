@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <apfs/raw.h>
 #include "apfsck.h"
 #include "btree.h"
 #include "extents.h"

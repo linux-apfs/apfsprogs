@@ -1,5 +1,5 @@
 /*
- *  apfsprogs/apfsck/types.h
+ *  apfsprogs/include/apfs/types.h
  *
  * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  *

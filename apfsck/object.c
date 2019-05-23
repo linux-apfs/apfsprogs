@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <apfs/raw.h>
 #include "apfsck.h"
 #include "btree.h"
 #include "htable.h"

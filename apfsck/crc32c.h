@@ -7,7 +7,7 @@
 #ifndef _CRC32C_H
 #define _CRC32C_H
 
-#include "types.h"
+#include <apfs/types.h>
 
 extern u32 crc32c(u32 crc, const void *buf, int size);
 

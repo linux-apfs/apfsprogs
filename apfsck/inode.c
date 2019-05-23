@@ -8,13 +8,14 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <apfs/raw.h>
+#include <apfs/types.h>
 #include "apfsck.h"
 #include "extents.h"
 #include "htable.h"
 #include "inode.h"
 #include "key.h"
 #include "super.h"
-#include "types.h"
 
 /**
  * check_inode_stats - Verify the stats gathered by the fsck vs the metadata

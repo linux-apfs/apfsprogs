@@ -7,12 +7,12 @@
 #ifndef _HTABLE_H
 #define _HTABLE_H
 
+#include <apfs/types.h>
 #include "btree.h"
 #include "extents.h"
 #include "inode.h"
 #include "key.h"
 #include "super.h"
-#include "types.h"
 
 #define HTABLE_BUCKETS	512	/* So the hash table array fits in 4k */
 

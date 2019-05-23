@@ -5,12 +5,13 @@
  */
 
 #include <string.h>
+#include <apfs/raw.h>
+#include <apfs/types.h>
 #include "apfsck.h"
 #include "extents.h"
 #include "inode.h"
 #include "key.h"
 #include "super.h"
-#include "types.h"
 #include "xattr.h"
 
 /**

@@ -6,6 +6,8 @@ DEPS = $(SRCS:.c=.d)
 BINDIR = ~/bin
 MANDIR = ~/share/man/man8
 
+override CFLAGS += -I$(CURDIR)/../include
+
 apfsck: $(OBJS)
 	gcc $(CFLAGS) -o apfsck $(OBJS)
 

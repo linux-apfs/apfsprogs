@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <apfs/raw.h>
+#include <apfs/types.h>
 #include "apfsck.h"
 #include "btree.h"
 #include "dir.h"
@@ -19,7 +21,6 @@
 #include "object.h"
 #include "spaceman.h"
 #include "super.h"
-#include "types.h"
 #include "xattr.h"
 
 bool ongoing_query;

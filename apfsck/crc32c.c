@@ -7,8 +7,8 @@
  * code or tables extracted from it, as desired without restriction.
  */
 
+#include <apfs/types.h>
 #include "crc32c.h"
-#include "types.h"
 
 static const u32 crc32Table[256] = {
 	0x00000000L, 0xF26B8303L, 0xE13B70F7L, 0x1350F3F4L,

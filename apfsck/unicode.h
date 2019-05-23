@@ -7,7 +7,7 @@
 #ifndef _UNICODE_H
 #define _UNICODE_H
 
-#include "types.h"
+#include <apfs/types.h>
 
 /*
  * This structure helps normalize_next() to retrieve one normalized
