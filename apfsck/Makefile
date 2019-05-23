@@ -6,13 +6,21 @@ DEPS = $(SRCS:.c=.d)
 BINDIR = ~/bin
 MANDIR = ~/share/man/man8
 
-override CFLAGS += -I$(CURDIR)/../include
+SPARSE_VERSION := $(shell sparse --version 2>/dev/null)
+
+override CFLAGS += -Wall -I$(CURDIR)/../include
 
 apfsck: $(OBJS)
-	gcc $(CFLAGS) -o apfsck $(OBJS)
+	@echo '  Linking...'
+	@gcc $(CFLAGS) -o apfsck $(OBJS)
+	@echo '  Build complete'
 
 %.o: %.c
-	gcc $(CFLAGS) -o $@ -MMD -MP -c $<
+	@echo '  Compiling $<...'
+	@gcc $(CFLAGS) -o $@ -MMD -MP -c $<
+ifdef SPARSE_VERSION
+	@sparse $(CFLAGS) $<
+endif
 
 -include $(DEPS)
 
