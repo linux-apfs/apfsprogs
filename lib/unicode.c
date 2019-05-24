@@ -1,5 +1,5 @@
 /*
- *  apfsprogs/apfsck/unicode.c
+ *  apfsprogs/lib/unicode.c
  *
  * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  *
@@ -8,7 +8,7 @@
  */
 
 #include <ctype.h>
-#include "unicode.h"
+#include <apfs/unicode.h>
 
 /*
  * To reuse the implementation from the kernel module, we first
