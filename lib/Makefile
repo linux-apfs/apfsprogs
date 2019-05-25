@@ -6,7 +6,9 @@ SPARSE_VERSION := $(shell sparse --version 2>/dev/null)
 
 override CFLAGS += -Wall -I$(CURDIR)/../include
 
-all: $(OBJS)
+libapfs.a: $(OBJS)
+	@echo '  Assembling library archive...'
+	@ar rcs $@ $^
 
 %.o: %.c
 	@echo '  Compiling $<...'
@@ -18,4 +20,4 @@ endif
 -include $(DEPS)
 
 clean:
-	rm -f $(OBJS) $(DEPS)
+	rm -f $(OBJS) $(DEPS) libapfs.a

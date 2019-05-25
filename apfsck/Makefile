@@ -4,7 +4,7 @@ OBJS = $(SRCS:.c=.o)
 DEPS = $(SRCS:.c=.d)
 
 LIBDIR = ../lib
-LIBS = $(LIBDIR)/checksum.o $(LIBDIR)/unicode.o
+LIBRARY = $(LIBDIR)/libapfs.a
 
 BINDIR = ~/bin
 MANDIR = ~/share/man/man8
@@ -13,13 +13,13 @@ SPARSE_VERSION := $(shell sparse --version 2>/dev/null)
 
 override CFLAGS += -Wall -I$(CURDIR)/../include
 
-apfsck: $(OBJS) libraries
+apfsck: $(OBJS) $(LIBRARY)
 	@echo '  Linking...'
-	@gcc $(CFLAGS) -o apfsck $(OBJS) $(LIBS)
+	@gcc $(CFLAGS) -o apfsck $(OBJS) $(LIBRARY)
 	@echo '  Build complete'
 
 # Build the common libraries
-libraries: FORCE
+$(LIBRARY): FORCE
 	@echo '  Building libraries...'
 	@$(MAKE) -C $(LIBDIR) --silent --no-print-directory
 	@echo '  Library build complete'
