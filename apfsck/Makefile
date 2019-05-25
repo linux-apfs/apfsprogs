@@ -4,7 +4,7 @@ OBJS = $(SRCS:.c=.o)
 DEPS = $(SRCS:.c=.d)
 
 LIBDIR = ../lib
-LIBS = $(LIBDIR)/crc32c.o $(LIBDIR)/unicode.o
+LIBS = $(LIBDIR)/checksum.o $(LIBDIR)/unicode.o
 
 BINDIR = ~/bin
 MANDIR = ~/share/man/man8

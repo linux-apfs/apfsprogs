@@ -1,42 +1,20 @@
 /*
  *  apfsprogs/apfsck/object.c
  *
- * Author: Gabriel Krisman Bertazi <krisman@collabora.co.uk>
- *
- * Checksum routines for an APFS object
+ * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */
 
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <apfs/checksum.h>
 #include <apfs/raw.h>
 #include "apfsck.h"
 #include "btree.h"
 #include "htable.h"
 #include "object.h"
 #include "super.h"
-
-static u64 fletcher64(void *addr, unsigned long len)
-{
-	__le32 *buff = addr;
-	u64 sum1 = 0;
-	u64 sum2 = 0;
-	u64 c1, c2;
-	int i;
-
-	for (i = 0; i < len/sizeof(u32); i++) {
-		sum1 += le32_to_cpu(buff[i]);
-		sum2 += sum1;
-	}
-
-	c1 = sum1 + sum2;
-	c1 = 0xFFFFFFFF - c1 % 0xFFFFFFFF;
-	c2 = sum1 + c1;
-	c2 = 0xFFFFFFFF - c2 % 0xFFFFFFFF;
-
-	return (c2 << 32) | c1;
-}
 
 int obj_verify_csum(struct apfs_obj_phys *obj)
 {

@@ -1,14 +1,18 @@
 /*
- *  apfsprogs/lib/crc32c.c
+ *  apfsprogs/lib/checksum.c
  *
+ * Checksum implementations needed by APFS.
+ */
+
+#include <apfs/checksum.h>
+#include <apfs/types.h>
+
+/*
  * Implementation of the crc32c algorithm, adapted and simplified.
  *
  * COPYRIGHT (C) 1986 Gary S. Brown.  You may use this program, or
  * code or tables extracted from it, as desired without restriction.
  */
-
-#include <apfs/crc32c.h>
-#include <apfs/types.h>
 
 static const u32 crc32Table[256] = {
 	0x00000000L, 0xF26B8303L, 0xE13B70F7L, 0x1350F3F4L,
@@ -85,4 +89,31 @@ u32 crc32c(u32 crc, const void *buf, int size)
 		crc = crc32Table[(crc ^ *p++) & 0xff] ^ (crc >> 8);
 
 	return crc;
+}
+
+/*
+ * Implementation of the Fletcher-64 checksum, as used in APFS.
+ *
+ * Author: Gabriel Krisman Bertazi <krisman@collabora.co.uk>
+ * Based on the Fletcher64 implementation from linux/drivers/nvdimm.
+ */
+u64 fletcher64(void *addr, unsigned long len)
+{
+	__le32 *buff = addr;
+	u64 sum1 = 0;
+	u64 sum2 = 0;
+	u64 c1, c2;
+	int i;
+
+	for (i = 0; i < len/sizeof(u32); i++) {
+		sum1 += le32_to_cpu(buff[i]);
+		sum2 += sum1;
+	}
+
+	c1 = sum1 + sum2;
+	c1 = 0xFFFFFFFF - c1 % 0xFFFFFFFF;
+	c2 = sum1 + c1;
+	c2 = 0xFFFFFFFF - c2 % 0xFFFFFFFF;
+
+	return (c2 << 32) | c1;
 }
