@@ -24,7 +24,16 @@ static bool weird_state;
  */
 static void usage(char *path)
 {
-	fprintf(stderr, "usage: %s [-cuw] device\n", path);
+	fprintf(stderr, "usage: %s [-cuvw] device\n", path);
+	exit(1);
+}
+
+/**
+ * version - Print version information and exit
+ */
+static void version(void)
+{
+	printf("apfsck version 0.1\n");
 	exit(1);
 }
 
@@ -102,7 +111,7 @@ int main(int argc, char *argv[])
 	char *filename;
 
 	while (1) {
-		int opt = getopt(argc, argv, "cuw");
+		int opt = getopt(argc, argv, "cuvw");
 
 		if (opt == -1)
 			break;
@@ -117,6 +126,8 @@ int main(int argc, char *argv[])
 		case 'w':
 			options |= OPT_REPORT_WEIRD;
 			break;
+		case 'v':
+			version();
 		default:
 			usage(argv[0]);
 		}
