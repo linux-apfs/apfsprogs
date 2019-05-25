@@ -1,5 +1,5 @@
 /*
- *  apfsprogs/apfsck/crc32c.h
+ *  apfsprogs/include/apfs/crc32c.h
  *
  * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */

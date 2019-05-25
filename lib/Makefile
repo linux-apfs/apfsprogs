@@ -1,4 +1,4 @@
-SRCS = unicode.c
+SRCS = crc32c.c unicode.c
 OBJS = $(SRCS:.c=.o)
 DEPS = $(SRCS:.c=.d)
 

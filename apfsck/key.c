@@ -7,11 +7,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <apfs/crc32c.h>
 #include <apfs/raw.h>
 #include <apfs/types.h>
 #include <apfs/unicode.h>
 #include "apfsck.h"
-#include "crc32c.h"
 #include "key.h"
 #include "super.h"
 
