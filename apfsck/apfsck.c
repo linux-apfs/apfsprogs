@@ -122,7 +122,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (optind >= argc)
+	if (optind != argc - 1)
 		usage(argv[0]);
 	filename = argv[optind];
 
