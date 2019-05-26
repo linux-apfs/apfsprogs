@@ -19,10 +19,8 @@ union htable_entry **alloc_htable(void)
 	union htable_entry **table;
 
 	table = calloc(HTABLE_BUCKETS, sizeof(*table));
-	if (!table) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!table)
+		system_error();
 	return table;
 }
 
@@ -77,10 +75,8 @@ union htable_entry *get_htable_entry(u64 id, int size,
 	}
 
 	new = calloc(1, size);
-	if (!new) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!new)
+		system_error();
 
 	new->header.h_id = id;
 	new->header.h_next = entry;

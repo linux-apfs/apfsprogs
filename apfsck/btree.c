@@ -72,10 +72,8 @@ static void node_parse_key_free_list(struct node *node)
 
 	/* Each bit represents a byte in the key area */
 	node->free_key_bmap = malloc((area_len + 7) / 8);
-	if (!node->free_key_bmap) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!node->free_key_bmap)
+		system_error();
 	memset(node->free_key_bmap, 0xFF, (area_len + 7) / 8);
 
 	off = le16_to_cpu(free->off);
@@ -137,10 +135,8 @@ static void node_parse_val_free_list(struct node *node)
 
 	/* Each bit represents a byte in the value area */
 	node->free_val_bmap = malloc((area_len + 7) / 8);
-	if (!node->free_val_bmap) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!node->free_val_bmap)
+		system_error();
 	memset(node->free_val_bmap, 0xFF, (area_len + 7) / 8);
 
 	off = le16_to_cpu(free->off);
@@ -205,10 +201,8 @@ static void node_prepare_bitmaps(struct node *node)
 
 	/* Each bit represents a byte in the key area */
 	node->used_key_bmap = calloc(1, (keys_len + 7) / 8);
-	if (!node->used_key_bmap) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!node->used_key_bmap)
+		system_error();
 
 	/* Only the root has a footer */
 	values_len = sb->s_blocksize - node->data -
@@ -216,10 +210,8 @@ static void node_prepare_bitmaps(struct node *node)
 
 	/* Each bit represents a byte in the value area */
 	node->used_val_bmap = calloc(1, (values_len + 7) / 8);
-	if (!node->used_val_bmap) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!node->used_val_bmap)
+		system_error();
 
 	node_parse_key_free_list(node);
 	node_parse_val_free_list(node);
@@ -239,10 +231,8 @@ static struct node *read_node(u64 oid, struct btree *btree)
 	u32 obj_type, obj_subtype;
 
 	node = calloc(1, sizeof(*node));
-	if (!node) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!node)
+		system_error();
 	node->btree = btree;
 
 	/* The free-space queue is the only tree with ephemeral nodes so far */
@@ -950,10 +940,8 @@ struct free_queue *parse_free_queue_btree(u64 oid)
 	struct key last_key = {0};
 
 	sfq = calloc(1, sizeof(*sfq));
-	if (!sfq) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!sfq)
+		system_error();
 	btree = &sfq->sfq_btree;
 
 	btree->type = BTREE_TYPE_FREE_QUEUE;
@@ -977,10 +965,8 @@ struct btree *parse_snap_meta_btree(u64 oid)
 	struct key last_key = {0};
 
 	snap = calloc(1, sizeof(*snap));
-	if (!snap) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!snap)
+		system_error();
 	snap->type = BTREE_TYPE_SNAP_META;
 	snap->omap_table = NULL; /* These are physical objects */
 	snap->root = read_node(oid, snap);
@@ -1005,10 +991,8 @@ struct btree *parse_cat_btree(u64 oid, union htable_entry **omap_table)
 	char name_buf[256];
 
 	cat = calloc(1, sizeof(*cat));
-	if (!cat) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!cat)
+		system_error();
 
 	cat->type = BTREE_TYPE_CATALOG;
 	cat->omap_table = omap_table;
@@ -1074,10 +1058,8 @@ struct btree *parse_omap_btree(u64 oid)
 		report_unknown("Revert in progress");
 
 	omap = calloc(1, sizeof(*omap));
-	if (!omap) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!omap)
+		system_error();
 	omap->type = BTREE_TYPE_OMAP;
 	omap->omap_table = NULL; /* The omap doesn't have an omap of its own */
 	omap->root = read_node(le64_to_cpu(raw->om_tree_oid), omap);
@@ -1105,10 +1087,8 @@ struct btree *parse_extentref_btree(u64 oid)
 	struct key last_key = {0};
 
 	extref = calloc(1, sizeof(*extref));
-	if (!extref) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!extref)
+		system_error();
 	extref->type = BTREE_TYPE_EXTENTREF;
 	extref->omap_table = NULL; /* These are physical objects */
 	extref->root = read_node(oid, extref);
@@ -1212,10 +1192,8 @@ struct query *alloc_query(struct node *node, struct query *parent)
 	struct query *query;
 
 	query = malloc(sizeof(*query));
-	if (!query) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!query)
+		system_error();
 
 	query->node = node;
 	query->key = parent ? parent->key : NULL;

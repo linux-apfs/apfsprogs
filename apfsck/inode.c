@@ -269,10 +269,8 @@ static int read_name_xfield(char *xval, int len, struct inode *inode)
 		report("Name xfield", "name with no null termination");
 
 	inode->i_name = malloc(xlen);
-	if (!inode->i_name) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!inode->i_name)
+		system_error();
 	strcpy(inode->i_name, xval);
 
 	return xlen;
@@ -689,10 +687,8 @@ struct sibling *get_sibling(u64 id, struct inode *inode)
 	}
 
 	new = calloc(1, sizeof(*new));
-	if (!new) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!new)
+		system_error();
 
 	new->s_checked = false;
 	new->s_id = id;
@@ -720,10 +716,8 @@ void set_or_check_sibling(u64 parent_id, int namelen, u8 *name,
 		sibling->s_name_len = namelen;
 
 		sibling->s_name = malloc(namelen);
-		if (!sibling->s_name) {
-			perror(NULL);
-			exit(1);
-		}
+		if (!sibling->s_name)
+			system_error();
 		strcpy((char *)sibling->s_name, (char *)name);
 		return;
 	}

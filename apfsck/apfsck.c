@@ -17,14 +17,14 @@
 int fd;
 unsigned int options;
 static bool weird_state;
+static char *progname;
 
 /**
  * usage - Print usage information and exit
- * @path: path to this program
  */
-static void usage(char *path)
+static void usage(void)
 {
-	fprintf(stderr, "usage: %s [-cuvw] device\n", path);
+	fprintf(stderr, "usage: %s [-cuvw] device\n", progname);
 	exit(1);
 }
 
@@ -34,6 +34,15 @@ static void usage(char *path)
 static void version(void)
 {
 	printf("apfsck version 0.1\n");
+	exit(1);
+}
+
+/**
+ * system_error - Print a system error message and exit
+ */
+__attribute__((noreturn)) void system_error(void)
+{
+	perror(progname);
 	exit(1);
 }
 
@@ -110,6 +119,7 @@ int main(int argc, char *argv[])
 {
 	char *filename;
 
+	progname = argv[0];
 	while (1) {
 		int opt = getopt(argc, argv, "cuvw");
 
@@ -129,19 +139,17 @@ int main(int argc, char *argv[])
 		case 'v':
 			version();
 		default:
-			usage(argv[0]);
+			usage();
 		}
 	}
 
 	if (optind != argc - 1)
-		usage(argv[0]);
+		usage();
 	filename = argv[optind];
 
 	fd = open(filename, O_RDONLY);
-	if (fd == -1) {
-		perror(NULL);
-		exit(1);
-	}
+	if (fd == -1)
+		system_error();
 
 	parse_filesystem();
 	if (weird_state)

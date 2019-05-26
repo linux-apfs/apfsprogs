@@ -190,10 +190,8 @@ static void attach_extent_to_dstream(u64 paddr, u64 blk_count,
 	}
 
 	new = malloc(sizeof(*new));
-	if (!new) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!new)
+		system_error();
 
 	new->paddr = paddr;
 	new->next = ext;

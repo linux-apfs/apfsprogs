@@ -86,10 +86,8 @@ static void *read_chunk_bitmap(u64 addr, u64 bmap)
 	offset = bmap * sb->s_blocksize;
 	do {
 		read_bytes = pread(fd, buf, count, offset);
-		if (read_bytes < 0) {
-			perror(NULL);
-			exit(1);
-		}
+		if (read_bytes < 0)
+			system_error();
 		buf += read_bytes;
 		count -= read_bytes;
 		offset += read_bytes;
@@ -525,10 +523,8 @@ static void check_ip_bitmap_blocks(struct apfs_spaceman_phys *raw)
 
 		bmap = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
 			    fd, (bmap_base + i) * sb->s_blocksize);
-		if (bmap == MAP_FAILED) {
-			perror(NULL);
-			exit(1);
-		}
+		if (bmap == MAP_FAILED)
+			system_error();
 
 		/*
 		 * The edge is the last byte inside the allocation bitmap;
@@ -565,10 +561,8 @@ static void check_internal_pool(struct apfs_spaceman_phys *raw, u64 *real_bmap)
 
 	pool_bmap = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
 			 fd, parse_ip_bitmap_list(raw) * sb->s_blocksize);
-	if (pool_bmap == MAP_FAILED) {
-		perror(NULL);
-		exit(1);
-	}
+	if (pool_bmap == MAP_FAILED)
+		system_error();
 
 	for (i = 0; i < pool_blocks; ++i) {
 		u64 bno = pool_base + i;
@@ -643,10 +637,8 @@ void check_spaceman(u64 oid)
 
 	/* All bitmaps will need to be read into memory */
 	sm->sm_bitmap = calloc(sm->sm_chunk_count, sb->s_blocksize);
-	if (!sm->sm_bitmap) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!sm->sm_bitmap)
+		system_error();
 
 	parse_spaceman_main_device(raw);
 	check_spaceman_tier2_device(raw);

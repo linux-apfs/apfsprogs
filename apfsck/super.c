@@ -75,10 +75,8 @@ static struct apfs_nx_superblock *read_super_copy(void)
 
 	msb_raw = mmap(NULL, bsize_tmp, PROT_READ, MAP_PRIVATE,
 		       fd, APFS_NX_BLOCK_NUM * bsize_tmp);
-	if (msb_raw == MAP_FAILED) {
-		perror(NULL);
-		exit(1);
-	}
+	if (msb_raw == MAP_FAILED)
+		system_error();
 	sb->s_blocksize = le32_to_cpu(msb_raw->nx_block_size);
 	sb->s_blocksize_bits = blksize_bits(sb->s_blocksize);
 
@@ -87,10 +85,8 @@ static struct apfs_nx_superblock *read_super_copy(void)
 
 		msb_raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
 			       fd, APFS_NX_BLOCK_NUM * sb->s_blocksize);
-		if (msb_raw == MAP_FAILED) {
-			perror(NULL);
-			exit(1);
-		}
+		if (msb_raw == MAP_FAILED)
+			system_error();
 	}
 
 	if (le32_to_cpu(msb_raw->nx_magic) != APFS_NX_MAGIC)
@@ -135,18 +131,14 @@ static u64 get_device_size(unsigned int blocksize)
 	struct stat buf;
 	u64 size;
 
-	if (fstat(fd, &buf)) {
-		perror(NULL);
-		exit(1);
-	}
+	if (fstat(fd, &buf))
+		system_error();
 
 	if ((buf.st_mode & S_IFMT) == S_IFREG)
 		return buf.st_size / blocksize;
 
-	if (ioctl(fd, BLKGETSIZE64, &size)) {
-		perror(NULL);
-		exit(1);
-	}
+	if (ioctl(fd, BLKGETSIZE64, &size))
+		system_error();
 	return size / blocksize;
 }
 
@@ -551,10 +543,8 @@ static void check_container(struct super_block *sb)
 		struct apfs_superblock *vsb_raw;
 
 		vsb = calloc(1, sizeof(*vsb));
-		if (!vsb) {
-			perror(NULL);
-			exit(1);
-		}
+		if (!vsb)
+			system_error();
 		vsb->v_omap_table = alloc_htable();
 		vsb->v_extent_table = alloc_htable();
 		vsb->v_cnid_table = alloc_htable();
@@ -655,10 +645,8 @@ static void parse_main_super(struct super_block *sb)
 	 */
 	chunk_count = DIV_ROUND_UP(sb->s_block_count, 8 * sb->s_blocksize);
 	sb->s_bitmap = calloc(chunk_count, sb->s_blocksize);
-	if (!sb->s_bitmap) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!sb->s_bitmap)
+		system_error();
 	((char *)sb->s_bitmap)[0] = 0x01; /* Block zero is always used */
 
 	sb->s_max_vols = get_max_volumes(sb->s_block_count * sb->s_blocksize);
@@ -831,10 +819,8 @@ void parse_filesystem(void)
 	u32 desc_next, desc_index, index;
 
 	sb = calloc(1, sizeof(*sb));
-	if (!sb) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!sb)
+		system_error();
 
 	/* Read the superblock from the last clean unmount */
 	msb_raw = read_super_copy();
@@ -933,10 +919,8 @@ static struct object *parse_reaper(u64 oid)
 	int i;
 
 	reaper = calloc(1, sizeof(*reaper));
-	if (!reaper) {
-		perror(NULL);
-		exit(1);
-	}
+	if (!reaper)
+		system_error();
 
 	raw = read_ephemeral_object(oid, reaper);
 	if (reaper->type != APFS_OBJECT_TYPE_NX_REAPER)

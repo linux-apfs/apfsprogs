@@ -37,10 +37,8 @@ void *read_object_nocheck(u64 bno, struct object *obj)
 
 	raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
 		   fd, bno * sb->s_blocksize);
-	if (raw == MAP_FAILED) {
-		perror(NULL);
-		exit(1);
-	}
+	if (raw == MAP_FAILED)
+		system_error();
 
 	/* This one check is always needed */
 	if (!obj_verify_csum(raw)) {

@@ -26,5 +26,6 @@ extern __attribute__((noreturn, format(printf, 2, 3)))
 extern void report_crash(const char *context);
 extern void report_unknown(const char *feature);
 extern void report_weird(const char *context);
+extern __attribute__((noreturn)) void system_error(void);
 
 #endif	/* _APFSCK_H */

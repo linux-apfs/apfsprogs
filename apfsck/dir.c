@@ -128,10 +128,8 @@ void parse_dentry_record(struct apfs_drec_hashed_key *key,
 	if (!inode->i_first_name) {
 		/* No dentry for this inode has been seen before */
 		inode->i_first_name = malloc(namelen);
-		if (!inode->i_first_name) {
-			perror(NULL);
-			exit(1);
-		}
+		if (!inode->i_first_name)
+			system_error();
 		strcpy(inode->i_first_name, name);
 		inode->i_first_parent = parent_ino;
 	}
