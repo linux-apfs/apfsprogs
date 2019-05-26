@@ -9,10 +9,14 @@ mkapfs \- create an APFS filesystem
 .B mkapfs
 [\-v]
 .I device
+.RI [ blocks ]
 .SH DESCRIPTION
 .B mkapfs
 is an experimental tool to create an APFS filesystem on the given
 .IR device .
+The number of blocks in the container can be specified in
+.IR blocks ,
+otherwise the whole disk is used.
 .SH OPTIONS
 .TP
 .B \-v

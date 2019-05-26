@@ -7,6 +7,12 @@
 #ifndef _MKAPFS_H
 #define _MKAPFS_H
 
+/* Filesystem parameters */
+struct parameters {
+	unsigned long	blocksize;	/* Block size */
+	u64		block_count;	/* Number of blocks in the container */
+};
+
 /* Declarations for global variables */
 extern int fd;				/* File descriptor for the device */
 
