@@ -60,5 +60,10 @@ void make_container(struct parameters *param)
 
 	set_uuid(sb_copy->nx_uuid, param->uuid);
 
+	/* Leave some room for the objects created by the mkfs */
+	sb_copy->nx_next_oid = cpu_to_le64(APFS_OID_RESERVED_COUNT + 100);
+	/* The first valid transaction is for the mkfs */
+	sb_copy->nx_next_xid = cpu_to_le64(2);
+
 	munmap(sb_copy, param->blocksize);
 }
