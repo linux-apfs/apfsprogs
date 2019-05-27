@@ -37,6 +37,38 @@ static void set_uuid(char *field, char *uuid)
 }
 
 /**
+ * set_checkpoint_areas - Set all sb fields describing the checkpoint areas
+ * @sb: pointer to the superblock copy on disk
+ */
+static void set_checkpoint_areas(struct apfs_nx_superblock *sb)
+{
+	u64 desc_base = APFS_NX_BLOCK_NUM + 1; /* Right after the super copy */
+	u32 desc_blocks;
+	u64 data_base;
+
+	/* TODO: this should change with the container size, but how much? */
+	desc_blocks = 64;
+
+	/* First set the checkpoint descriptor area fields */
+	sb->nx_xp_desc_base = cpu_to_le64(desc_base);
+	sb->nx_xp_desc_blocks = cpu_to_le32(desc_blocks);
+	/* The first two blocks hold the superblock and the mappings */
+	sb->nx_xp_desc_len = cpu_to_le32(2);
+	sb->nx_xp_desc_next = cpu_to_le32(2);
+	sb->nx_xp_desc_index = 0;
+
+	data_base = desc_base + desc_blocks; /* Right after the descriptors */
+
+	/* Now set the checkpoint data area fields */
+	sb->nx_xp_data_base = cpu_to_le64(data_base);
+	sb->nx_xp_data_blocks = cpu_to_le32(5904); /* Also hardcoded for now */
+	/* Room for the space manager, the two free queues, and the reaper */
+	sb->nx_xp_data_len = cpu_to_le32(4);
+	sb->nx_xp_data_next = cpu_to_le32(4);
+	sb->nx_xp_data_index = 0;
+}
+
+/**
  * make_container - Make the whole filesystem
  * @param: parameters for the filesystem
  */
@@ -64,6 +96,8 @@ void make_container(struct parameters *param)
 	sb_copy->nx_next_oid = cpu_to_le64(APFS_OID_RESERVED_COUNT + 100);
 	/* The first valid transaction is for the mkfs */
 	sb_copy->nx_next_xid = cpu_to_le64(2);
+
+	set_checkpoint_areas(sb_copy);
 
 	munmap(sb_copy, param->blocksize);
 }
