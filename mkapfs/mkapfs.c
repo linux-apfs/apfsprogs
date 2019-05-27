@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <apfs/raw.h>
 #include "mkapfs.h"
+#include "super.h"
 
 int fd;
 static char *progname;
@@ -127,11 +128,11 @@ int main(int argc, char *argv[])
 		usage();
 	}
 
-	fd = open(filename, O_RDONLY);
+	fd = open(filename, O_RDWR);
 	if (fd == -1)
 		system_error();
 	complete_parameters(param);
 
-	/* For now, do nothing */
+	make_container(param);
 	return 0;
 }
