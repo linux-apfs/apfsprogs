@@ -29,5 +29,9 @@ void make_container(struct parameters *param)
 	sb_copy->nx_block_size = cpu_to_le32(param->blocksize);
 	sb_copy->nx_block_count = cpu_to_le64(param->block_count);
 
+	/* We only support version 2 of APFS */
+	sb_copy->nx_incompatible_features |=
+					cpu_to_le64(APFS_NX_INCOMPAT_VERSION2);
+
 	munmap(sb_copy, param->blocksize);
 }
