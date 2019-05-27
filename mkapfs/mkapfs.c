@@ -25,7 +25,7 @@ static char *progname;
  */
 static void usage(void)
 {
-	fprintf(stderr, "usage: %s [-v] device [blocks]\n", progname);
+	fprintf(stderr, "usage: %s [-U UUID] [-v] device [blocks]\n", progname);
 	exit(1);
 }
 
@@ -92,6 +92,29 @@ static void complete_parameters(struct parameters *param)
 			progname);
 		exit(1);
 	}
+
+	if (!param->uuid) {
+		int uuid_fd;
+		ssize_t ret;
+
+		/* Length of a null-terminated UUID standard format string */
+		param->uuid = malloc(37);
+		if (!param->uuid)
+			system_error();
+
+		/* Linux provides randomly generated UUIDs at /proc */
+		uuid_fd = open("/proc/sys/kernel/random/uuid", O_RDONLY);
+		if (fd == -1)
+			system_error();
+		do {
+			ret = read(uuid_fd, param->uuid, 36);
+			if (ret == -1)
+				system_error();
+		} while (ret != 36);
+
+		/* Put a null-termination, just in case */
+		param->uuid[36] = 0;
+	}
 }
 
 int main(int argc, char *argv[])
@@ -105,12 +128,15 @@ int main(int argc, char *argv[])
 		system_error();
 
 	while (1) {
-		int opt = getopt(argc, argv, "v");
+		int opt = getopt(argc, argv, "U:v");
 
 		if (opt == -1)
 			break;
 
 		switch (opt) {
+		case 'U':
+			param->uuid = optarg;
+			break;
 		case 'v':
 			version();
 		default:

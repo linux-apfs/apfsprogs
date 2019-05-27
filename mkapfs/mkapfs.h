@@ -11,6 +11,7 @@
 struct parameters {
 	unsigned long	blocksize;	/* Block size */
 	u64		block_count;	/* Number of blocks in the container */
+	char		*uuid;		/* UUID in standard format */
 };
 
 /* Declarations for global variables */

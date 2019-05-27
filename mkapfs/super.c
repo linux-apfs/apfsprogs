@@ -5,11 +5,36 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <apfs/raw.h>
 #include "mkapfs.h"
 #include "super.h"
+
+/**
+ * set_uuid - Set a UUID field
+ * @field:	on-disk field to set
+ * @uuid:	pointer to the UUID string in standard format
+ */
+static void set_uuid(char *field, char *uuid)
+{
+	int ret;
+	char *stdformat = "%2hhx%2hhx%2hhx%2hhx-%2hhx%2hhx-%2hhx%2hhx-"
+			  "%2hhx%2hhx-%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx";
+
+	ret = sscanf(uuid, stdformat, &field[0], &field[1], &field[2],
+				      &field[3], &field[4], &field[5],
+				      &field[6], &field[7], &field[8],
+				      &field[9], &field[10], &field[11],
+				      &field[12], &field[13], &field[14],
+				      &field[15]);
+	if (ret == 16)
+		return;
+
+	printf("Please provide a UUID in standard format.\n");
+	exit(1);
+}
 
 /**
  * make_container - Make the whole filesystem
@@ -32,6 +57,8 @@ void make_container(struct parameters *param)
 	/* We only support version 2 of APFS */
 	sb_copy->nx_incompatible_features |=
 					cpu_to_le64(APFS_NX_INCOMPAT_VERSION2);
+
+	set_uuid(sb_copy->nx_uuid, param->uuid);
 
 	munmap(sb_copy, param->blocksize);
 }

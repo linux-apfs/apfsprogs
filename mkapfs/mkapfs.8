@@ -8,6 +8,8 @@ mkapfs \- create an APFS filesystem
 .SH SYNOPSIS
 .B mkapfs
 [\-v]
+[\-U
+.IR UUID ]
 .I device
 .RI [ blocks ]
 .SH DESCRIPTION
@@ -18,6 +20,10 @@ The number of blocks in the container can be specified in
 .IR blocks ,
 otherwise the whole disk is used.
 .SH OPTIONS
+.TP
+.BI \-U " UUID"
+Specify a UUID for the filesystem, in the standard format. By default the value
+is chosen by /proc/sys/kernel/random/uuid.
 .TP
 .B \-v
 Print the version number of
