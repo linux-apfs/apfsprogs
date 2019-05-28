@@ -110,8 +110,7 @@ void make_container(void)
 
 	/* Leave some room for the objects created by the mkfs */
 	sb_copy->nx_next_oid = cpu_to_le64(APFS_OID_RESERVED_COUNT + 100);
-	/* The first valid transaction is for the mkfs */
-	sb_copy->nx_next_xid = cpu_to_le64(2);
+	sb_copy->nx_next_xid = cpu_to_le64(MKFS_XID + 1);
 
 	set_checkpoint_areas(sb_copy);
 

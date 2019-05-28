@@ -28,7 +28,7 @@ void set_object_header(struct apfs_obj_phys *obj, u64 oid, u32 type,
 	int after_cksum_len = param->blocksize - APFS_MAX_CKSUM_SIZE;
 
 	obj->o_oid = cpu_to_le64(oid);
-	obj->o_xid = cpu_to_le64(1);
+	obj->o_xid = cpu_to_le64(MKFS_XID);
 	obj->o_type = cpu_to_le32(type);
 	obj->o_subtype = cpu_to_le32(subtype);
 

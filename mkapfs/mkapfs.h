@@ -14,6 +14,9 @@ struct parameters {
 	char		*uuid;		/* UUID in standard format */
 };
 
+/* Hardcoded transaction ids */
+#define MKFS_XID	1
+
 /* Hardcoded object ids */
 #define	SPACEMAN_OID	APFS_OID_RESERVED_COUNT
 #define REAPER_OID	(SPACEMAN_OID + 1)
