@@ -85,6 +85,21 @@ static u32 get_max_volumes(u64 size)
 }
 
 /**
+ * set_ephemeral_info - Set the container's array of ephemeral info
+ * @info: pointer to the nx_ephemeral_info array on the container superblock
+ */
+static void set_ephemeral_info(__le64 *info)
+{
+	/* TODO: add support for small containers */
+	u64 min_block_count = APFS_NX_EPH_MIN_BLOCK_COUNT;
+
+	/* Only the first entry is documented, leave the others as zero */
+	*info = cpu_to_le64((min_block_count << 32)
+			    | (APFS_NX_MAX_FILE_SYSTEM_EPH_STRUCTS << 16)
+			    | APFS_NX_EPH_INFO_VERSION_1);
+}
+
+/**
  * make_container - Make the whole filesystem
  */
 void make_container(void)
@@ -119,6 +134,8 @@ void make_container(void)
 	sb_copy->nx_reaper_oid = cpu_to_le64(REAPER_OID);
 
 	sb_copy->nx_max_file_systems = cpu_to_le32(get_max_volumes(size));
+
+	set_ephemeral_info(&sb_copy->nx_ephemeral_info[0]);
 
 	set_object_header(&sb_copy->nx_o, APFS_OID_NX_SUPERBLOCK,
 			  APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_NX_SUPERBLOCK,
