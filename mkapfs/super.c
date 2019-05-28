@@ -69,12 +69,28 @@ static void set_checkpoint_areas(struct apfs_nx_superblock *sb)
 }
 
 /**
+ * get_max_volumes - Calculate the maximum number of volumes for the container
+ * @size: the container size, in bytes
+ */
+static u32 get_max_volumes(u64 size)
+{
+	u32 max_vols;
+
+	/* Divide by 512 MiB and round up, as the reference requires */
+	max_vols = DIV_ROUND_UP(size, 512 * 1024 * 1024);
+	if (max_vols > APFS_NX_MAX_FILE_SYSTEMS)
+		max_vols = APFS_NX_MAX_FILE_SYSTEMS;
+	return max_vols;
+}
+
+/**
  * make_container - Make the whole filesystem
  * @param: parameters for the filesystem
  */
 void make_container(struct parameters *param)
 {
 	struct apfs_nx_superblock *sb_copy;
+	u64 size = param->blocksize * param->block_count;
 
 	sb_copy = mmap(NULL, param->blocksize, PROT_READ | PROT_WRITE,
 		       MAP_SHARED, fd, APFS_NX_BLOCK_NUM * param->blocksize);
@@ -102,6 +118,8 @@ void make_container(struct parameters *param)
 	sb_copy->nx_spaceman_oid = cpu_to_le64(SPACEMAN_OID);
 	sb_copy->nx_omap_oid = cpu_to_le64(MAIN_OMAP_BNO);
 	sb_copy->nx_reaper_oid = cpu_to_le64(REAPER_OID);
+
+	sb_copy->nx_max_file_systems = cpu_to_le32(get_max_volumes(size));
 
 	munmap(sb_copy, param->blocksize);
 }
