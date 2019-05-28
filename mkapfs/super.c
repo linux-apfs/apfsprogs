@@ -99,5 +99,9 @@ void make_container(struct parameters *param)
 
 	set_checkpoint_areas(sb_copy);
 
+	sb_copy->nx_spaceman_oid = cpu_to_le64(SPACEMAN_OID);
+	sb_copy->nx_omap_oid = cpu_to_le64(MAIN_OMAP_BNO);
+	sb_copy->nx_reaper_oid = cpu_to_le64(REAPER_OID);
+
 	munmap(sb_copy, param->blocksize);
 }

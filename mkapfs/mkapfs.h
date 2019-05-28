@@ -14,6 +14,13 @@ struct parameters {
 	char		*uuid;		/* UUID in standard format */
 };
 
+/* Hardcoded object ids */
+#define	SPACEMAN_OID	APFS_OID_RESERVED_COUNT
+#define REAPER_OID	(SPACEMAN_OID + 1)
+
+/* Hardcoded block numbers */
+#define MAIN_OMAP_BNO	20000
+
 /* Declarations for global variables */
 extern int fd;				/* File descriptor for the device */
 
