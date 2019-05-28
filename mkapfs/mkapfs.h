@@ -22,6 +22,7 @@ struct parameters {
 #define MAIN_OMAP_BNO	20000
 
 /* Declarations for global variables */
+extern struct parameters *param;	/* Filesystem parameters */
 extern int fd;				/* File descriptor for the device */
 
 extern __attribute__((noreturn)) void system_error(void);

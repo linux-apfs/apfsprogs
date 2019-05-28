@@ -7,6 +7,6 @@
 #ifndef _SUPER_H
 #define _SUPER_H
 
-extern void make_container(struct parameters *param);
+extern void make_container(void);
 
 #endif	/* _SUPER_H */

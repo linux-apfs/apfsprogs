@@ -60,6 +60,8 @@
 #define APFS_OBJ_ENCRYPTED			0x10000000
 #define APFS_OBJ_NONPERSISTENT			0x08000000
 
+#define APFS_MAX_CKSUM_SIZE 8
+
 /*
  * On-disk representation of an APFS object
  */

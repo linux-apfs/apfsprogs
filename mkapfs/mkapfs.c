@@ -18,6 +18,7 @@
 #include "super.h"
 
 int fd;
+struct parameters *param;
 static char *progname;
 
 /**
@@ -69,11 +70,10 @@ static u64 get_device_size(unsigned int blocksize)
 
 /**
  * complete_parameters - Set all uninitialized parameters to their defaults
- * @param: the parameter structure
  *
  * Also runs any needed checks on the parameters provided by the user.
  */
-static void complete_parameters(struct parameters *param)
+static void complete_parameters(void)
 {
 	u64 dev_block_count;
 
@@ -119,7 +119,6 @@ static void complete_parameters(struct parameters *param)
 
 int main(int argc, char *argv[])
 {
-	struct parameters *param;
 	char *filename;
 
 	progname = argv[0];
@@ -157,8 +156,8 @@ int main(int argc, char *argv[])
 	fd = open(filename, O_RDWR);
 	if (fd == -1)
 		system_error();
-	complete_parameters(param);
+	complete_parameters();
 
-	make_container(param);
+	make_container();
 	return 0;
 }

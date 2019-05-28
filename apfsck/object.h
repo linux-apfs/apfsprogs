@@ -26,8 +26,6 @@ struct object {
 	u32 flags;
 };
 
-#define APFS_MAX_CKSUM_SIZE 8
-
 extern int obj_verify_csum(struct apfs_obj_phys *obj);
 extern void *read_object_nocheck(u64 bno, struct object *obj);
 extern u32 parse_object_flags(u32 flags);

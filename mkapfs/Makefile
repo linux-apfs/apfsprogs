@@ -1,4 +1,4 @@
-SRCS = mkapfs.c super.c
+SRCS = mkapfs.c object.c super.c
 OBJS = $(SRCS:.c=.o)
 DEPS = $(SRCS:.c=.d)
 

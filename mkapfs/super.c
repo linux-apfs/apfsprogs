@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include <apfs/raw.h>
 #include "mkapfs.h"
+#include "object.h"
 #include "super.h"
 
 /**
@@ -85,9 +86,8 @@ static u32 get_max_volumes(u64 size)
 
 /**
  * make_container - Make the whole filesystem
- * @param: parameters for the filesystem
  */
-void make_container(struct parameters *param)
+void make_container(void)
 {
 	struct apfs_nx_superblock *sb_copy;
 	u64 size = param->blocksize * param->block_count;
@@ -121,5 +121,8 @@ void make_container(struct parameters *param)
 
 	sb_copy->nx_max_file_systems = cpu_to_le32(get_max_volumes(size));
 
+	set_object_header(&sb_copy->nx_o, APFS_OID_NX_SUPERBLOCK,
+			  APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_NX_SUPERBLOCK,
+			  APFS_OBJECT_TYPE_INVALID);
 	munmap(sb_copy, param->blocksize);
 }
