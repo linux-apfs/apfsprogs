@@ -22,7 +22,8 @@ struct parameters {
 #define REAPER_OID	(SPACEMAN_OID + 1)
 
 /* Hardcoded block numbers */
-#define MAIN_OMAP_BNO	20000
+#define MAIN_OMAP_BNO		20000
+#define MAIN_OMAP_ROOT_BNO	20001
 
 /* Declarations for global variables */
 extern struct parameters *param;	/* Filesystem parameters */

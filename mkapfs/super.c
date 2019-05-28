@@ -9,6 +9,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <apfs/raw.h>
+#include "btree.h"
 #include "mkapfs.h"
 #include "object.h"
 #include "super.h"
@@ -130,8 +131,9 @@ void make_container(void)
 	set_checkpoint_areas(sb_copy);
 
 	sb_copy->nx_spaceman_oid = cpu_to_le64(SPACEMAN_OID);
-	sb_copy->nx_omap_oid = cpu_to_le64(MAIN_OMAP_BNO);
 	sb_copy->nx_reaper_oid = cpu_to_le64(REAPER_OID);
+	sb_copy->nx_omap_oid = cpu_to_le64(MAIN_OMAP_BNO);
+	make_omap_btree(MAIN_OMAP_BNO, false /* is_vol */);
 
 	sb_copy->nx_max_file_systems = cpu_to_le32(get_max_volumes(size));
 
