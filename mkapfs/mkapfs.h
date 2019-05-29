@@ -38,6 +38,7 @@ struct parameters {
 /* Hardcoded block numbers */
 #define CPOINT_MAP_BNO		CPOINT_DESC_BASE
 #define CPOINT_SB_BNO		(CPOINT_DESC_BASE + 1)
+#define REAPER_BNO		CPOINT_DATA_BASE
 #define MAIN_OMAP_BNO		20000
 #define MAIN_OMAP_ROOT_BNO	20001
 #define FIRST_VOL_BNO		20002

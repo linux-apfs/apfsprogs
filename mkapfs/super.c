@@ -113,9 +113,19 @@ static void make_volume(u64 bno, u64 oid)
 static void make_cpoint_map_block(u64 bno)
 {
 	struct apfs_checkpoint_map_phys *block = get_zeroed_block(bno);
+	struct apfs_checkpoint_mapping *map;
 
 	block->cpm_flags = cpu_to_le32(APFS_CHECKPOINT_MAP_LAST);
-	block->cpm_count = 0; /* For the moment, we leave it empty */
+	block->cpm_count = cpu_to_le32(1); /* For the moment, just the reaper */
+
+	/* Set the checkpoint mapping for the reaper */
+	map = &block->cpm_map[0];
+	map->cpm_type = cpu_to_le32(APFS_OBJ_EPHEMERAL |
+				    APFS_OBJECT_TYPE_NX_REAPER);
+	map->cpm_subtype = cpu_to_le32(APFS_OBJECT_TYPE_INVALID);
+	map->cpm_size = cpu_to_le32(param->blocksize);
+	map->cpm_oid = cpu_to_le64(REAPER_OID);
+	map->cpm_paddr = cpu_to_le64(REAPER_BNO);
 
 	set_object_header(&block->cpm_o, bno,
 			  APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_CHECKPOINT_MAP,
@@ -137,6 +147,26 @@ static void make_cpoint_superblock(u64 bno, struct apfs_nx_superblock *sb_copy)
 
 	memcpy(sb, sb_copy, sizeof(*sb));
 	munmap(sb, param->blocksize);
+}
+
+/**
+ * make_empty_reaper - Make an empty reaper
+ * @bno: block number to use
+ * @oid: object id
+ */
+static void make_empty_reaper(u64 bno, u64 oid)
+{
+	struct apfs_nx_reaper_phys *reaper = get_zeroed_block(bno);
+
+	reaper->nr_next_reap_id = cpu_to_le64(1);
+	reaper->nr_flags = cpu_to_le32(APFS_NR_BHM_FLAG);
+	reaper->nr_state_buffer_size = cpu_to_le32(param->blocksize -
+						   sizeof(*reaper));
+
+	set_object_header(&reaper->nr_o, oid,
+			  APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_NX_REAPER,
+			  APFS_OBJECT_TYPE_INVALID);
+	munmap(reaper, param->blocksize);
 }
 
 /**
@@ -167,6 +197,7 @@ void make_container(void)
 
 	sb_copy->nx_spaceman_oid = cpu_to_le64(SPACEMAN_OID);
 	sb_copy->nx_reaper_oid = cpu_to_le64(REAPER_OID);
+	make_empty_reaper(REAPER_BNO, REAPER_OID);
 	sb_copy->nx_omap_oid = cpu_to_le64(MAIN_OMAP_BNO);
 	make_omap_btree(MAIN_OMAP_BNO, false /* is_vol */);
 
