@@ -9,6 +9,7 @@
 
 #include <string.h>
 #include <sys/mman.h>
+#include <apfs/raw.h>
 
 /* Filesystem parameters */
 struct parameters {
@@ -26,6 +27,7 @@ struct parameters {
 #define FIRST_VOL_OID	(REAPER_OID + 1)
 
 /* Hardcoded block numbers */
+#define CPOINT_DESC_BASE	(APFS_NX_BLOCK_NUM + 1)
 #define MAIN_OMAP_BNO		20000
 #define MAIN_OMAP_ROOT_BNO	20001
 #define FIRST_VOL_BNO		20002

@@ -42,7 +42,6 @@ static void set_uuid(char *field, char *uuid)
  */
 static void set_checkpoint_areas(struct apfs_nx_superblock *sb)
 {
-	u64 desc_base = APFS_NX_BLOCK_NUM + 1; /* Right after the super copy */
 	u32 desc_blocks;
 	u64 data_base;
 
@@ -50,14 +49,14 @@ static void set_checkpoint_areas(struct apfs_nx_superblock *sb)
 	desc_blocks = 64;
 
 	/* First set the checkpoint descriptor area fields */
-	sb->nx_xp_desc_base = cpu_to_le64(desc_base);
+	sb->nx_xp_desc_base = cpu_to_le64(CPOINT_DESC_BASE);
 	sb->nx_xp_desc_blocks = cpu_to_le32(desc_blocks);
 	/* The first two blocks hold the superblock and the mappings */
 	sb->nx_xp_desc_len = cpu_to_le32(2);
 	sb->nx_xp_desc_next = cpu_to_le32(2);
 	sb->nx_xp_desc_index = 0;
 
-	data_base = desc_base + desc_blocks; /* Right after the descriptors */
+	data_base = CPOINT_DESC_BASE + desc_blocks; /* After the descriptors */
 
 	/* Now set the checkpoint data area fields */
 	sb->nx_xp_data_base = cpu_to_le64(data_base);
@@ -116,6 +115,23 @@ static void make_volume(u64 bno, u64 oid)
 }
 
 /**
+ * make_cpoint_map_block - Make the mapping block for the one checkpoint
+ * @bno: block number to use
+ */
+static void make_cpoint_map_block(u64 bno)
+{
+	struct apfs_checkpoint_map_phys *block = get_zeroed_block(bno);
+
+	block->cpm_flags = cpu_to_le32(APFS_CHECKPOINT_MAP_LAST);
+	block->cpm_count = 0; /* For the moment, we leave it empty */
+
+	set_object_header(&block->cpm_o, bno,
+			  APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_CHECKPOINT_MAP,
+			  APFS_OBJECT_TYPE_INVALID);
+	munmap(block, param->blocksize);
+}
+
+/**
  * make_container - Make the whole filesystem
  */
 void make_container(void)
@@ -151,6 +167,8 @@ void make_container(void)
 	make_volume(FIRST_VOL_BNO, FIRST_VOL_OID);
 
 	set_ephemeral_info(&sb_copy->nx_ephemeral_info[0]);
+
+	make_cpoint_map_block(CPOINT_DESC_BASE);
 
 	set_object_header(&sb_copy->nx_o, APFS_OID_NX_SUPERBLOCK,
 			  APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_NX_SUPERBLOCK,
