@@ -101,6 +101,29 @@ static void set_ephemeral_info(__le64 *info)
 }
 
 /**
+ * make_volume - Make a volume
+ * @bno: block number for the volume superblock
+ * @oid: object id for the volume superblock
+ */
+static void make_volume(u64 bno, u64 oid)
+{
+	struct apfs_superblock *vsb;
+
+	vsb = mmap(NULL, param->blocksize, PROT_READ | PROT_WRITE,
+		   MAP_SHARED, fd, bno * param->blocksize);
+	if (vsb == MAP_FAILED)
+		system_error();
+	memset(vsb, 0, param->blocksize);
+
+	vsb->apfs_magic = cpu_to_le32(APFS_MAGIC);
+
+	set_object_header(&vsb->apfs_o, oid,
+			  APFS_OBJ_VIRTUAL | APFS_OBJECT_TYPE_FS,
+			  APFS_OBJECT_TYPE_INVALID);
+	munmap(vsb, param->blocksize);
+}
+
+/**
  * make_container - Make the whole filesystem
  */
 void make_container(void)
@@ -136,6 +159,8 @@ void make_container(void)
 	make_omap_btree(MAIN_OMAP_BNO, false /* is_vol */);
 
 	sb_copy->nx_max_file_systems = cpu_to_le32(get_max_volumes(size));
+	sb_copy->nx_fs_oid[0] = cpu_to_le64(FIRST_VOL_OID);
+	make_volume(FIRST_VOL_BNO, FIRST_VOL_OID);
 
 	set_ephemeral_info(&sb_copy->nx_ephemeral_info[0]);
 
