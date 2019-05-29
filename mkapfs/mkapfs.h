@@ -20,10 +20,12 @@ struct parameters {
 /* Hardcoded object ids */
 #define	SPACEMAN_OID	APFS_OID_RESERVED_COUNT
 #define REAPER_OID	(SPACEMAN_OID + 1)
+#define FIRST_VOL_OID	(REAPER_OID + 1)
 
 /* Hardcoded block numbers */
 #define MAIN_OMAP_BNO		20000
 #define MAIN_OMAP_ROOT_BNO	20001
+#define FIRST_VOL_BNO		20002
 
 /* Declarations for global variables */
 extern struct parameters *param;	/* Filesystem parameters */
