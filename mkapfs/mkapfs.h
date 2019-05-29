@@ -7,6 +7,9 @@
 #ifndef _MKAPFS_H
 #define _MKAPFS_H
 
+#include <string.h>
+#include <sys/mman.h>
+
 /* Filesystem parameters */
 struct parameters {
 	unsigned long	blocksize;	/* Block size */
@@ -32,5 +35,23 @@ extern struct parameters *param;	/* Filesystem parameters */
 extern int fd;				/* File descriptor for the device */
 
 extern __attribute__((noreturn)) void system_error(void);
+
+/**
+ * get_zeroed_block - Map and zero a filesystem block
+ * @bno: block number
+ *
+ * Returns a pointer to the mapped block; the caller must unmap it after use.
+ */
+static inline void *get_zeroed_block(u64 bno)
+{
+	void *block;
+
+	block = mmap(NULL, param->blocksize, PROT_READ | PROT_WRITE,
+		     MAP_SHARED, fd, bno * param->blocksize);
+	if (block == MAP_FAILED)
+		system_error();
+	memset(block, 0, param->blocksize);
+	return block;
+}
 
 #endif	/* _MKAPFS_H */

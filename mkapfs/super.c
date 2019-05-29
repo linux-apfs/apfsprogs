@@ -6,8 +6,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/mman.h>
 #include <apfs/raw.h>
 #include "btree.h"
 #include "mkapfs.h"
@@ -107,13 +105,7 @@ static void set_ephemeral_info(__le64 *info)
  */
 static void make_volume(u64 bno, u64 oid)
 {
-	struct apfs_superblock *vsb;
-
-	vsb = mmap(NULL, param->blocksize, PROT_READ | PROT_WRITE,
-		   MAP_SHARED, fd, bno * param->blocksize);
-	if (vsb == MAP_FAILED)
-		system_error();
-	memset(vsb, 0, param->blocksize);
+	struct apfs_superblock *vsb = get_zeroed_block(bno);
 
 	vsb->apfs_magic = cpu_to_le32(APFS_MAGIC);
 
@@ -131,11 +123,7 @@ void make_container(void)
 	struct apfs_nx_superblock *sb_copy;
 	u64 size = param->blocksize * param->block_count;
 
-	sb_copy = mmap(NULL, param->blocksize, PROT_READ | PROT_WRITE,
-		       MAP_SHARED, fd, APFS_NX_BLOCK_NUM * param->blocksize);
-	if (sb_copy == MAP_FAILED)
-		system_error();
-	memset(sb_copy, 0, param->blocksize);
+	sb_copy = get_zeroed_block(APFS_NX_BLOCK_NUM);
 
 	sb_copy->nx_magic = cpu_to_le32(APFS_NX_MAGIC);
 	sb_copy->nx_block_size = cpu_to_le32(param->blocksize);

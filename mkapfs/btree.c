@@ -5,8 +5,6 @@
  */
 
 #include <stdlib.h>
-#include <string.h>
-#include <sys/mman.h>
 #include <apfs/raw.h>
 #include "btree.h"
 #include "mkapfs.h"
@@ -39,19 +37,13 @@ static void set_omap_info(struct apfs_btree_info *info, int nkeys)
  */
 static void make_main_omap_root(u64 bno)
 {
-	struct apfs_btree_node_phys *root;
+	struct apfs_btree_node_phys *root = get_zeroed_block(bno);
 	struct apfs_omap_key *key;
 	struct apfs_omap_val *val;
 	struct apfs_kvoff *kvoff;
 	int toc_len, key_len, val_len, free_len;
 	int head_len = sizeof(*root);
 	int info_len = sizeof(struct apfs_btree_info);
-
-	root = mmap(NULL, param->blocksize, PROT_READ | PROT_WRITE,
-		    MAP_SHARED, fd, bno * param->blocksize);
-	if (root == MAP_FAILED)
-		system_error();
-	memset(root, 0, param->blocksize);
 
 	root->btn_flags = cpu_to_le16(APFS_BTNODE_ROOT | APFS_BTNODE_LEAF |
 				      APFS_BTNODE_FIXED_KV_SIZE);
@@ -103,13 +95,7 @@ static void make_main_omap_root(u64 bno)
  */
 void make_omap_btree(u64 bno, bool is_vol)
 {
-	struct apfs_omap_phys *omap;
-
-	omap = mmap(NULL, param->blocksize, PROT_READ | PROT_WRITE,
-		    MAP_SHARED, fd, bno * param->blocksize);
-	if (omap == MAP_FAILED)
-		system_error();
-	memset(omap, 0, param->blocksize);
+	struct apfs_omap_phys *omap = get_zeroed_block(bno);
 
 	if (!is_vol)
 		omap->om_flags = cpu_to_le32(APFS_OMAP_MANUALLY_MANAGED);
