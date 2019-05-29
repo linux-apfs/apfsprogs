@@ -42,25 +42,17 @@ static void set_uuid(char *field, char *uuid)
  */
 static void set_checkpoint_areas(struct apfs_nx_superblock *sb)
 {
-	u32 desc_blocks;
-	u64 data_base;
-
-	/* TODO: this should change with the container size, but how much? */
-	desc_blocks = 64;
-
 	/* First set the checkpoint descriptor area fields */
 	sb->nx_xp_desc_base = cpu_to_le64(CPOINT_DESC_BASE);
-	sb->nx_xp_desc_blocks = cpu_to_le32(desc_blocks);
+	sb->nx_xp_desc_blocks = cpu_to_le32(CPOINT_DESC_BLOCKS);
 	/* The first two blocks hold the superblock and the mappings */
 	sb->nx_xp_desc_len = cpu_to_le32(2);
 	sb->nx_xp_desc_next = cpu_to_le32(2);
 	sb->nx_xp_desc_index = 0;
 
-	data_base = CPOINT_DESC_BASE + desc_blocks; /* After the descriptors */
-
 	/* Now set the checkpoint data area fields */
-	sb->nx_xp_data_base = cpu_to_le64(data_base);
-	sb->nx_xp_data_blocks = cpu_to_le32(5904); /* Also hardcoded for now */
+	sb->nx_xp_data_base = cpu_to_le64(CPOINT_DATA_BASE);
+	sb->nx_xp_data_blocks = cpu_to_le32(CPOINT_DATA_BLOCKS);
 	/* Room for the space manager, the two free queues, and the reaper */
 	sb->nx_xp_data_len = cpu_to_le32(4);
 	sb->nx_xp_data_next = cpu_to_le32(4);
@@ -188,8 +180,8 @@ void make_container(void)
 			  APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_NX_SUPERBLOCK,
 			  APFS_OBJECT_TYPE_INVALID);
 
-	make_cpoint_map_block(CPOINT_DESC_BASE);
-	make_cpoint_superblock(CPOINT_DESC_BASE + 1, sb_copy);
+	make_cpoint_map_block(CPOINT_MAP_BNO);
+	make_cpoint_superblock(CPOINT_SB_BNO, sb_copy);
 
 	munmap(sb_copy, param->blocksize);
 }

@@ -26,8 +26,18 @@ struct parameters {
 #define REAPER_OID	(SPACEMAN_OID + 1)
 #define FIRST_VOL_OID	(REAPER_OID + 1)
 
-/* Hardcoded block numbers */
+/*
+ * Constants describing the checkpoint areas; these are hardcoded for now, but
+ * should actually change with the container size.
+ */
 #define CPOINT_DESC_BASE	(APFS_NX_BLOCK_NUM + 1)
+#define CPOINT_DESC_BLOCKS	64
+#define CPOINT_DATA_BASE	(CPOINT_DESC_BASE + CPOINT_DESC_BLOCKS)
+#define CPOINT_DATA_BLOCKS	5904
+
+/* Hardcoded block numbers */
+#define CPOINT_MAP_BNO		CPOINT_DESC_BASE
+#define CPOINT_SB_BNO		(CPOINT_DESC_BASE + 1)
 #define MAIN_OMAP_BNO		20000
 #define MAIN_OMAP_ROOT_BNO	20001
 #define FIRST_VOL_BNO		20002
