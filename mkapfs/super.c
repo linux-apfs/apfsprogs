@@ -132,6 +132,22 @@ static void make_cpoint_map_block(u64 bno)
 }
 
 /**
+ * make_cpoint_superblock - Make the one checkpoint superblock
+ * @bno:	block number to use
+ * @sb_copy:	copy of the superblock at block zero
+ *
+ * For now just copies @sb_copy into @bno.  TODO: figure out what to do with
+ * the nx_counters array.
+ */
+static void make_cpoint_superblock(u64 bno, struct apfs_nx_superblock *sb_copy)
+{
+	struct apfs_nx_superblock *sb = get_zeroed_block(bno);
+
+	memcpy(sb, sb_copy, sizeof(*sb));
+	munmap(sb, param->blocksize);
+}
+
+/**
  * make_container - Make the whole filesystem
  */
 void make_container(void)
@@ -168,10 +184,12 @@ void make_container(void)
 
 	set_ephemeral_info(&sb_copy->nx_ephemeral_info[0]);
 
-	make_cpoint_map_block(CPOINT_DESC_BASE);
-
 	set_object_header(&sb_copy->nx_o, APFS_OID_NX_SUPERBLOCK,
 			  APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_NX_SUPERBLOCK,
 			  APFS_OBJECT_TYPE_INVALID);
+
+	make_cpoint_map_block(CPOINT_DESC_BASE);
+	make_cpoint_superblock(CPOINT_DESC_BASE + 1, sb_copy);
+
 	munmap(sb_copy, param->blocksize);
 }
