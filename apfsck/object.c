@@ -223,6 +223,10 @@ void *read_ephemeral_object(u64 oid, struct object *obj)
 
 	/* Multiblock ephemeral objects may exist, but are not supported yet */
 	raw = read_object_nocheck(map->m_paddr, obj);
+	if ((obj->type | obj->flags) != map->m_type)
+		report("Ephemeral object", "type field doesn't match mapping.");
+	if (obj->subtype != map->m_subtype)
+		report("Ephemeral object", "subtype doesn't match mapping.");
 	if (obj->oid != oid)
 		report("Ephemeral object", "wrong object id.");
 	if (obj->xid != sb->s_xid)
