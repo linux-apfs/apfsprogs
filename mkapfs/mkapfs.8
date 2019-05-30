@@ -7,19 +7,23 @@
 mkapfs \- create an APFS filesystem
 .SH SYNOPSIS
 .B mkapfs
-[\-v]
+[\-sv]
 [\-U
 .IR UUID ]
 .I device
 .RI [ blocks ]
 .SH DESCRIPTION
 .B mkapfs
-is an experimental tool to create an APFS filesystem on the given
+is an experimental tool to create an APFS filesystem with a single volume on
+the given
 .IR device .
 The number of blocks in the container can be specified in
 .IR blocks ,
 otherwise the whole disk is used.
 .SH OPTIONS
+.TP
+.B \-s
+Enable case sensitivity for the volume.
 .TP
 .BI \-U " UUID"
 Specify a UUID for the filesystem, in the standard format. By default the value

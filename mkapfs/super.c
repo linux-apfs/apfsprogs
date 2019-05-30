@@ -100,6 +100,14 @@ static void make_volume(u64 bno, u64 oid)
 
 	vsb->apfs_magic = cpu_to_le32(APFS_MAGIC);
 
+	vsb->apfs_features = cpu_to_le64(APFS_FEATURE_HARDLINK_MAP_RECORDS);
+	if (param->case_sensitive)
+		vsb->apfs_incompatible_features =
+			cpu_to_le64(APFS_INCOMPAT_NORMALIZATION_INSENSITIVE);
+	else
+		vsb->apfs_incompatible_features =
+			cpu_to_le64(APFS_INCOMPAT_CASE_INSENSITIVE);
+
 	set_object_header(&vsb->apfs_o, oid,
 			  APFS_OBJ_VIRTUAL | APFS_OBJECT_TYPE_FS,
 			  APFS_OBJECT_TYPE_INVALID);

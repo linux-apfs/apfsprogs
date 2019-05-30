@@ -26,7 +26,8 @@ static char *progname;
  */
 static void usage(void)
 {
-	fprintf(stderr, "usage: %s [-U UUID] [-v] device [blocks]\n", progname);
+	fprintf(stderr, "usage: %s [-U UUID] [-sv] device [blocks]\n",
+		progname);
 	exit(1);
 }
 
@@ -127,7 +128,7 @@ int main(int argc, char *argv[])
 		system_error();
 
 	while (1) {
-		int opt = getopt(argc, argv, "U:v");
+		int opt = getopt(argc, argv, "U:sv");
 
 		if (opt == -1)
 			break;
@@ -135,6 +136,9 @@ int main(int argc, char *argv[])
 		switch (opt) {
 		case 'U':
 			param->uuid = optarg;
+			break;
+		case 's':
+			param->case_sensitive = true;
 			break;
 		case 'v':
 			version();
