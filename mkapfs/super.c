@@ -108,6 +108,10 @@ static void make_volume(u64 bno, u64 oid)
 		vsb->apfs_incompatible_features =
 			cpu_to_le64(APFS_INCOMPAT_CASE_INSENSITIVE);
 
+	/* Just two catalog records: the root and private directories */
+	vsb->apfs_next_obj_id = cpu_to_le64(APFS_MIN_USER_INO_NUM);
+	vsb->apfs_num_directories = cpu_to_le64(2);
+
 	set_object_header(&vsb->apfs_o, oid,
 			  APFS_OBJ_VIRTUAL | APFS_OBJECT_TYPE_FS,
 			  APFS_OBJECT_TYPE_INVALID);
