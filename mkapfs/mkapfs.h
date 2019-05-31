@@ -16,6 +16,7 @@
 struct parameters {
 	unsigned long	blocksize;	/* Block size */
 	u64		block_count;	/* Number of blocks in the container */
+	char		*label;		/* Volume label */
 	char		*main_uuid;	/* Container UUID in standard format */
 	char		*vol_uuid;	/* Volume UUID in standard format */
 	bool		case_sensitive;	/* Is the filesystem case-sensitive? */

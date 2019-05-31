@@ -122,6 +122,9 @@ static void make_volume(u64 bno, u64 oid)
 	vsb->apfs_formatted_by.timestamp = cpu_to_le64(get_timestamp());
 	vsb->apfs_formatted_by.last_xid = cpu_to_le64(MKFS_XID);
 
+	if (param->label)
+		strcpy((char *)vsb->apfs_volname, param->label);
+
 	set_object_header(&vsb->apfs_o, oid,
 			  APFS_OBJ_VIRTUAL | APFS_OBJECT_TYPE_FS,
 			  APFS_OBJECT_TYPE_INVALID);

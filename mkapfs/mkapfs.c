@@ -26,7 +26,9 @@ static char *progname;
  */
 static void usage(void)
 {
-	fprintf(stderr, "usage: %s [-U UUID] [-u UUID] [-sv] device [blocks]\n",
+	fprintf(stderr,
+		"usage: %s [-L label] [-U UUID] [-u UUID] [-sv] "
+		"device [blocks]\n",
 		progname);
 	exit(1);
 }
@@ -129,6 +131,10 @@ static void complete_parameters(void)
 		exit(1);
 	}
 
+	/* Make sure the volume label fits, along with its null termination */
+	if (param->label && strlen(param->label) + 1 > APFS_VOLNAME_LEN)
+		fprintf(stderr, "%s: volume label is too long\n", progname);
+
 	if (!param->main_uuid)
 		param->main_uuid = get_random_uuid();
 	if (!param->vol_uuid)
@@ -145,12 +151,15 @@ int main(int argc, char *argv[])
 		system_error();
 
 	while (1) {
-		int opt = getopt(argc, argv, "U:u:sv");
+		int opt = getopt(argc, argv, "L:U:u:sv");
 
 		if (opt == -1)
 			break;
 
 		switch (opt) {
+		case 'L':
+			param->label = optarg;
+			break;
 		case 'U':
 			param->main_uuid = optarg;
 			break;

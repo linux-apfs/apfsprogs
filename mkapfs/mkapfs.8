@@ -8,6 +8,8 @@ mkapfs \- create an APFS filesystem
 .SH SYNOPSIS
 .B mkapfs
 [\-sv]
+[\-L
+.IR label ]
 [\-U
 .IR UUID ]
 [\-u
@@ -26,6 +28,9 @@ otherwise the whole disk is used.
 .TP
 .B \-s
 Enable case sensitivity for the volume.
+.TP
+.BI \-L " label"
+Set a label for the volume, with a maximum length of 255 bytes.
 .TP
 .BI \-U " UUID"
 Specify a UUID for the container, in the standard format. By default the value
