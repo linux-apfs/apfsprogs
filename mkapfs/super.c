@@ -113,6 +113,7 @@ static void make_volume(u64 bno, u64 oid)
 	vsb->apfs_num_directories = cpu_to_le64(2);
 
 	set_uuid(vsb->apfs_vol_uuid, param->vol_uuid);
+	vsb->apfs_fs_flags = cpu_to_le64(APFS_FS_UNENCRYPTED);
 
 	set_object_header(&vsb->apfs_o, oid,
 			  APFS_OBJ_VIRTUAL | APFS_OBJECT_TYPE_FS,
