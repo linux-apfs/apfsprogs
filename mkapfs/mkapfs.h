@@ -29,9 +29,10 @@ struct parameters {
 #define MKFS_XID	1
 
 /* Hardcoded object ids */
-#define	SPACEMAN_OID	APFS_OID_RESERVED_COUNT
-#define REAPER_OID	(SPACEMAN_OID + 1)
-#define FIRST_VOL_OID	(REAPER_OID + 1)
+#define	SPACEMAN_OID		APFS_OID_RESERVED_COUNT
+#define REAPER_OID		(SPACEMAN_OID + 1)
+#define FIRST_VOL_OID		(REAPER_OID + 1)
+#define FIRST_VOL_CAT_ROOT_OID	(FIRST_VOL_OID + 1)
 
 /*
  * Constants describing the checkpoint areas; these are hardcoded for now, but
@@ -49,6 +50,9 @@ struct parameters {
 #define MAIN_OMAP_BNO		20000
 #define MAIN_OMAP_ROOT_BNO	20001
 #define FIRST_VOL_BNO		20002
+#define FIRST_VOL_OMAP_BNO	20003
+#define FIRST_VOL_OMAP_ROOT_BNO	20004
+#define FIRST_VOL_CAT_ROOT_BNO	20005
 
 /* Declarations for global variables */
 extern struct parameters *param;	/* Filesystem parameters */

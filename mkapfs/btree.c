@@ -32,10 +32,11 @@ static void set_omap_info(struct apfs_btree_info *info, int nkeys)
 #define BTREE_TOC_ENTRY_MAX_UNUSED	(2 * BTREE_TOC_ENTRY_INCREMENT)
 
 /**
- * make_main_omap_root - Make the root node of the container's object map
- * @bno: block number to use
+ * make_omap_root - Make the root node of an object map
+ * @bno:	block number to use
+ * @is_vol:	is this the object map for a volume?
  */
-static void make_main_omap_root(u64 bno)
+static void make_omap_root(u64 bno, bool is_vol)
 {
 	struct apfs_btree_node_phys *root = get_zeroed_block(bno);
 	struct apfs_omap_key *key;
@@ -48,7 +49,7 @@ static void make_main_omap_root(u64 bno)
 	root->btn_flags = cpu_to_le16(APFS_BTNODE_ROOT | APFS_BTNODE_LEAF |
 				      APFS_BTNODE_FIXED_KV_SIZE);
 
-	/* Just one volume for now */
+	/* The mkfs will need only one record on each omap */
 	root->btn_nkeys = cpu_to_le32(1);
 	toc_len = BTREE_TOC_ENTRY_MAX_UNUSED * sizeof(*kvoff);
 	key_len = 1 * sizeof(*key);
@@ -62,10 +63,17 @@ static void make_main_omap_root(u64 bno)
 	kvoff->v = cpu_to_le16(val_len);
 
 	/* Set the key and value for the one record */
-	key->ok_oid = cpu_to_le64(FIRST_VOL_OID);
+	if (is_vol) {
+		/* Map for the catalog root */
+		key->ok_oid = cpu_to_le64(FIRST_VOL_CAT_ROOT_OID);
+		val->ov_paddr = cpu_to_le64(FIRST_VOL_CAT_ROOT_BNO);
+	} else {
+		/* Map for the one volume superblock */
+		key->ok_oid = cpu_to_le64(FIRST_VOL_OID);
+		val->ov_paddr = cpu_to_le64(FIRST_VOL_BNO);
+	}
 	key->ok_xid = cpu_to_le64(MKFS_XID);
 	val->ov_size = cpu_to_le32(param->blocksize); /* Only size supported */
-	val->ov_paddr = cpu_to_le64(FIRST_VOL_BNO);
 
 	root->btn_table_space.off = 0;
 	root->btn_table_space.len = cpu_to_le16(toc_len);
@@ -82,7 +90,7 @@ static void make_main_omap_root(u64 bno)
 	root->btn_val_free_list.len = 0;
 
 	set_omap_info((void *)root + param->blocksize - info_len, 1);
-	set_object_header(&root->btn_o, MAIN_OMAP_ROOT_BNO,
+	set_object_header(&root->btn_o, bno,
 			  APFS_OBJECT_TYPE_BTREE | APFS_OBJ_PHYSICAL,
 			  APFS_OBJECT_TYPE_OMAP);
 	munmap(root, param->blocksize);
@@ -103,9 +111,13 @@ void make_omap_btree(u64 bno, bool is_vol)
 					 APFS_OBJ_PHYSICAL);
 	omap->om_snapshot_tree_type = cpu_to_le32(APFS_OBJECT_TYPE_BTREE |
 						  APFS_OBJ_PHYSICAL);
-	omap->om_tree_oid = cpu_to_le64(MAIN_OMAP_ROOT_BNO);
-	if (!is_vol)
-		make_main_omap_root(MAIN_OMAP_ROOT_BNO);
+	if (is_vol) {
+		omap->om_tree_oid = cpu_to_le64(FIRST_VOL_OMAP_ROOT_BNO);
+		make_omap_root(FIRST_VOL_OMAP_ROOT_BNO, is_vol);
+	} else {
+		omap->om_tree_oid = cpu_to_le64(MAIN_OMAP_ROOT_BNO);
+		make_omap_root(MAIN_OMAP_ROOT_BNO, is_vol);
+	}
 
 	set_object_header(&omap->om_o, bno,
 			  APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_OMAP,

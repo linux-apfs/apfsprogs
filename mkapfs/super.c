@@ -133,6 +133,9 @@ static void make_volume(u64 bno, u64 oid)
 	vsb->apfs_snap_meta_tree_type = cpu_to_le32(APFS_OBJ_PHYSICAL |
 						    APFS_OBJECT_TYPE_BTREE);
 
+	vsb->apfs_omap_oid = cpu_to_le64(FIRST_VOL_OMAP_BNO);
+	make_omap_btree(FIRST_VOL_OMAP_BNO, true /* is_vol */);
+
 	set_object_header(&vsb->apfs_o, oid,
 			  APFS_OBJ_VIRTUAL | APFS_OBJECT_TYPE_FS,
 			  APFS_OBJECT_TYPE_INVALID);
