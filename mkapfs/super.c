@@ -124,6 +124,7 @@ static void make_volume(u64 bno, u64 oid)
 
 	if (param->label)
 		strcpy((char *)vsb->apfs_volname, param->label);
+	vsb->apfs_next_doc_id = cpu_to_le32(APFS_MIN_DOC_ID);
 
 	set_object_header(&vsb->apfs_o, oid,
 			  APFS_OBJ_VIRTUAL | APFS_OBJECT_TYPE_FS,
