@@ -126,6 +126,13 @@ static void make_volume(u64 bno, u64 oid)
 		strcpy((char *)vsb->apfs_volname, param->label);
 	vsb->apfs_next_doc_id = cpu_to_le32(APFS_MIN_DOC_ID);
 
+	vsb->apfs_root_tree_type = cpu_to_le32(APFS_OBJ_VIRTUAL |
+					       APFS_OBJECT_TYPE_BTREE);
+	vsb->apfs_extentref_tree_type = cpu_to_le32(APFS_OBJ_PHYSICAL |
+						    APFS_OBJECT_TYPE_BTREE);
+	vsb->apfs_snap_meta_tree_type = cpu_to_le32(APFS_OBJ_PHYSICAL |
+						    APFS_OBJECT_TYPE_BTREE);
+
 	set_object_header(&vsb->apfs_o, oid,
 			  APFS_OBJ_VIRTUAL | APFS_OBJECT_TYPE_FS,
 			  APFS_OBJECT_TYPE_INVALID);
