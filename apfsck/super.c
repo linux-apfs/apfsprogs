@@ -439,6 +439,18 @@ static void check_incompat_vol_features(u64 flags)
 }
 
 /**
+ * check_volume_role - Check that a volume's role flags are valid
+ * @role: the volume role
+ */
+static void check_volume_role(u16 role)
+{
+	if ((role & APFS_VOL_ROLES_VALID_MASK) != role)
+		report("Volume superblock", "invalid role in use.");
+	if (role & APFS_VOL_ROLE_RESERVED_200)
+		report("Volume superblock", "reserved role in use.");
+}
+
+/**
  * map_volume_super - Find the volume superblock and map it into memory
  * @vol:	volume number
  * @vsb:	volume superblock struct to receive the results
@@ -493,6 +505,7 @@ static struct apfs_superblock *map_volume_super(int vol,
 	check_volume_flags(le64_to_cpu(vsb->v_raw->apfs_fs_flags));
 	check_software_information(&vsb->v_raw->apfs_formatted_by,
 				   &vsb->v_raw->apfs_modified_by[0]);
+	check_volume_role(le16_to_cpu(vsb->v_raw->apfs_role));
 
 	/*
 	 * The documentation suggests that other tree types could be possible,
