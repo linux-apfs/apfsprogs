@@ -494,6 +494,8 @@ static struct apfs_superblock *map_volume_super(int vol,
 				vsb->v_raw->apfs_incompatible_features));
 
 	vsb->v_next_obj_id = le64_to_cpu(vsb->v_raw->apfs_next_obj_id);
+	if (vsb->v_next_obj_id < APFS_MIN_USER_INO_NUM)
+		report("Volume superblock", "next catalog id is invalid.");
 	vsb->v_next_doc_id = le32_to_cpu(vsb->v_raw->apfs_next_doc_id);
 	if (vsb->v_next_doc_id < APFS_MIN_DOC_ID)
 		report("Volume superblock", "next document id is invalid.");
