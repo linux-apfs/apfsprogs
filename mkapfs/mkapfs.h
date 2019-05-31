@@ -9,6 +9,7 @@
 
 #include <string.h>
 #include <sys/mman.h>
+#include <time.h>
 #include <apfs/raw.h>
 
 /* Filesystem parameters */
@@ -19,6 +20,9 @@ struct parameters {
 	char		*vol_uuid;	/* Volume UUID in standard format */
 	bool		case_sensitive;	/* Is the filesystem case-sensitive? */
 };
+
+/* String to identify the program and its version */
+#define MKFS_ID_STRING	"mkapfs for linux, version 0.1"
 
 /* Hardcoded transaction ids */
 #define MKFS_XID	1
@@ -67,6 +71,21 @@ static inline void *get_zeroed_block(u64 bno)
 		system_error();
 	memset(block, 0, param->blocksize);
 	return block;
+}
+
+/**
+ * get_timestamp - Get the current time in nanoseconds
+ *
+ * Calls clock_gettime(), so may not work with old versions of glibc.
+ */
+static inline u64 get_timestamp(void)
+{
+	struct timespec time;
+
+	if (clock_gettime(CLOCK_REALTIME, &time))
+		system_error();
+
+	return (u64)time.tv_sec * NSEC_PER_SEC + time.tv_nsec;
 }
 
 #endif	/* _MKAPFS_H */

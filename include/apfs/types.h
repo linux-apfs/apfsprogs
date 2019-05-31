@@ -45,6 +45,8 @@ typedef uint64_t	u64;
 #define __ROUND_MASK(x, y) ((__typeof__(x))((y)-1))
 #define ROUND_UP(x, y) ((((x)-1) | __ROUND_MASK(x, y))+1)
 
+#define NSEC_PER_SEC	1000000000L
+
 typedef u32 unicode_t;
 
 #endif	/* _TYPES_H */

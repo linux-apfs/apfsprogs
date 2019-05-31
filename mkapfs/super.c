@@ -4,8 +4,10 @@
  * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <apfs/raw.h>
 #include "btree.h"
 #include "mkapfs.h"
@@ -114,6 +116,11 @@ static void make_volume(u64 bno, u64 oid)
 
 	set_uuid(vsb->apfs_vol_uuid, param->vol_uuid);
 	vsb->apfs_fs_flags = cpu_to_le64(APFS_FS_UNENCRYPTED);
+
+	assert(strlen(MKFS_ID_STRING) < sizeof(vsb->apfs_formatted_by.id));
+	strcpy((char *)vsb->apfs_formatted_by.id, MKFS_ID_STRING);
+	vsb->apfs_formatted_by.timestamp = cpu_to_le64(get_timestamp());
+	vsb->apfs_formatted_by.last_xid = cpu_to_le64(MKFS_XID);
 
 	set_object_header(&vsb->apfs_o, oid,
 			  APFS_OBJ_VIRTUAL | APFS_OBJECT_TYPE_FS,
