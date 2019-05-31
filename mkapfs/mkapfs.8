@@ -10,6 +10,8 @@ mkapfs \- create an APFS filesystem
 [\-sv]
 [\-U
 .IR UUID ]
+[\-u
+.IR UUID ]
 .I device
 .RI [ blocks ]
 .SH DESCRIPTION
@@ -26,7 +28,11 @@ otherwise the whole disk is used.
 Enable case sensitivity for the volume.
 .TP
 .BI \-U " UUID"
-Specify a UUID for the filesystem, in the standard format. By default the value
+Specify a UUID for the container, in the standard format. By default the value
+is chosen by /proc/sys/kernel/random/uuid.
+.TP
+.BI \-u " UUID"
+Specify a UUID for the volume, in the standard format. By default the value
 is chosen by /proc/sys/kernel/random/uuid.
 .TP
 .B \-v

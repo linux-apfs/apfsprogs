@@ -112,6 +112,8 @@ static void make_volume(u64 bno, u64 oid)
 	vsb->apfs_next_obj_id = cpu_to_le64(APFS_MIN_USER_INO_NUM);
 	vsb->apfs_num_directories = cpu_to_le64(2);
 
+	set_uuid(vsb->apfs_vol_uuid, param->vol_uuid);
+
 	set_object_header(&vsb->apfs_o, oid,
 			  APFS_OBJ_VIRTUAL | APFS_OBJECT_TYPE_FS,
 			  APFS_OBJECT_TYPE_INVALID);
@@ -199,7 +201,7 @@ void make_container(void)
 	sb_copy->nx_incompatible_features |=
 					cpu_to_le64(APFS_NX_INCOMPAT_VERSION2);
 
-	set_uuid(sb_copy->nx_uuid, param->uuid);
+	set_uuid(sb_copy->nx_uuid, param->main_uuid);
 
 	/* Leave some room for the objects created by the mkfs */
 	sb_copy->nx_next_oid = cpu_to_le64(APFS_OID_RESERVED_COUNT + 100);

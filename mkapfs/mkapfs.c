@@ -26,7 +26,7 @@ static char *progname;
  */
 static void usage(void)
 {
-	fprintf(stderr, "usage: %s [-U UUID] [-sv] device [blocks]\n",
+	fprintf(stderr, "usage: %s [-U UUID] [-u UUID] [-sv] device [blocks]\n",
 		progname);
 	exit(1);
 }
@@ -70,6 +70,41 @@ static u64 get_device_size(unsigned int blocksize)
 }
 
 /**
+ * get_random_uuid - Get a random UUID string in standard format
+ *
+ * Returns a pointer to the string.
+ */
+static char *get_random_uuid(void)
+{
+	char *uuid;
+	ssize_t ret;
+
+	/* Length of a null-terminated UUID standard format string */
+	uuid = malloc(37);
+	if (!uuid)
+		system_error();
+
+	/* Linux provides randomly generated UUIDs at /proc */
+	do {
+		int uuid_fd;
+
+		uuid_fd = open("/proc/sys/kernel/random/uuid", O_RDONLY);
+		if (uuid_fd == -1)
+			system_error();
+
+		ret = read(uuid_fd, uuid, 36);
+		if (ret == -1)
+			system_error();
+
+		close(uuid_fd);
+	} while (ret != 36);
+
+	/* Put a null-termination, just in case */
+	uuid[36] = 0;
+	return uuid;
+}
+
+/**
  * complete_parameters - Set all uninitialized parameters to their defaults
  *
  * Also runs any needed checks on the parameters provided by the user.
@@ -94,28 +129,10 @@ static void complete_parameters(void)
 		exit(1);
 	}
 
-	if (!param->uuid) {
-		int uuid_fd;
-		ssize_t ret;
-
-		/* Length of a null-terminated UUID standard format string */
-		param->uuid = malloc(37);
-		if (!param->uuid)
-			system_error();
-
-		/* Linux provides randomly generated UUIDs at /proc */
-		uuid_fd = open("/proc/sys/kernel/random/uuid", O_RDONLY);
-		if (fd == -1)
-			system_error();
-		do {
-			ret = read(uuid_fd, param->uuid, 36);
-			if (ret == -1)
-				system_error();
-		} while (ret != 36);
-
-		/* Put a null-termination, just in case */
-		param->uuid[36] = 0;
-	}
+	if (!param->main_uuid)
+		param->main_uuid = get_random_uuid();
+	if (!param->vol_uuid)
+		param->vol_uuid = get_random_uuid();
 }
 
 int main(int argc, char *argv[])
@@ -128,14 +145,17 @@ int main(int argc, char *argv[])
 		system_error();
 
 	while (1) {
-		int opt = getopt(argc, argv, "U:sv");
+		int opt = getopt(argc, argv, "U:u:sv");
 
 		if (opt == -1)
 			break;
 
 		switch (opt) {
 		case 'U':
-			param->uuid = optarg;
+			param->main_uuid = optarg;
+			break;
+		case 'u':
+			param->vol_uuid = optarg;
 			break;
 		case 's':
 			param->case_sensitive = true;
