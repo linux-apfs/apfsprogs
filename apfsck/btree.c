@@ -875,7 +875,6 @@ static void check_btree_footer(struct btree *btree)
 				sizeof(struct apfs_spaceman_free_queue_key))
 			report(ctx, "wrong key size in info footer.");
 
-		/* I don't know what this value is yet */
 		if (le32_to_cpu(info->bt_fixed.bt_val_size) != 8)
 			report(ctx, "wrong value size in info footer.");
 
