@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <apfs/raw.h>
 #include "btree.h"
+#include "dir.h"
 #include "mkapfs.h"
 #include "object.h"
 
@@ -212,4 +213,82 @@ void make_omap_btree(u64 bno, bool is_vol)
 			  APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_OMAP,
 			  APFS_OBJECT_TYPE_INVALID);
 	munmap(omap, param->blocksize);
+}
+
+/**
+ * set_cat_info - Set the info footer for a catalog root node
+ * @info:	pointer to the on-disk info footer
+ */
+static void set_cat_info(struct apfs_btree_info *info)
+{
+	int maxkey = sizeof(struct apfs_drec_hashed_key) +
+		     strlen("private-dir") + 1;
+	int maxval = sizeof(struct apfs_inode_val) +
+		     sizeof(struct apfs_xf_blob) + sizeof(struct apfs_x_field) +
+		     ROUND_UP(strlen("private-dir") + 1, 8);
+
+	info->bt_fixed.bt_flags = cpu_to_le32(APFS_BTREE_KV_NONALIGNED);
+	info->bt_fixed.bt_node_size = cpu_to_le32(param->blocksize);
+
+	info->bt_longest_key = cpu_to_le32(maxkey);
+	info->bt_longest_val = cpu_to_le32(maxval);
+	info->bt_key_count = cpu_to_le64(4); /* Two records for each dir */
+	info->bt_node_count = cpu_to_le64(1); /* Only one node: the root */
+}
+
+/**
+ * make_cat_root - Make the root node of a catalog tree
+ * @bno: block number to use
+ * @oid: object id
+ *
+ * Creates a root node with two records: the root and private directories.
+ */
+void make_cat_root(u64 bno, u64 oid)
+{
+	struct apfs_btree_node_phys *root = get_zeroed_block(bno);
+	struct apfs_kvloc *kvloc;
+	void *key, *key_area, *val_end, *val_area_end;
+	int toc_len, key_len, free_len, val_len;
+	int head_len = sizeof(*root);
+	int info_len = sizeof(struct apfs_btree_info);
+
+	root->btn_flags = cpu_to_le16(APFS_BTNODE_ROOT | APFS_BTNODE_LEAF);
+
+	/* The two dentry records and their inodes */
+	root->btn_nkeys = cpu_to_le32(4);
+	toc_len = BTREE_TOC_ENTRY_MAX_UNUSED * sizeof(*kvloc);
+	root->btn_table_space.off = 0;
+	root->btn_table_space.len = cpu_to_le16(toc_len);
+
+	kvloc = (void *)root + head_len;
+	key = key_area = (void *)root + head_len + toc_len;
+	val_end = val_area_end = (void *)root + param->blocksize - info_len;
+
+	make_special_dir_dentry(APFS_PRIV_DIR_INO_NUM, "private-dir", &kvloc,
+				key_area, &key, val_area_end, &val_end);
+	make_special_dir_dentry(APFS_ROOT_DIR_INO_NUM, "root", &kvloc,
+				key_area, &key, val_area_end, &val_end);
+	make_special_dir_inode(APFS_ROOT_DIR_INO_NUM, "root", &kvloc,
+			       key_area, &key, val_area_end, &val_end);
+	make_special_dir_inode(APFS_PRIV_DIR_INO_NUM, "private-dir", &kvloc,
+			       key_area, &key, val_area_end, &val_end);
+
+	key_len = key - key_area;
+	val_len = val_area_end - val_end;
+	free_len = param->blocksize -
+		   head_len - toc_len - key_len - val_len - info_len;
+	root->btn_free_space.off = cpu_to_le16(key_len);
+	root->btn_free_space.len = cpu_to_le16(free_len);
+
+	/* No fragmentation */
+	root->btn_key_free_list.off = cpu_to_le16(APFS_BTOFF_INVALID);
+	root->btn_key_free_list.len = 0;
+	root->btn_val_free_list.off = cpu_to_le16(APFS_BTOFF_INVALID);
+	root->btn_val_free_list.len = 0;
+
+	set_cat_info((void *)root + param->blocksize - info_len);
+	set_object_header(&root->btn_o, oid,
+			  APFS_OBJECT_TYPE_BTREE | APFS_OBJ_VIRTUAL,
+			  APFS_OBJECT_TYPE_FSTREE);
+	munmap(root, param->blocksize);
 }

@@ -110,9 +110,8 @@ static void make_volume(u64 bno, u64 oid)
 		vsb->apfs_incompatible_features =
 			cpu_to_le64(APFS_INCOMPAT_CASE_INSENSITIVE);
 
-	/* Just two catalog records: the root and private directories */
+	/* We won't create any user inodes */
 	vsb->apfs_next_obj_id = cpu_to_le64(APFS_MIN_USER_INO_NUM);
-	vsb->apfs_num_directories = cpu_to_le64(2);
 
 	set_uuid(vsb->apfs_vol_uuid, param->vol_uuid);
 	vsb->apfs_fs_flags = cpu_to_le64(APFS_FS_UNENCRYPTED);
@@ -135,6 +134,8 @@ static void make_volume(u64 bno, u64 oid)
 
 	vsb->apfs_omap_oid = cpu_to_le64(FIRST_VOL_OMAP_BNO);
 	make_omap_btree(FIRST_VOL_OMAP_BNO, true /* is_vol */);
+	vsb->apfs_root_tree_oid = cpu_to_le64(FIRST_VOL_CAT_ROOT_OID);
+	make_cat_root(FIRST_VOL_CAT_ROOT_BNO, FIRST_VOL_CAT_ROOT_OID);
 
 	/* The snapshot metadata and extent reference trees are empty */
 	vsb->apfs_extentref_tree_oid = cpu_to_le64(FIRST_VOL_EXTREF_ROOT_BNO);
