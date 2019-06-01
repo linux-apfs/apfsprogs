@@ -10,6 +10,99 @@
 #include "mkapfs.h"
 #include "object.h"
 
+/* Constants used in managing the size of a node's table of contents */
+#define BTREE_TOC_ENTRY_INCREMENT	8
+#define BTREE_TOC_ENTRY_MAX_UNUSED	(2 * BTREE_TOC_ENTRY_INCREMENT)
+
+/**
+ * set_empty_btree_info - Set the info footer for an empty b-tree node
+ * @info:	pointer to the on-disk info footer
+ * @subtype:	subtype of the root node, i.e., tree type
+ *
+ * Should only be called for the free queues, the snapshot metadata tree, and
+ * the extent reference tree.
+ */
+static void set_empty_btree_info(struct apfs_btree_info *info, u32 subtype)
+{
+	u16 flags;
+
+	if (subtype == APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE)
+		flags = APFS_BTREE_EPHEMERAL | APFS_BTREE_ALLOW_GHOSTS;
+	else
+		flags = APFS_BTREE_PHYSICAL | APFS_BTREE_KV_NONALIGNED;
+
+	info->bt_fixed.bt_flags = cpu_to_le32(flags);
+	info->bt_fixed.bt_node_size = cpu_to_le32(param->blocksize);
+
+	if (subtype == APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE) {
+		/* The other two trees don't have fixed key/value sizes */
+		info->bt_fixed.bt_key_size =
+		       cpu_to_le32(sizeof(struct apfs_spaceman_free_queue_key));
+		info->bt_fixed.bt_val_size =
+		       cpu_to_le32(sizeof(struct apfs_spaceman_free_queue_key));
+		info->bt_longest_key =
+		       cpu_to_le32(sizeof(struct apfs_spaceman_free_queue_key));
+		info->bt_longest_val =
+		       cpu_to_le32(sizeof(struct apfs_spaceman_free_queue_key));
+	}
+	info->bt_node_count = cpu_to_le64(1); /* Only one node: the root */
+}
+
+/**
+ * make_empty_btree_root - Make an empty root for a b-tree
+ * @bno:	block number to use
+ * @subtype:	subtype of the root node, i.e., tree type
+ *
+ * Should only be called for the free queues, the snapshot metadata tree, and
+ * the extent reference tree.
+ */
+void make_empty_btree_root(u64 bno, u32 subtype)
+{
+	struct apfs_btree_node_phys *root = get_zeroed_block(bno);
+	u32 type;
+	u16 flags;
+	int toc_entry_len, toc_len, free_len;
+	int head_len = sizeof(*root);
+	int info_len = sizeof(struct apfs_btree_info);
+
+	flags = APFS_BTNODE_ROOT | APFS_BTNODE_LEAF;
+	if (subtype == APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE)
+		flags |= APFS_BTNODE_FIXED_KV_SIZE;
+	root->btn_flags = cpu_to_le16(flags);
+
+	if (subtype == APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE)
+		toc_entry_len = sizeof(struct apfs_kvoff);
+	else
+		toc_entry_len = sizeof(struct apfs_kvloc);
+	toc_len = toc_entry_len * BTREE_TOC_ENTRY_MAX_UNUSED;
+
+	/* No keys and no values, so this is straightforward */
+	root->btn_nkeys = 0;
+	free_len = param->blocksize - head_len - toc_len - info_len;
+	root->btn_table_space.off = 0;
+	root->btn_table_space.len = cpu_to_le16(toc_len);
+	root->btn_free_space.off = 0;
+	root->btn_free_space.len = cpu_to_le16(free_len);
+
+	/* No fragmentation */
+	root->btn_key_free_list.off = cpu_to_le16(APFS_BTOFF_INVALID);
+	root->btn_key_free_list.len = 0;
+	root->btn_val_free_list.off = cpu_to_le16(APFS_BTOFF_INVALID);
+	root->btn_val_free_list.len = 0;
+
+	set_empty_btree_info((void *)root + param->blocksize - info_len,
+			     subtype);
+
+	type = APFS_OBJECT_TYPE_BTREE;
+	if (subtype == APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE)
+		type |= APFS_OBJ_EPHEMERAL;
+	else
+		type |= APFS_OBJ_PHYSICAL;
+	set_object_header(&root->btn_o, bno, type, subtype);
+
+	munmap(root, param->blocksize);
+}
+
 /**
  * set_omap_info - Set the info footer for an object map node
  * @info:	pointer to the on-disk info footer
@@ -26,10 +119,6 @@ static void set_omap_info(struct apfs_btree_info *info, int nkeys)
 	info->bt_key_count = cpu_to_le64(nkeys);
 	info->bt_node_count = cpu_to_le64(1); /* Only one node: the root */
 }
-
-/* Constants used in managing the size of a node's table of contents */
-#define BTREE_TOC_ENTRY_INCREMENT	8
-#define BTREE_TOC_ENTRY_MAX_UNUSED	(2 * BTREE_TOC_ENTRY_INCREMENT)
 
 /**
  * make_omap_root - Make the root node of an object map

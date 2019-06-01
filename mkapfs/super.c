@@ -136,6 +136,14 @@ static void make_volume(u64 bno, u64 oid)
 	vsb->apfs_omap_oid = cpu_to_le64(FIRST_VOL_OMAP_BNO);
 	make_omap_btree(FIRST_VOL_OMAP_BNO, true /* is_vol */);
 
+	/* The snapshot metadata and extent reference trees are empty */
+	vsb->apfs_extentref_tree_oid = cpu_to_le64(FIRST_VOL_EXTREF_ROOT_BNO);
+	make_empty_btree_root(FIRST_VOL_EXTREF_ROOT_BNO,
+			      APFS_OBJECT_TYPE_BLOCKREFTREE);
+	vsb->apfs_snap_meta_tree_oid = cpu_to_le64(FIRST_VOL_SNAP_ROOT_BNO);
+	make_empty_btree_root(FIRST_VOL_SNAP_ROOT_BNO,
+			      APFS_OBJECT_TYPE_SNAPMETATREE);
+
 	set_object_header(&vsb->apfs_o, oid,
 			  APFS_OBJ_VIRTUAL | APFS_OBJECT_TYPE_FS,
 			  APFS_OBJECT_TYPE_INVALID);

@@ -44,15 +44,17 @@ struct parameters {
 #define CPOINT_DATA_BLOCKS	5904
 
 /* Hardcoded block numbers */
-#define CPOINT_MAP_BNO		CPOINT_DESC_BASE
-#define CPOINT_SB_BNO		(CPOINT_DESC_BASE + 1)
-#define REAPER_BNO		CPOINT_DATA_BASE
-#define MAIN_OMAP_BNO		20000
-#define MAIN_OMAP_ROOT_BNO	20001
-#define FIRST_VOL_BNO		20002
-#define FIRST_VOL_OMAP_BNO	20003
-#define FIRST_VOL_OMAP_ROOT_BNO	20004
-#define FIRST_VOL_CAT_ROOT_BNO	20005
+#define CPOINT_MAP_BNO			CPOINT_DESC_BASE
+#define CPOINT_SB_BNO			(CPOINT_DESC_BASE + 1)
+#define REAPER_BNO			CPOINT_DATA_BASE
+#define MAIN_OMAP_BNO			20000
+#define MAIN_OMAP_ROOT_BNO		20001
+#define FIRST_VOL_BNO			20002
+#define FIRST_VOL_OMAP_BNO		20003
+#define FIRST_VOL_OMAP_ROOT_BNO		20004
+#define FIRST_VOL_CAT_ROOT_BNO		20005
+#define FIRST_VOL_EXTREF_ROOT_BNO	20006
+#define FIRST_VOL_SNAP_ROOT_BNO		20007
 
 /* Declarations for global variables */
 extern struct parameters *param;	/* Filesystem parameters */
