@@ -1,4 +1,4 @@
-SRCS = btree.c dir.c mkapfs.c object.c super.c
+SRCS = btree.c dir.c mkapfs.c object.c spaceman.c super.c
 OBJS = $(SRCS:.c=.o)
 DEPS = $(SRCS:.c=.d)
 

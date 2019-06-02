@@ -12,6 +12,7 @@
 #include "btree.h"
 #include "mkapfs.h"
 #include "object.h"
+#include "spaceman.h"
 #include "super.h"
 
 /**
@@ -161,7 +162,7 @@ static void make_cpoint_map_block(u64 bno)
 	struct apfs_checkpoint_mapping *map;
 
 	block->cpm_flags = cpu_to_le32(APFS_CHECKPOINT_MAP_LAST);
-	block->cpm_count = cpu_to_le32(1); /* For the moment, just the reaper */
+	block->cpm_count = cpu_to_le32(2); /* For now, reaper and spaceman */
 
 	/* Set the checkpoint mapping for the reaper */
 	map = &block->cpm_map[0];
@@ -171,6 +172,15 @@ static void make_cpoint_map_block(u64 bno)
 	map->cpm_size = cpu_to_le32(param->blocksize);
 	map->cpm_oid = cpu_to_le64(REAPER_OID);
 	map->cpm_paddr = cpu_to_le64(REAPER_BNO);
+
+	/* Set the checkpoint mapping for the space manager */
+	map = &block->cpm_map[1];
+	map->cpm_type = cpu_to_le32(APFS_OBJ_EPHEMERAL |
+				    APFS_OBJECT_TYPE_SPACEMAN);
+	map->cpm_subtype = cpu_to_le32(APFS_OBJECT_TYPE_INVALID);
+	map->cpm_size = cpu_to_le32(param->blocksize);
+	map->cpm_oid = cpu_to_le64(SPACEMAN_OID);
+	map->cpm_paddr = cpu_to_le64(SPACEMAN_BNO);
 
 	set_object_header(&block->cpm_o, bno,
 			  APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_CHECKPOINT_MAP,
@@ -241,6 +251,7 @@ void make_container(void)
 	set_checkpoint_areas(sb_copy);
 
 	sb_copy->nx_spaceman_oid = cpu_to_le64(SPACEMAN_OID);
+	make_spaceman(SPACEMAN_BNO, SPACEMAN_OID);
 	sb_copy->nx_reaper_oid = cpu_to_le64(REAPER_OID);
 	make_empty_reaper(REAPER_BNO, REAPER_OID);
 	sb_copy->nx_omap_oid = cpu_to_le64(MAIN_OMAP_BNO);
