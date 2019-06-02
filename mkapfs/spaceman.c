@@ -51,10 +51,10 @@ static inline u32 cibs_per_cab(void)
 #define CIB_ADDR_BASE_OFF	0x180	/* First cib address for main device */
 
 /**
- * make_main_device - Make the spaceman main device structure
+ * make_devices - Make the spaceman device structures
  * @sm: pointer to the on-disk spaceman structure
  */
-static void make_main_device(struct apfs_spaceman_phys *sm)
+static void make_devices(struct apfs_spaceman_phys *sm)
 {
 	struct apfs_spaceman_device *dev = &sm->sm_dev[APFS_SD_MAIN];
 	u64 chunk_count = DIV_ROUND_UP(param->block_count, blocks_per_chunk());
@@ -84,6 +84,11 @@ static void make_main_device(struct apfs_spaceman_phys *sm)
 	cib_addr = (void *)sm + CIB_ADDR_BASE_OFF;
 	for (i = 0; i < cib_count; ++i)
 		cib_addr[i] = cpu_to_le64(FIRST_CIB_BNO + i);
+
+	/* For the tier2 device, just set the offset; the address is null */
+	dev = &sm->sm_dev[APFS_SD_TIER2];
+	dev->sm_addr_offset = cpu_to_le32(CIB_ADDR_BASE_OFF +
+					  cib_count * sizeof(__le64));
 }
 
 /**
@@ -100,7 +105,7 @@ void make_spaceman(u64 bno, u64 oid)
 	sm->sm_chunks_per_cib = cpu_to_le32(chunks_per_cib());
 	sm->sm_cibs_per_cab = cpu_to_le32(cibs_per_cab());
 
-	make_main_device(sm);
+	make_devices(sm);
 
 	set_object_header(&sm->sm_o, oid,
 			  APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_SPACEMAN,
