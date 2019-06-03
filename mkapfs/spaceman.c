@@ -42,6 +42,78 @@ static inline u32 cibs_per_cab(void)
 	return (param->blocksize - cab_size) / sizeof(__le64);
 }
 
+/**
+ * count_used_blocks - Calculate the number of blocks used by the mkfs
+ */
+static inline u32 count_used_blocks(void)
+{
+	u64 chunk_count = DIV_ROUND_UP(param->block_count, blocks_per_chunk());
+	u32 cib_count = DIV_ROUND_UP(chunk_count, chunks_per_cib());
+	u32 blocks = 0;
+
+	blocks += 1;			/* Block zero */
+	blocks += CPOINT_DESC_BLOCKS;	/* Checkpoint descriptor blocks */
+	blocks += CPOINT_DATA_BLOCKS;	/* Checkpoint data blocks */
+	blocks += cib_count;		/* Chunk-info blocks */
+	blocks += 1;			/* Allocation bitmap block */
+	blocks += 2;			/* Container object map and its root */
+	blocks += 6;			/* Volume superblock and its trees */
+	blocks += IP_BMAP_BLOCKS;	/* Internal pool bitmap blocks */
+	blocks += IP_BLOCKS;		/* Internal pool blocks */
+	return blocks;
+}
+
+/**
+ * bmap_mark_as_used - Mark a range as used in the allocation bitmap
+ * @bitmap:	allocation bitmap for the first chunk
+ * @paddr:	first block number
+ * @length:	block count
+ */
+static void bmap_mark_as_used(u64 *bitmap, u64 paddr, u64 length)
+{
+	u64 *byte;
+	u64 flag;
+	u64 i;
+
+	for (i = paddr; i < paddr + length; ++i) {
+		byte = bitmap + i / 64;
+		flag = 1ULL << i % 64;
+		*byte |= flag;
+	}
+}
+
+/**
+ * make_alloc_bitmap - Make the allocation bitmap for the first chunk
+ * @bno: block number to use
+ */
+static void make_alloc_bitmap(u64 bno)
+{
+	u64 chunk_count = DIV_ROUND_UP(param->block_count, blocks_per_chunk());
+	u32 cib_count = DIV_ROUND_UP(chunk_count, chunks_per_cib());
+	void *bmap = get_zeroed_block(bno);
+
+	/* Block zero */
+	bmap_mark_as_used(bmap, 0, 1);
+	/* Checkpoint descriptor blocks */
+	bmap_mark_as_used(bmap, CPOINT_DESC_BASE, CPOINT_DESC_BLOCKS);
+	/* Checkpoint data blocks */
+	bmap_mark_as_used(bmap, CPOINT_DATA_BASE, CPOINT_DATA_BLOCKS);
+	/* Chunk-info blocks */
+	bmap_mark_as_used(bmap, FIRST_CIB_BNO, cib_count);
+	/* Allocation bitmap block */
+	bmap_mark_as_used(bmap, bno, 1);
+	/* Container object map and its root */
+	bmap_mark_as_used(bmap, MAIN_OMAP_BNO, 2);
+	/* Volume superblock and its trees */
+	bmap_mark_as_used(bmap, FIRST_VOL_BNO, 6);
+	/* Internal pool bitmap blocks */
+	bmap_mark_as_used(bmap, IP_BMAP_BASE, IP_BMAP_BLOCKS);
+	/* Internal pool blocks */
+	bmap_mark_as_used(bmap, IP_BASE, IP_BLOCKS);
+
+	munmap(bmap, param->blocksize);
+}
+
 /*
  * Offsets into the spaceman block for a non-versioned container; the values
  * have been borrowed from a test image.
@@ -61,23 +133,28 @@ static inline u32 cibs_per_cab(void)
 static u64 make_chunk_info(struct apfs_chunk_info *chunk, u64 start)
 {
 	u64 remaining_blocks = param->block_count - start;
-	u32 block_count;
+	u32 block_count, free_count;
 
 	chunk->ci_xid = cpu_to_le64(MKFS_XID);
 	chunk->ci_addr = cpu_to_le64(start);
 
 	/* The first chunk is the only one that's not a hole */
-	if (!start)
+	if (!start) {
 		chunk->ci_bitmap_addr = cpu_to_le64(FIRST_CHUNK_BITMAP_BNO);
+		make_alloc_bitmap(FIRST_CHUNK_BITMAP_BNO);
+	}
 
 	block_count = blocks_per_chunk();
 	if (remaining_blocks < block_count) /* This is the final chunk */
 		block_count = remaining_blocks;
 	chunk->ci_block_count = cpu_to_le32(block_count);
-	start += block_count;
 
-	/* For the first chunk, we'll reduce this value later */
-	chunk->ci_free_count = cpu_to_le32(block_count);
+	free_count = block_count;
+	if (!start) /* The mkfs puts all of its blocks in the first chunk */
+		free_count -= count_used_blocks();
+	chunk->ci_free_count = cpu_to_le32(free_count);
+
+	start += block_count;
 	return start;
 }
 
@@ -137,9 +214,8 @@ static void make_devices(struct apfs_spaceman_phys *sm)
 	dev->sm_chunk_count = cpu_to_le64(chunk_count);
 	dev->sm_cib_count = cpu_to_le32(cib_count);
 	dev->sm_cab_count = 0; /* Not supported, hence the block count limit */
-
-	/* Pretend the whole device is free for now; we'll reduce this later */
-	dev->sm_free_count = cpu_to_le64(param->block_count);
+	dev->sm_free_count = cpu_to_le64(param->block_count -
+					 count_used_blocks());
 
 	dev->sm_addr_offset = cpu_to_le32(CIB_ADDR_BASE_OFF);
 	cib_addr = (void *)sm + CIB_ADDR_BASE_OFF;
