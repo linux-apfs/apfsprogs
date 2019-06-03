@@ -63,6 +63,15 @@ struct parameters {
 #define FIRST_VOL_EXTREF_ROOT_BNO	20006
 #define FIRST_VOL_SNAP_ROOT_BNO		20007
 
+/*
+ * Constants describing the internal pool; these are hardcoded for now, but
+ * should actually change with the container size.
+ */
+#define IP_BMAP_BASE	21000				/* First ip bitmap */
+#define IP_BMAP_BLOCKS	16				/* Ip bitmap count */
+#define IP_BASE		(IP_BMAP_BASE + IP_BMAP_BLOCKS)	/* Start of pool */
+#define IP_BLOCKS	183				/* Pool block count */
+
 /* Declarations for global variables */
 extern struct parameters *param;	/* Filesystem parameters */
 extern int fd;				/* File descriptor for the device */

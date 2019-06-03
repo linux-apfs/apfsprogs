@@ -181,6 +181,42 @@ static void make_main_free_queue(struct apfs_spaceman_free_queue *fq)
 }
 
 /**
+ * make_internal_pool - Make the internal pool of the space manager
+ * @sm: pointer to the on-disk spaceman structure
+ */
+static void make_internal_pool(struct apfs_spaceman_phys *sm)
+{
+	int i;
+	__le64 *addr;
+
+	sm->sm_ip_bm_tx_multiplier =
+				cpu_to_le32(APFS_SPACEMAN_IP_BM_TX_MULTIPLIER);
+	sm->sm_ip_block_count = cpu_to_le64(IP_BLOCKS);
+	sm->sm_ip_base = cpu_to_le64(IP_BASE);
+	/* No support for multiblock bitmaps */
+	sm->sm_ip_bm_size_in_blocks = cpu_to_le32(1);
+
+	sm->sm_ip_bm_block_count = cpu_to_le32(IP_BMAP_BLOCKS);
+	sm->sm_ip_bm_base = cpu_to_le64(IP_BMAP_BASE);
+	for (i = 0; i < IP_BMAP_BLOCKS; ++i) /* We use no blocks from the ip */
+		munmap(get_zeroed_block(IP_BMAP_BASE + i), param->blocksize);
+
+	/* Current bitmap is the first, so the offset is left at zero */
+	sm->sm_ip_bitmap_offset = cpu_to_le32(BITMAP_OFF);
+	sm->sm_ip_bm_free_head = cpu_to_le16(1);
+	sm->sm_ip_bm_free_tail = cpu_to_le16(IP_BMAP_BLOCKS - 1);
+
+	sm->sm_ip_bm_xid_offset = cpu_to_le32(BITMAP_XID_OFF);
+	addr = (void *)sm + BITMAP_XID_OFF;
+	*addr = cpu_to_le64(MKFS_XID);
+
+	/* I have no idea what this means */
+	sm->sm_ip_bm_free_next_offset = cpu_to_le32(BITMAP_FREE_NEXT_OFF);
+	addr = (void *)sm + BITMAP_FREE_NEXT_OFF;
+	*addr = cpu_to_le64(0x0004000300020001);
+}
+
+/**
  * make_spaceman - Make the space manager for the container
  * @bno: block number to use
  * @oid: object id
@@ -197,6 +233,7 @@ void make_spaceman(u64 bno, u64 oid)
 	make_devices(sm);
 	make_ip_free_queue(&sm->sm_fq[APFS_SFQ_IP]);
 	make_main_free_queue(&sm->sm_fq[APFS_SFQ_MAIN]);
+	make_internal_pool(sm);
 
 	set_object_header(&sm->sm_o, oid,
 			  APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_SPACEMAN,
