@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <apfs/raw.h>
 #include <apfs/types.h>
+#include "btree.h"
 #include "mkapfs.h"
 #include "object.h"
 #include "spaceman.h"
@@ -154,6 +155,32 @@ static void make_devices(struct apfs_spaceman_phys *sm)
 }
 
 /**
+ * make_ip_free_queue - Make an empty free queue for the internal pool
+ * @fq:	free queue structure
+ */
+static void make_ip_free_queue(struct apfs_spaceman_free_queue *fq)
+{
+	fq->sfq_tree_oid = cpu_to_le64(IP_FREE_QUEUE_OID);
+	make_empty_btree_root(IP_FREE_QUEUE_BNO, IP_FREE_QUEUE_OID,
+			      APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE);
+	fq->sfq_oldest_xid = 0;	/* Is this correct? */
+	fq->sfq_tree_node_limit = cpu_to_le16(1);
+}
+
+/**
+ * make_main_free_queue - Make an empty free queue for the main device
+ * @fq:	free queue structure
+ */
+static void make_main_free_queue(struct apfs_spaceman_free_queue *fq)
+{
+	fq->sfq_tree_oid = cpu_to_le64(MAIN_FREE_QUEUE_OID);
+	make_empty_btree_root(MAIN_FREE_QUEUE_BNO, MAIN_FREE_QUEUE_OID,
+			      APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE);
+	fq->sfq_oldest_xid = 0;	/* Is this correct? */
+	fq->sfq_tree_node_limit = cpu_to_le16(200); /* From test images */
+}
+
+/**
  * make_spaceman - Make the space manager for the container
  * @bno: block number to use
  * @oid: object id
@@ -168,6 +195,8 @@ void make_spaceman(u64 bno, u64 oid)
 	sm->sm_cibs_per_cab = cpu_to_le32(cibs_per_cab());
 
 	make_devices(sm);
+	make_ip_free_queue(&sm->sm_fq[APFS_SFQ_IP]);
+	make_main_free_queue(&sm->sm_fq[APFS_SFQ_MAIN]);
 
 	set_object_header(&sm->sm_o, oid,
 			  APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_SPACEMAN,

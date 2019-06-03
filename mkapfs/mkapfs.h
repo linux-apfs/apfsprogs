@@ -33,6 +33,8 @@ struct parameters {
 #define REAPER_OID		(SPACEMAN_OID + 1)
 #define FIRST_VOL_OID		(REAPER_OID + 1)
 #define FIRST_VOL_CAT_ROOT_OID	(FIRST_VOL_OID + 1)
+#define	IP_FREE_QUEUE_OID	(FIRST_VOL_CAT_ROOT_OID + 1)
+#define MAIN_FREE_QUEUE_OID	(IP_FREE_QUEUE_OID + 1)
 
 /*
  * Constants describing the checkpoint areas; these are hardcoded for now, but
@@ -48,6 +50,8 @@ struct parameters {
 #define CPOINT_SB_BNO			(CPOINT_DESC_BASE + 1)
 #define REAPER_BNO			CPOINT_DATA_BASE
 #define SPACEMAN_BNO			(CPOINT_DATA_BASE + 1)
+#define	IP_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 2)
+#define MAIN_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 3)
 #define FIRST_CIB_BNO			6000
 #define FIRST_CHUNK_BITMAP_BNO		8000
 #define MAIN_OMAP_BNO			20000

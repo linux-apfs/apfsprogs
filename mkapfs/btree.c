@@ -39,12 +39,10 @@ static void set_empty_btree_info(struct apfs_btree_info *info, u32 subtype)
 		/* The other two trees don't have fixed key/value sizes */
 		info->bt_fixed.bt_key_size =
 		       cpu_to_le32(sizeof(struct apfs_spaceman_free_queue_key));
-		info->bt_fixed.bt_val_size =
-		       cpu_to_le32(sizeof(struct apfs_spaceman_free_queue_key));
+		info->bt_fixed.bt_val_size = cpu_to_le32(8);
 		info->bt_longest_key =
 		       cpu_to_le32(sizeof(struct apfs_spaceman_free_queue_key));
-		info->bt_longest_val =
-		       cpu_to_le32(sizeof(struct apfs_spaceman_free_queue_key));
+		info->bt_longest_val = cpu_to_le32(8);
 	}
 	info->bt_node_count = cpu_to_le64(1); /* Only one node: the root */
 }
@@ -52,12 +50,13 @@ static void set_empty_btree_info(struct apfs_btree_info *info, u32 subtype)
 /**
  * make_empty_btree_root - Make an empty root for a b-tree
  * @bno:	block number to use
+ * @oid:	object id to use
  * @subtype:	subtype of the root node, i.e., tree type
  *
  * Should only be called for the free queues, the snapshot metadata tree, and
  * the extent reference tree.
  */
-void make_empty_btree_root(u64 bno, u32 subtype)
+void make_empty_btree_root(u64 bno, u64 oid, u32 subtype)
 {
 	struct apfs_btree_node_phys *root = get_zeroed_block(bno);
 	u32 type;
@@ -99,7 +98,7 @@ void make_empty_btree_root(u64 bno, u32 subtype)
 		type |= APFS_OBJ_EPHEMERAL;
 	else
 		type |= APFS_OBJ_PHYSICAL;
-	set_object_header(&root->btn_o, bno, type, subtype);
+	set_object_header(&root->btn_o, oid, type, subtype);
 
 	munmap(root, param->blocksize);
 }

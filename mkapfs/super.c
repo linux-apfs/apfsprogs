@@ -141,9 +141,10 @@ static void make_volume(u64 bno, u64 oid)
 	/* The snapshot metadata and extent reference trees are empty */
 	vsb->apfs_extentref_tree_oid = cpu_to_le64(FIRST_VOL_EXTREF_ROOT_BNO);
 	make_empty_btree_root(FIRST_VOL_EXTREF_ROOT_BNO,
+			      FIRST_VOL_EXTREF_ROOT_BNO,
 			      APFS_OBJECT_TYPE_BLOCKREFTREE);
 	vsb->apfs_snap_meta_tree_oid = cpu_to_le64(FIRST_VOL_SNAP_ROOT_BNO);
-	make_empty_btree_root(FIRST_VOL_SNAP_ROOT_BNO,
+	make_empty_btree_root(FIRST_VOL_SNAP_ROOT_BNO, FIRST_VOL_SNAP_ROOT_BNO,
 			      APFS_OBJECT_TYPE_SNAPMETATREE);
 
 	set_object_header(&vsb->apfs_o, oid,
@@ -162,7 +163,7 @@ static void make_cpoint_map_block(u64 bno)
 	struct apfs_checkpoint_mapping *map;
 
 	block->cpm_flags = cpu_to_le32(APFS_CHECKPOINT_MAP_LAST);
-	block->cpm_count = cpu_to_le32(2); /* For now, reaper and spaceman */
+	block->cpm_count = cpu_to_le32(4); /* Reaper, spaceman, free queues */
 
 	/* Set the checkpoint mapping for the reaper */
 	map = &block->cpm_map[0];
@@ -181,6 +182,24 @@ static void make_cpoint_map_block(u64 bno)
 	map->cpm_size = cpu_to_le32(param->blocksize);
 	map->cpm_oid = cpu_to_le64(SPACEMAN_OID);
 	map->cpm_paddr = cpu_to_le64(SPACEMAN_BNO);
+
+	/* Set the checkpoint mapping for the internal-pool free queue root */
+	map = &block->cpm_map[2];
+	map->cpm_type = cpu_to_le32(APFS_OBJ_EPHEMERAL |
+				    APFS_OBJECT_TYPE_BTREE);
+	map->cpm_subtype = cpu_to_le32(APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE);
+	map->cpm_size = cpu_to_le32(param->blocksize);
+	map->cpm_oid = cpu_to_le64(IP_FREE_QUEUE_OID);
+	map->cpm_paddr = cpu_to_le64(IP_FREE_QUEUE_BNO);
+
+	/* Set the checkpoint mapping for the main device free queue root */
+	map = &block->cpm_map[3];
+	map->cpm_type = cpu_to_le32(APFS_OBJ_EPHEMERAL |
+				    APFS_OBJECT_TYPE_BTREE);
+	map->cpm_subtype = cpu_to_le32(APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE);
+	map->cpm_size = cpu_to_le32(param->blocksize);
+	map->cpm_oid = cpu_to_le64(MAIN_FREE_QUEUE_OID);
+	map->cpm_paddr = cpu_to_le64(MAIN_FREE_QUEUE_BNO);
 
 	set_object_header(&block->cpm_o, bno,
 			  APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_CHECKPOINT_MAP,
