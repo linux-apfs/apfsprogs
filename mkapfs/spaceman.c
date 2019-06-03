@@ -51,6 +51,65 @@ static inline u32 cibs_per_cab(void)
 #define CIB_ADDR_BASE_OFF	0x180	/* First cib address for main device */
 
 /**
+ * make_chunk_info - Write a chunk info structure
+ * @chunk:	pointer to the raw chunk info structure
+ * @start:	first block number for the chunk
+ *
+ * Returns the first block number for the next chunk.
+ */
+static u64 make_chunk_info(struct apfs_chunk_info *chunk, u64 start)
+{
+	u64 remaining_blocks = param->block_count - start;
+	u32 block_count;
+
+	chunk->ci_xid = cpu_to_le64(MKFS_XID);
+	chunk->ci_addr = cpu_to_le64(start);
+
+	/* The first chunk is the only one that's not a hole */
+	if (!start)
+		chunk->ci_bitmap_addr = cpu_to_le64(FIRST_CHUNK_BITMAP_BNO);
+
+	block_count = blocks_per_chunk();
+	if (remaining_blocks < block_count) /* This is the final chunk */
+		block_count = remaining_blocks;
+	chunk->ci_block_count = cpu_to_le32(block_count);
+	start += block_count;
+
+	/* For the first chunk, we'll reduce this value later */
+	chunk->ci_free_count = cpu_to_le32(block_count);
+	return start;
+}
+
+/**
+ * make_chunk_info_block - Make a chunk-info block
+ * @bno:	block number for the chunk-info block
+ * @index:	index of the chunk-info block
+ * @start:	first block number for the first chunk
+ *
+ * Returns the first block number for the first chunk of the next cib.
+ */
+static u64 make_chunk_info_block(u64 bno, int index, u64 start)
+{
+	struct apfs_chunk_info_block *cib = get_zeroed_block(bno);
+	int i;
+
+	cib->cib_index = cpu_to_le32(index);
+	for (i = 0; i < chunks_per_cib(); ++i) {
+		if (start == param->block_count) /* No more chunks in device */
+			break;
+		start = make_chunk_info(&cib->cib_chunk_info[i], start);
+	}
+	cib->cib_chunk_info_count = cpu_to_le32(i);
+
+	set_object_header(&cib->cib_o, bno,
+			  APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_SPACEMAN_CIB,
+			  APFS_OBJECT_TYPE_INVALID);
+	munmap(cib, param->blocksize);
+
+	return start;
+}
+
+/**
  * make_devices - Make the spaceman device structures
  * @sm: pointer to the on-disk spaceman structure
  */
@@ -59,6 +118,7 @@ static void make_devices(struct apfs_spaceman_phys *sm)
 	struct apfs_spaceman_device *dev = &sm->sm_dev[APFS_SD_MAIN];
 	u64 chunk_count = DIV_ROUND_UP(param->block_count, blocks_per_chunk());
 	u32 cib_count = DIV_ROUND_UP(chunk_count, chunks_per_cib());
+	u64 start = 0;
 	__le64 *cib_addr;
 	int i;
 
@@ -82,8 +142,10 @@ static void make_devices(struct apfs_spaceman_phys *sm)
 
 	dev->sm_addr_offset = cpu_to_le32(CIB_ADDR_BASE_OFF);
 	cib_addr = (void *)sm + CIB_ADDR_BASE_OFF;
-	for (i = 0; i < cib_count; ++i)
+	for (i = 0; i < cib_count; ++i) {
 		cib_addr[i] = cpu_to_le64(FIRST_CIB_BNO + i);
+		start = make_chunk_info_block(FIRST_CIB_BNO + i, i, start);
+	}
 
 	/* For the tier2 device, just set the offset; the address is null */
 	dev = &sm->sm_dev[APFS_SD_TIER2];
