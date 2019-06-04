@@ -973,6 +973,18 @@ struct apfs_modified_by {
 	__le64 last_xid;
 } __packed;
 
+/* Version constants for wrapped meta crypto state */
+#define APFS_WMCS_MAJOR_VERSION		5
+#define APFS_WMCS_MINOR_VERSION		0
+
+/* Protection classes */
+#define APFS_PROTECTION_CLASS_DIR_NONE	0 /* Inherits the directory's default */
+#define APFS_PROTECTION_CLASS_A		1
+#define APFS_PROTECTION_CLASS_B		2
+#define APFS_PROTECTION_CLASS_C		3
+#define APFS_PROTECTION_CLASS_D		4 /* No protection */
+#define APFS_PROTECTION_CLASS_F		6 /* No protection, nonpersistent key */
+
 /*
  * Structure used to store the encryption state
  */

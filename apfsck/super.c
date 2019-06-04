@@ -450,26 +450,21 @@ static void check_volume_role(u16 role)
 		report("Volume superblock", "reserved role in use.");
 }
 
-/* Wrapped meta crypto state constants */
-#define WMCS_MAJOR_VERSION	5
-#define WMCS_MINOR_VERSION	0
-#define WMCS_PROTECTION_CLASS_F	6	/* No protection, nonpersistent key */
-
 /**
  * check_meta_crypto - Check a volume's meta_crypto field
  * @wmcs: the structure to check
  */
 static void check_meta_crypto(struct apfs_wrapped_meta_crypto_state *wmcs)
 {
-	if (le16_to_cpu(wmcs->major_version) != WMCS_MAJOR_VERSION)
+	if (le16_to_cpu(wmcs->major_version) != APFS_WMCS_MAJOR_VERSION)
 		report("Volume meta_crypto", "wrong major version.");
-	if (le16_to_cpu(wmcs->minor_version) != WMCS_MINOR_VERSION)
+	if (le16_to_cpu(wmcs->minor_version) != APFS_WMCS_MINOR_VERSION)
 		report("Volume meta_crypto", "wrong minor version.");
 
 	if (wmcs->cpflags)
 		report("Volume meta_crypto", "unknown flag.");
 
-	if (le32_to_cpu(wmcs->persistent_class) != WMCS_PROTECTION_CLASS_F)
+	if (le32_to_cpu(wmcs->persistent_class) != APFS_PROTECTION_CLASS_F)
 		report_unknown("Encryption");
 	if (le16_to_cpu(wmcs->key_revision) != 1) /* Key has been changed */
 		report_unknown("Encryption");

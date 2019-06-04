@@ -117,6 +117,9 @@ static int make_special_inode_val(u64 ino, char *name,
 	val->create_time = val->mod_time = val->change_time =
 			   val->access_time = cpu_to_le64(get_timestamp());
 
+	val->default_protection_class =
+				cpu_to_le32(APFS_PROTECTION_CLASS_DIR_NONE);
+
 	/* TODO: allow the user to override these fields */
 	val->owner = cpu_to_le32(geteuid());
 	val->group = cpu_to_le32(getegid());

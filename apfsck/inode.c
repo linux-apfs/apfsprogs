@@ -600,6 +600,7 @@ void parse_inode_record(struct apfs_inode_key *key,
 {
 	struct inode *inode;
 	u16 mode, filetype;
+	u32 def_prot_class;
 
 	if (len < sizeof(*val))
 		report("Inode record", "value is too small.");
@@ -620,6 +621,12 @@ void parse_inode_record(struct apfs_inode_key *key,
 
 	inode->i_flags = le64_to_cpu(val->internal_flags);
 	check_inode_internal_flags(inode->i_flags);
+
+	def_prot_class = le32_to_cpu(val->default_protection_class);
+	/* These protection classes have been seen in unencrypted volumes */
+	if (def_prot_class != APFS_PROTECTION_CLASS_DIR_NONE &&
+	    def_prot_class != APFS_PROTECTION_CLASS_D)
+		report_unknown("Encryption");
 
 	mode = le16_to_cpu(val->mode);
 	filetype = mode & S_IFMT;

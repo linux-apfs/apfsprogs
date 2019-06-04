@@ -92,21 +92,16 @@ static void set_ephemeral_info(__le64 *info)
 			    | APFS_NX_EPH_INFO_VERSION_1);
 }
 
-/* Wrapped meta crypto state constants */
-#define WMCS_MAJOR_VERSION	5
-#define WMCS_MINOR_VERSION	0
-#define WMCS_PROTECTION_CLASS_F	6	/* No protection, nonpersistent key */
-
 /**
  * set_meta_crypto - Set a volume's meta_crypto field
  * @wmcs: the structure to set
  */
 static void set_meta_crypto(struct apfs_wrapped_meta_crypto_state *wmcs)
 {
-	wmcs->major_version = cpu_to_le16(WMCS_MAJOR_VERSION);
-	wmcs->minor_version = cpu_to_le16(WMCS_MINOR_VERSION);
+	wmcs->major_version = cpu_to_le16(APFS_WMCS_MAJOR_VERSION);
+	wmcs->minor_version = cpu_to_le16(APFS_WMCS_MINOR_VERSION);
 	wmcs->cpflags = 0; /* No flags exist yet */
-	wmcs->persistent_class = cpu_to_le32(WMCS_PROTECTION_CLASS_F);
+	wmcs->persistent_class = cpu_to_le32(APFS_PROTECTION_CLASS_F);
 	wmcs->key_os_version = 0; /* Not sure what to do with this on Linux */
 	wmcs->key_revision = cpu_to_le16(1);
 }
