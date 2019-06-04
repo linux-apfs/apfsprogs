@@ -516,6 +516,10 @@ static struct apfs_superblock *map_volume_super(int vol,
 	check_incompat_vol_features(le64_to_cpu(
 				vsb->v_raw->apfs_incompatible_features));
 
+	if (vsb->v_raw->apfs_fs_reserve_block_count)
+		report_unknown("Volume block reservation");
+	if (vsb->v_raw->apfs_fs_quota_block_count)
+		report_unknown("Volume block quota");
 	check_meta_crypto(&vsb->v_raw->apfs_meta_crypto);
 
 	vsb->v_next_obj_id = le64_to_cpu(vsb->v_raw->apfs_next_obj_id);
