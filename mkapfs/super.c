@@ -164,6 +164,9 @@ static void make_volume(u64 bno, u64 oid)
 	make_empty_btree_root(FIRST_VOL_SNAP_ROOT_BNO, FIRST_VOL_SNAP_ROOT_BNO,
 			      APFS_OBJECT_TYPE_SNAPMETATREE);
 
+	/* The root nodes of all four trees, plus the object map structure */
+	vsb->apfs_fs_alloc_count = cpu_to_le64(5);
+
 	set_object_header(&vsb->apfs_o, oid,
 			  APFS_OBJ_VIRTUAL | APFS_OBJECT_TYPE_FS,
 			  APFS_OBJECT_TYPE_INVALID);
