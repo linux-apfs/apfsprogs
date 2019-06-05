@@ -310,6 +310,8 @@ u64 parse_phys_ext_record(struct apfs_phys_ext_key *key,
 	extent = get_extent(cat_cnid(&key->hdr));
 	extent->e_refcnt = refcnt;
 
+	vsb->v_block_count += length;
 	container_bmap_mark_as_used(extent->e_bno, length);
+
 	return extent->e_bno + length - 1;
 }

@@ -646,6 +646,10 @@ static void check_container(struct super_block *sb)
 		if (le64_to_cpu(vsb_raw->apfs_num_other_fsobjects) !=
 							vsb->v_special_count)
 			report("Volume superblock", "bad special file count.");
+		if (le64_to_cpu(vsb_raw->apfs_fs_alloc_count) !=
+							vsb->v_block_count - 1)
+			/* The volume superblock itself does not count */
+			report("Volume superblock", "bad block count.");
 
 		sb->s_volumes[vol] = vsb;
 	}

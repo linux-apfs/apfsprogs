@@ -31,6 +31,7 @@ struct volume_superblock {
 	u64 v_dir_count;	/* Number of directories */
 	u64 v_symlink_count;	/* Number of symlinks */
 	u64 v_special_count;	/* Number of other filesystem objects */
+	u64 v_block_count;	/* Number of blocks currently allocated */
 	bool v_has_root;	/* Is there a root directory? */
 	bool v_has_priv;	/* Is there a private directory? */
 
