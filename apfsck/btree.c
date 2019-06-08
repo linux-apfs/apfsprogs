@@ -712,6 +712,8 @@ static void parse_subtree(struct node *root,
 
 		if (keycmp(last_key, &curr_key) > 0)
 			report("B-tree", "keys are out of order.");
+		if (!i && !node_is_root(root) && keycmp(last_key, &curr_key))
+			report("B-tree", "index key absent from child node.");
 
 		if (i != 0 && node_is_leaf(root) &&
 		    !keycmp(last_key, &curr_key))
