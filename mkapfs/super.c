@@ -40,6 +40,22 @@ static void set_uuid(char *field, char *uuid)
 }
 
 /**
+ * zero_area - Wipe an area on disk
+ * @start:	first block of the area
+ * @blocks:	block count for the area
+ */
+static void zero_area(u64 start, u64 blocks)
+{
+	u64 bno;
+	void *block;
+
+	for (bno = start; bno < start + blocks; ++bno) {
+		block = get_zeroed_block(bno);
+		munmap(block, param->blocksize);
+	}
+}
+
+/**
  * set_checkpoint_areas - Set all sb fields describing the checkpoint areas
  * @sb: pointer to the superblock copy on disk
  */
@@ -306,6 +322,11 @@ void make_container(void)
 			  APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_NX_SUPERBLOCK,
 			  APFS_OBJECT_TYPE_INVALID);
 
+	/*
+	 * If the disk was ever formatted as APFS, valid checkpoint superblocks
+	 * may still remain.  Wipe the area to avoid mounting them by mistake.
+	 */
+	zero_area(CPOINT_DESC_BASE, CPOINT_DESC_BLOCKS);
 	make_cpoint_map_block(CPOINT_MAP_BNO);
 	make_cpoint_superblock(CPOINT_SB_BNO, sb_copy);
 
