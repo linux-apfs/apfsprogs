@@ -463,7 +463,6 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 			break;
 		case APFS_INO_EXT_TYPE_RDEV:
 			xlen = read_rdev_xfield(xval, len, inode);
-			report_unknown("Device identifier xfield");
 			break;
 		case APFS_INO_EXT_TYPE_NAME:
 			xlen = read_name_xfield(xval, len, inode);
