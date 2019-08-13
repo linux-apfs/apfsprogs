@@ -100,6 +100,43 @@ static struct apfs_nx_superblock *read_super_copy(void)
 }
 
 /**
+ * read_latest_super - Read the latest checkpoint superblock
+ * @base:	base of the checkpoint descriptor area
+ * @blocks:	block count for the checkpoint descriptor area
+ */
+static struct apfs_nx_superblock *read_latest_super(u64 base, u32 blocks)
+{
+	struct apfs_nx_superblock *latest = NULL;
+	u64 xid = 0;
+	u64 bno;
+
+	assert(sb->s_blocksize);
+
+	for (bno = base; bno < base + blocks; ++bno) {
+		struct apfs_nx_superblock *current;
+
+		current = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
+			       fd, bno * sb->s_blocksize);
+		if (current == MAP_FAILED)
+			system_error();
+
+		if (le32_to_cpu(current->nx_magic) != APFS_NX_MAGIC)
+			continue; /* Not a superblock */
+		if (le64_to_cpu(current->nx_o.o_xid) <= xid)
+			continue; /* Old */
+		if (!obj_verify_csum(&current->nx_o))
+			continue; /* Corrupted */
+
+		xid = le64_to_cpu(current->nx_o.o_xid);
+		latest = current;
+	}
+
+	if (!latest)
+		report("Checkpoint descriptor area", "no valid superblock.");
+	return latest;
+}
+
+/**
  * main_super_compare - Compare two copies of the container superblock
  * @desc: the superblock from the latest checkpoint
  * @copy: the superblock copy in block zero
@@ -110,8 +147,10 @@ static void main_super_compare(struct apfs_nx_superblock *desc,
 	char *desc_bytes = (char *)desc;
 	char *copy_bytes = (char *)copy;
 
-	if (copy->nx_o.o_xid != desc->nx_o.o_xid)
+	if (copy->nx_o.o_xid != desc->nx_o.o_xid) {
 		report_crash("Block zero");
+		return;
+	}
 
 	/*
 	 * The nx_counters array doesn't always match.  Naturally, this means
@@ -862,7 +901,7 @@ static u32 parse_cpoint_map_blocks(u64 desc_base, u32 desc_blocks, u32 *index)
  */
 void parse_filesystem(void)
 {
-	struct apfs_nx_superblock *msb_raw;
+	struct apfs_nx_superblock *msb_raw_copy, *msb_raw_latest;
 	u64 desc_base;
 	u32 desc_blocks;
 	long long valid_blocks;
@@ -873,22 +912,28 @@ void parse_filesystem(void)
 		system_error();
 
 	/* Read the superblock from the last clean unmount */
-	msb_raw = read_super_copy();
+	msb_raw_copy = read_super_copy();
 
 	/* We want to mount the latest valid checkpoint among the descriptors */
-	desc_base = le64_to_cpu(msb_raw->nx_xp_desc_base);
+	desc_base = le64_to_cpu(msb_raw_copy->nx_xp_desc_base);
 	if (desc_base >> 63 != 0) {
 		/* The highest bit is set when checkpoints are not contiguous */
 		report("Block zero",
 		       "checkpoint descriptor tree not yet supported.");
 	}
-	desc_blocks = le32_to_cpu(msb_raw->nx_xp_desc_blocks);
+	desc_blocks = le32_to_cpu(msb_raw_copy->nx_xp_desc_blocks);
 	if (desc_blocks > 10000) /* Arbitrary loop limit, is it enough? */
 		report("Block zero", "too many checkpoint descriptors?");
-	desc_next = le32_to_cpu(msb_raw->nx_xp_desc_next);
-	desc_index = le32_to_cpu(msb_raw->nx_xp_desc_index);
+
+	/* Find the valid range, as reported by the latest descriptor */
+	msb_raw_latest = read_latest_super(desc_base, desc_blocks);
+	desc_next = le32_to_cpu(msb_raw_latest->nx_xp_desc_next);
+	desc_index = le32_to_cpu(msb_raw_latest->nx_xp_desc_index);
 	if (desc_next >= desc_blocks || desc_index >= desc_blocks)
-		report("Block zero", "out of range checkpoint descriptors.");
+		report("Checkpoint superblock",
+		       "out of range checkpoint descriptors.");
+	munmap(msb_raw_latest, sb->s_blocksize);
+	msb_raw_latest = NULL;
 
 	/*
 	 * Now go through the valid checkpoints one by one, though it seems
@@ -951,8 +996,8 @@ void parse_filesystem(void)
 
 	if (!sb->s_raw)
 		report("Checkpoint descriptor area", "no valid superblocks.");
-	main_super_compare(sb->s_raw, msb_raw);
-	munmap(msb_raw, sb->s_blocksize);
+	main_super_compare(sb->s_raw, msb_raw_copy);
+	munmap(msb_raw_copy, sb->s_blocksize);
 }
 
 /**
