@@ -56,7 +56,7 @@ struct super_block {
 	u64 s_next_oid;	/* Next virtual object id to be used */
 	u32 s_max_vols; /* Maximum number of volumes allowed */
 	u64 s_data_base; /* Base address of the checkpoint data area */
-	u64 s_data_blocks; /* Number of blocks in the checkpoint data area */
+	u32 s_data_blocks; /* Number of blocks in the checkpoint data area */
 	u32 s_data_index; /* Index of first valid block in checkpoint data */
 	u32 s_data_len; /* Number of valid blocks in checkpoint data area */
 

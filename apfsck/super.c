@@ -756,7 +756,7 @@ static void parse_main_super(struct super_block *sb)
 		report("Container superblock", "has checkpoint tree.");
 
 	sb->s_data_base = le64_to_cpu(sb->s_raw->nx_xp_data_base);
-	sb->s_data_blocks = le64_to_cpu(sb->s_raw->nx_xp_data_blocks);
+	sb->s_data_blocks = le32_to_cpu(sb->s_raw->nx_xp_data_blocks);
 	sb->s_data_index = le32_to_cpu(sb->s_raw->nx_xp_data_index);
 	sb->s_data_len = le32_to_cpu(sb->s_raw->nx_xp_data_len);
 	if (sb->s_data_index >= sb->s_data_blocks)
