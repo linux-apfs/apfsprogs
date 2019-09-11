@@ -1,6 +1,4 @@
 /*
- *  apfsprogs/include/apfs/types.h
- *
  * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  *
  * Definitions that make it easier to reuse code from the kernel module.

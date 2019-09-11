@@ -1,6 +1,4 @@
 /*
- *  apfsprogs/include/apfs/raw.h
- *
  * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  *
  * Definitions for all on-disk data structures.

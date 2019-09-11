@@ -1,6 +1,4 @@
 /*
- *  apfsprogs/mkapfs/dir.h
- *
  * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */
 

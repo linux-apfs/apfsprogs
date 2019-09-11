@@ -1,6 +1,4 @@
 /*
- *  apfsprogs/lib/unicode.c
- *
  * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  *
  * Routines and data for the normalization of unicode strings.

@@ -1,6 +1,4 @@
 /*
- *  apfsprogs/lib/checksum.c
- *
  * Checksum implementations needed by APFS.
  */
 
