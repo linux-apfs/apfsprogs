@@ -7,6 +7,7 @@
 
 #include <apfs/raw.h>
 #include <apfs/types.h>
+#include "htable.h"
 #include "object.h"
 
 struct super_block;
@@ -17,11 +18,7 @@ struct free_queue;
  * Omap record data in memory
  */
 struct omap_record {
-	/* Hash table entry header (struct htable_entry_header from htable.h) */
-	struct {
-		union htable_entry      *o_next;
-		u64                     o_oid;  /* Object id */
-	};
+	struct htable_entry o_htable; /* Hash table entry header */
 
 	bool	o_seen;	/* Has this oid been seen in use? */
 	u64	o_xid;	/* Transaction id (snapshots are not supported) */
@@ -123,7 +120,7 @@ struct btree {
 	struct node *root;	/* Root of this b-tree */
 
 	/* Hash table for the tree's object map (can be NULL) */
-	union htable_entry **omap_table;
+	struct htable_entry **omap_table;
 
 	/* B-tree stats as measured by the fsck */
 	u64 key_count;		/* Number of keys */
@@ -181,13 +178,14 @@ extern struct free_queue *parse_free_queue_btree(u64 oid);
 extern struct btree *parse_snap_meta_btree(u64 oid);
 extern struct btree *parse_extentref_btree(u64 oid);
 extern struct btree *parse_omap_btree(u64 oid);
-extern struct btree *parse_cat_btree(u64 oid, union htable_entry **omap_table);
+extern struct btree *parse_cat_btree(u64 oid, struct htable_entry **omap_table);
 extern struct query *alloc_query(struct node *node, struct query *parent);
 extern void free_query(struct query *query);
 extern int btree_query(struct query **query);
 extern struct node *omap_read_node(u64 id);
-extern void free_omap_table(union htable_entry **table);
-extern struct omap_record *get_omap_record(u64 oid, union htable_entry **table);
+extern void free_omap_table(struct htable_entry **table);
+extern struct omap_record *get_omap_record(u64 oid,
+					   struct htable_entry **table);
 extern void extentref_lookup(struct node *tbl, u64 bno,
 			     struct extref_record *extref);
 

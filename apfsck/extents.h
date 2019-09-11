@@ -6,6 +6,7 @@
 #define _EXTENTS_H
 
 #include <apfs/types.h>
+#include "htable.h"
 
 struct apfs_file_extent_key;
 struct apfs_dstream_id_key;
@@ -15,11 +16,7 @@ struct apfs_phys_ext_key;
  * Physical extent data in memory
  */
 struct extent {
-	/* Hash table entry header (struct htable_entry_header from htable.h) */
-	struct {
-		union htable_entry	*e_next;
-		u64			e_bno;	/* First physical block */
-	};
+	struct htable_entry e_htable; /* Hash table entry header */
 
 	u8		e_obj_type;	/* Type of the owner objects */
 
@@ -30,6 +27,7 @@ struct extent {
 	u32		e_references;	/* Number of references to extent */
 	u64		e_latest_owner;	/* Last owner counted on e_references */
 };
+#define e_bno	e_htable.h_id		/* First physical block in the extent */
 
 /*
  * Structure used to register each physical extent for a dstream, so that the
@@ -41,17 +39,11 @@ struct listed_extent {
 	struct listed_extent	*next;	 /* Next entry in linked list */
 };
 
-#define DSTREAM_TABLE_BUCKETS	512	/* So the hash table array fits in 4k */
-
 /*
  * Dstream data in memory
  */
 struct dstream {
-	/* Hash table entry header (struct htable_entry_header from htable.h) */
-	struct {
-		union htable_entry	*d_next;
-		u64			d_id;
-	};
+	struct htable_entry d_htable; /* Hash table entry header */
 
 	/* Linked list of physical extents for dstream */
 	struct listed_extent *d_extents;
@@ -70,9 +62,10 @@ struct dstream {
 	u64		d_sparse_bytes;	/* Size of the holes read so far */
 	u32		d_references;	/* Number of references to dstream */
 };
+#define d_id	d_htable.h_id		/* Dstream id */
 
-extern void free_dstream_table(union htable_entry **table);
-extern void free_extent_table(union htable_entry **table);
+extern void free_dstream_table(struct htable_entry **table);
+extern void free_extent_table(struct htable_entry **table);
 extern struct dstream *get_dstream(u64 ino);
 extern void parse_extent_record(struct apfs_file_extent_key *key,
 				struct apfs_file_extent_val *val, int len);

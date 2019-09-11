@@ -4,7 +4,7 @@ DEPS = $(SRCS:.c=.d)
 
 SPARSE_VERSION := $(shell sparse --version 2>/dev/null)
 
-override CFLAGS += -Wall -I$(CURDIR)/../include
+override CFLAGS += -Wall -fno-strict-aliasing -I$(CURDIR)/../include
 
 libapfs.a: $(OBJS)
 	@echo '  Assembling library archive...'

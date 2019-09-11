@@ -7,13 +7,11 @@
 
 #include <sys/stat.h> /* The macros for the inode mode */
 #include <apfs/types.h>
+#include "htable.h"
 
 struct apfs_inode_key;
 struct apfs_sibling_link_key;
 struct apfs_sibling_map_key;
-union htable_entry;
-
-#define INODE_TABLE_BUCKETS	512	/* So the hash table array fits in 4k */
 
 /* Flags for the bitmap of seen system xattrs (i_xattr_bmap) */
 #define XATTR_BMAP_SYMLINK	0x01	/* Symlink target xattr */
@@ -24,11 +22,7 @@ union htable_entry;
  * Inode data in memory
  */
 struct inode {
-	/* Hash table entry header (struct htable_entry_header from htable.h) */
-	struct {
-		union htable_entry	*i_next;
-		u64			i_ino;	/* Inode number */
-	};
+	struct htable_entry i_htable; /* Hash table entry header */
 
 	u64		i_private_id;	/* Id of the inode's data stream */
 	bool		i_seen;		/* Has this inode been seen? */
@@ -54,6 +48,7 @@ struct inode {
 	u64		i_first_parent;	/* Parent id of the first dentry seen */
 	struct sibling	*i_siblings;	/* Linked list of siblings for inode */
 };
+#define i_ino	i_htable.h_id		/* Inode number */
 
 /*
  * Sibling link data in memory
@@ -69,7 +64,7 @@ struct sibling {
 	u8		*s_name;	/* In-memory copy of the name */
 };
 
-extern void free_inode_table(union htable_entry **table);
+extern void free_inode_table(struct htable_entry **table);
 extern struct inode *get_inode(u64 ino);
 extern void check_inode_ids(u64 ino, u64 parent_ino);
 extern void parse_inode_record(struct apfs_inode_key *key,

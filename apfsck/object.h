@@ -6,11 +6,11 @@
 #define _OBJECT_H
 
 #include <apfs/types.h>
+#include "htable.h"
 
 struct apfs_obj_phys;
 struct super_block;
 struct node;
-union htable_entry;
 
 /*
  * In-memory representation of an APFS object
@@ -27,9 +27,9 @@ struct object {
 extern int obj_verify_csum(struct apfs_obj_phys *obj);
 extern void *read_object_nocheck(u64 bno, struct object *obj);
 extern u32 parse_object_flags(u32 flags);
-extern void *read_object(u64 oid, union htable_entry **omap_table,
+extern void *read_object(u64 oid, struct htable_entry **omap_table,
 			 struct object *obj);
-extern void free_cpoint_map_table(union htable_entry **table);
+extern void free_cpoint_map_table(struct htable_entry **table);
 extern struct cpoint_map *get_cpoint_map(u64 oid);
 extern void *read_ephemeral_object(u64 oid, struct object *obj);
 

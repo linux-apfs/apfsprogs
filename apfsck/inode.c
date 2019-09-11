@@ -127,9 +127,9 @@ static void free_inode_names(struct inode *inode)
  * free_inode - Free an inode structure after performing some final checks
  * @entry: the entry to free
  */
-static void free_inode(union htable_entry *entry)
+static void free_inode(struct htable_entry *entry)
 {
-	struct inode *inode = &entry->inode;
+	struct inode *inode = (struct inode *)entry;
 	struct listed_cnid *cnid;
 
 	/* The inodes must be freed before the cnids */
@@ -156,7 +156,7 @@ static void free_inode(union htable_entry *entry)
  * Also performs some consistency checks that can only be done after the whole
  * catalog has been parsed.
  */
-void free_inode_table(union htable_entry **table)
+void free_inode_table(struct htable_entry **table)
 {
 	free_htable(table, free_inode);
 }
@@ -169,10 +169,10 @@ void free_inode_table(union htable_entry **table)
  */
 struct inode *get_inode(u64 ino)
 {
-	union htable_entry *entry;
+	struct htable_entry *entry;
 
 	entry = get_htable_entry(ino, sizeof(struct inode), vsb->v_inode_table);
-	return &entry->inode;
+	return (struct inode *)entry;
 }
 
 /**

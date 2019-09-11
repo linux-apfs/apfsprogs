@@ -82,7 +82,7 @@ u32 parse_object_flags(u32 flags)
  * Returns a pointer to the raw data of the object in memory, after checking
  * the consistency of some of its fields.
  */
-void *read_object(u64 oid, union htable_entry **omap_table, struct object *obj)
+void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
 {
 	struct apfs_obj_phys *raw;
 	struct omap_record *omap_rec;
@@ -148,9 +148,9 @@ void *read_object(u64 oid, union htable_entry **omap_table, struct object *obj)
  * free_cpoint_map - Free a map structure after performing some final checks
  * @entry: the entry to free
  */
-static void free_cpoint_map(union htable_entry *entry)
+static void free_cpoint_map(struct htable_entry *entry)
 {
-	struct cpoint_map *map = &entry->mapping;
+	struct cpoint_map *map = (struct cpoint_map *)entry;
 	u32 blk_count = map->m_size >> sb->s_blocksize_bits;
 	u64 obj_start = map->m_paddr;
 	u64 obj_end = map->m_paddr + blk_count; /* Objects can't wrap, right? */
@@ -181,7 +181,7 @@ static void free_cpoint_map(union htable_entry *entry)
  * free_cpoint_map_table - Free the checkpoint map table and all its entries
  * @table: table to free
  */
-void free_cpoint_map_table(union htable_entry **table)
+void free_cpoint_map_table(struct htable_entry **table)
 {
 	free_htable(table, free_cpoint_map);
 }
@@ -194,11 +194,11 @@ void free_cpoint_map_table(union htable_entry **table)
  */
 struct cpoint_map *get_cpoint_map(u64 oid)
 {
-	union htable_entry *entry;
+	struct htable_entry *entry;
 
 	entry = get_htable_entry(oid, sizeof(struct cpoint_map),
 				 sb->s_cpoint_map_table);
-	return &entry->mapping;
+	return (struct cpoint_map *)entry;
 }
 
 /**

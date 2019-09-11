@@ -547,9 +547,9 @@ static void parse_cat_record(void *key, void *val, int len)
  * free_omap_record - Free an object map record structure after a final check
  * @entry: the entry to free
  */
-static void free_omap_record(union htable_entry *entry)
+static void free_omap_record(struct htable_entry *entry)
 {
-	struct omap_record *omap_rec = &entry->omap_rec;
+	struct omap_record *omap_rec = (struct omap_record *)entry;
 
 	if (!omap_rec->o_seen)
 		report("Omap record", "object id is never used.");
@@ -561,7 +561,7 @@ static void free_omap_record(union htable_entry *entry)
  * free_omap_table - Free a hash table for omap records, and all its entries
  * @table: table to free
  */
-void free_omap_table(union htable_entry **table)
+void free_omap_table(struct htable_entry **table)
 {
 	free_htable(table, free_omap_record);
 }
@@ -573,12 +573,12 @@ void free_omap_table(union htable_entry **table)
  *
  * Returns the omap record structure, after creating it if necessary.
  */
-struct omap_record *get_omap_record(u64 oid, union htable_entry **table)
+struct omap_record *get_omap_record(u64 oid, struct htable_entry **table)
 {
-	union htable_entry *entry;
+	struct htable_entry *entry;
 
 	entry = get_htable_entry(oid, sizeof(struct omap_record), table);
-	return &entry->omap_rec;
+	return (struct omap_record *)entry;
 }
 
 /**
@@ -983,7 +983,7 @@ struct btree *parse_snap_meta_btree(u64 oid)
  *
  * Returns a pointer to the btree struct for the catalog.
  */
-struct btree *parse_cat_btree(u64 oid, union htable_entry **omap_table)
+struct btree *parse_cat_btree(u64 oid, struct htable_entry **omap_table)
 {
 	struct btree *cat;
 	struct key last_key = {0};

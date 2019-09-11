@@ -18,9 +18,9 @@
  * free_extent - Free an extent structure after performing a final check
  * @entry: the entry to free
  */
-static void free_extent(union htable_entry *entry)
+static void free_extent(struct htable_entry *entry)
 {
-	struct extent *extent = &entry->extent;
+	struct extent *extent = (struct extent *)entry;
 
 	if (extent->e_refcnt != extent->e_references)
 		report("Physical extent record", "bad reference count.");
@@ -32,7 +32,7 @@ static void free_extent(union htable_entry *entry)
  * free_extent_table - Free the extent hash table and all its entries
  * @table: table to free
  */
-void free_extent_table(union htable_entry **table)
+void free_extent_table(struct htable_entry **table)
 {
 	free_htable(table, free_extent);
 }
@@ -45,11 +45,11 @@ void free_extent_table(union htable_entry **table)
  */
 static struct extent *get_extent(u64 bno)
 {
-	union htable_entry *entry;
+	struct htable_entry *entry;
 
 	entry = get_htable_entry(bno, sizeof(struct extent),
 				 vsb->v_extent_table);
-	return &entry->extent;
+	return (struct extent *)entry;
 }
 
 /**
@@ -85,9 +85,9 @@ static void check_dstream_stats(struct dstream *dstream)
  * free_dstream - Free a dstream structure after performing some final checks
  * @entry: the entry to free
  */
-static void free_dstream(union htable_entry *entry)
+static void free_dstream(struct htable_entry *entry)
 {
-	struct dstream *dstream = &entry->dstream;
+	struct dstream *dstream = (struct dstream *)entry;
 	struct listed_cnid *cnid;
 	struct listed_extent *curr_extent = dstream->d_extents;
 
@@ -132,7 +132,7 @@ static void free_dstream(union htable_entry *entry)
  * free_dstream_table - Free the dstream hash table and all its entries
  * @table: table to free
  */
-void free_dstream_table(union htable_entry **table)
+void free_dstream_table(struct htable_entry **table)
 {
 	free_htable(table, free_dstream);
 }
@@ -145,11 +145,11 @@ void free_dstream_table(union htable_entry **table)
  */
 struct dstream *get_dstream(u64 id)
 {
-	union htable_entry *entry;
+	struct htable_entry *entry;
 
 	entry = get_htable_entry(id, sizeof(struct dstream),
 				 vsb->v_dstream_table);
-	return &entry->dstream;
+	return (struct dstream *)entry;
 }
 
 /**

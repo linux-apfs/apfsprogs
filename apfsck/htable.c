@@ -12,9 +12,9 @@
 /**
  * alloc_htable - Allocates and returns an empty hash table
  */
-union htable_entry **alloc_htable(void)
+struct htable_entry **alloc_htable(void)
 {
-	union htable_entry **table;
+	struct htable_entry **table;
 
 	table = calloc(HTABLE_BUCKETS, sizeof(*table));
 	if (!table)
@@ -27,17 +27,17 @@ union htable_entry **alloc_htable(void)
  * @table:	the catalog table to free
  * @free_entry:	function that checks and frees an entry
  */
-void free_htable(union htable_entry **table,
-		 void (*free_entry)(union htable_entry *))
+void free_htable(struct htable_entry **table,
+		 void (*free_entry)(struct htable_entry *))
 {
-	union htable_entry *current;
-	union htable_entry *next;
+	struct htable_entry *current;
+	struct htable_entry *next;
 	int i;
 
-	for (i = 0; i < INODE_TABLE_BUCKETS; ++i) {
+	for (i = 0; i < HTABLE_BUCKETS; ++i) {
 		current = table[i];
 		while (current) {
-			next = current->header.h_next;
+			next = current->h_next;
 			free_entry(current);
 			current = next;
 		}
@@ -53,22 +53,22 @@ void free_htable(union htable_entry **table,
  *
  * Returns the entry, after creating it if necessary.
  */
-union htable_entry *get_htable_entry(u64 id, int size,
-				     union htable_entry **table)
+struct htable_entry *get_htable_entry(u64 id, int size,
+				      struct htable_entry **table)
 {
-	int index = id % INODE_TABLE_BUCKETS; /* Trivial hash function */
-	union htable_entry **entry_p = table + index;
-	union htable_entry *entry = *entry_p;
-	union htable_entry *new;
+	int index = id % HTABLE_BUCKETS; /* Trivial hash function */
+	struct htable_entry **entry_p = table + index;
+	struct htable_entry *entry = *entry_p;
+	struct htable_entry *new;
 
 	/* In each linked list, entries are ordered by id */
 	while (entry) {
-		if (id == entry->header.h_id)
+		if (id == entry->h_id)
 			return entry;
-		if (id < entry->header.h_id)
+		if (id < entry->h_id)
 			break;
 
-		entry_p = &entry->header.h_next;
+		entry_p = &entry->h_next;
 		entry = *entry_p;
 	}
 
@@ -76,8 +76,8 @@ union htable_entry *get_htable_entry(u64 id, int size,
 	if (!new)
 		system_error();
 
-	new->header.h_id = id;
-	new->header.h_next = entry;
+	new->h_id = id;
+	new->h_next = entry;
 	*entry_p = new;
 	return new;
 }
@@ -86,10 +86,10 @@ union htable_entry *get_htable_entry(u64 id, int size,
  * free_cnid_table - Free the cnid hash table and all its entries
  * @table: table to free
  */
-void free_cnid_table(union htable_entry **table)
+void free_cnid_table(struct htable_entry **table)
 {
 	/* No checks needed here, just call free() on each entry */
-	free_htable(table, (void (*)(union htable_entry *))free);
+	free_htable(table, (void (*)(struct htable_entry *))free);
 }
 
 /**
@@ -100,9 +100,9 @@ void free_cnid_table(union htable_entry **table)
  */
 struct listed_cnid *get_listed_cnid(u64 id)
 {
-	union htable_entry *entry;
+	struct htable_entry *entry;
 
 	entry = get_htable_entry(id, sizeof(struct listed_cnid),
 				 vsb->v_cnid_table);
-	return &entry->listed_cnid;
+	return (struct listed_cnid *)entry;
 }

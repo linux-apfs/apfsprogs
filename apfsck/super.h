@@ -7,10 +7,9 @@
 
 #include <apfs/raw.h>
 #include <apfs/types.h>
+#include "htable.h"
 #include "object.h"
 #include "spaceman.h"
-
-union htable_entry;
 
 struct volume_superblock {
 	struct apfs_superblock *v_raw;
@@ -18,11 +17,11 @@ struct volume_superblock {
 	struct btree *v_cat;
 	struct btree *v_extent_ref;
 	struct btree *v_snap_meta;
-	union htable_entry **v_omap_table;	/* Hash table of omap records */
-	union htable_entry **v_inode_table;	/* Hash table of all inodes */
-	union htable_entry **v_dstream_table;	/* Hash table of all dstreams */
-	union htable_entry **v_cnid_table;	/* Hash table of all cnids */
-	union htable_entry **v_extent_table;	/* Hash table of all extents */
+	struct htable_entry **v_omap_table;	/* Hash table of omap records */
+	struct htable_entry **v_inode_table;	/* Hash table of all inodes */
+	struct htable_entry **v_dstream_table;	/* Hash table of all dstreams */
+	struct htable_entry **v_cnid_table;	/* Hash table of all cnids */
+	struct htable_entry **v_extent_table;	/* Hash table of all extents */
 
 	/* Volume stats as measured by the fsck */
 	u64 v_file_count;	/* Number of files */
@@ -59,9 +58,9 @@ struct super_block {
 	u32 s_data_len; /* Number of valid blocks in checkpoint data area */
 
 	/* Hash table of ephemeral object mappings for the checkpoint */
-	union htable_entry **s_cpoint_map_table;
+	struct htable_entry **s_cpoint_map_table;
 	/* Hash table of virtual object mappings for the container */
-	union htable_entry **s_omap_table;
+	struct htable_entry **s_omap_table;
 
 	struct spaceman s_spaceman; /* Information about the space manager */
 
@@ -73,17 +72,14 @@ struct super_block {
  * Checkpoint mapping data in memory
  */
 struct cpoint_map {
-	/* Hash table entry header (struct htable_entry_header from htable.h) */
-	struct {
-		union htable_entry	*m_next;
-		u64			m_oid;	/* Ephemeral object id */
-	};
+	struct htable_entry m_htable; /* Hash table entry header */
 
 	u32	m_type;		/* Type of the object */
 	u32	m_subtype;	/* Subtype of the object */
 	u64	m_paddr;	/* Physical address of the object */
 	u32	m_size;		/* Size of the object in bytes */
 };
+#define m_oid	m_htable.h_id	/* Ephemeral object id */
 
 static inline bool apfs_is_case_insensitive(void)
 {
