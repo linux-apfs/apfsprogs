@@ -158,6 +158,9 @@ static void free_cpoint_map(struct htable_entry *entry)
 	u64 data_end = sb->s_data_base + sb->s_data_blocks;
 	u64 valid_start;
 
+	if (!map->m_seen)
+		report("Checkpoint map", "no object for mapping.");
+
 	if (obj_start < data_start || obj_end > data_end)
 		report("Checkpoint map", "block number is out of range.");
 
@@ -221,6 +224,9 @@ void *read_ephemeral_object(u64 oid, struct object *obj)
 	map = get_cpoint_map(oid);
 	if (!map->m_paddr)
 		report("Ephemeral object", "missing checkpoint mapping.");
+	if (map->m_seen)
+		report("Checkpoint map", "an ephemeral object id was reused.");
+	map->m_seen = true;
 
 	/* Multiblock ephemeral objects may exist, but are not supported yet */
 	raw = read_object_nocheck(map->m_paddr, obj);

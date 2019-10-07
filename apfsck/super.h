@@ -74,6 +74,7 @@ struct super_block {
 struct cpoint_map {
 	struct htable_entry m_htable; /* Hash table entry header */
 
+	bool	m_seen;		/* Has this ephemeral oid been seen in use? */
 	u32	m_type;		/* Type of the object */
 	u32	m_subtype;	/* Subtype of the object */
 	u64	m_paddr;	/* Physical address of the object */
