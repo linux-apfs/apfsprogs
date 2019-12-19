@@ -220,9 +220,6 @@ struct apfs_drec_val {
 	u8 xfields[];
 } __packed;
 
-/* Extended field types */
-#define APFS_DREC_EXT_TYPE_SIBLING_ID 1
-
 /* Physical extent records */
 #define APFS_PEXT_LEN_MASK	0x0fffffffffffffffULL
 #define APFS_PEXT_KIND_MASK	0xf000000000000000ULL
@@ -344,7 +341,10 @@ struct apfs_inode_val {
 /*5C*/	u8 xfields[];
 } __packed;
 
-/* Extended field types */
+/* Extended field types for dentries */
+#define APFS_DREC_EXT_TYPE_SIBLING_ID 1
+
+/* Extended field types for inodes */
 #define APFS_INO_EXT_TYPE_SNAP_XID 1
 #define APFS_INO_EXT_TYPE_DELTA_TREE_OID 2
 #define APFS_INO_EXT_TYPE_DOCUMENT_ID 3
@@ -374,7 +374,9 @@ struct apfs_inode_val {
 #define APFS_MIN_DOC_ID 3	/* Smallest not reserved document id */
 
 /*
- * Structure used to store the number and size of extended fields of an inode
+ * Structure used to store the number and size of an xfield collection.  The
+ * official reference seems to be wrong about @xf_used_data: it's the size of
+ * the xfield values alone, without the metadata.
  */
 struct apfs_xf_blob {
 	__le16 xf_num_exts;
@@ -383,7 +385,7 @@ struct apfs_xf_blob {
 } __packed;
 
 /*
- * Structure used to store an inode's extended field
+ * Structure used to describe an extended field
  */
 struct apfs_x_field {
 	u8 x_type;
