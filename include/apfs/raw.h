@@ -508,7 +508,7 @@ struct apfs_dstream_id_key {
 
 /* Bit masks for the 'name_len_and_hash' field of a directory entry */
 #define APFS_DREC_LEN_MASK	0x000003ff
-#define APFS_DREC_HASH_MASK	0xfffff400
+#define APFS_DREC_HASH_MASK	0xfffffc00
 #define APFS_DREC_HASH_SHIFT	10
 
 /* The name length in the catalog key counts the terminating null byte. */
