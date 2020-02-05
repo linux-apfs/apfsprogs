@@ -13,6 +13,16 @@ struct apfs_dstream_id_key;
 struct apfs_phys_ext_key;
 
 /*
+ * Physical extent record in memory, to be filled by extentref_lookup()
+ */
+struct extref_record {
+	u64 phys_addr;	/* First block number */
+	u64 blocks;	/* Block count */
+	u64 owner;	/* Owning object id */
+	u32 refcnt;	/* Reference count */
+};
+
+/*
  * Physical extent data in memory
  */
 struct extent {

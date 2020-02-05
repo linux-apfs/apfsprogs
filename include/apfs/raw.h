@@ -245,16 +245,6 @@ struct apfs_phys_ext_val {
 	__le32 refcnt;
 } __packed;
 
-/*
- * Physical extent record data in memory
- */
-struct extref_record {
-	u64 phys_addr;	/* First block number */
-	u64 blocks;	/* Block count */
-	u64 owner;	/* Owning object id */
-	u32 refcnt;	/* Reference count */
-};
-
 /* File extent records */
 #define APFS_FILE_EXTENT_LEN_MASK	0x00ffffffffffffffULL
 #define APFS_FILE_EXTENT_FLAG_MASK	0xff00000000000000ULL
