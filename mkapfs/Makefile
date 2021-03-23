@@ -10,7 +10,7 @@ MANDIR = ~/share/man/man8
 
 SPARSE_VERSION := $(shell sparse --version 2>/dev/null)
 
-override CFLAGS += -Wall -fno-strict-aliasing -I$(CURDIR)/../include
+override CFLAGS += -Wall -Wno-address-of-packed-member -fno-strict-aliasing -I$(CURDIR)/../include
 
 mkapfs: $(OBJS) $(LIBRARY)
 	@echo '  Linking...'
