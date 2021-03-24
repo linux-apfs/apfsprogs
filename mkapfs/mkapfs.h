@@ -18,6 +18,7 @@ struct parameters {
 	char		*main_uuid;	/* Container UUID in standard format */
 	char		*vol_uuid;	/* Volume UUID in standard format */
 	bool		case_sensitive;	/* Is the filesystem case-sensitive? */
+	bool		norm_sensitive;	/* Is it normalization-sensitive? */
 };
 
 /* String to identify the program and its version */

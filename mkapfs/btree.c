@@ -218,8 +218,9 @@ void make_omap_btree(u64 bno, bool is_vol)
  */
 static void set_cat_info(struct apfs_btree_info *info)
 {
-	int maxkey = sizeof(struct apfs_drec_hashed_key) +
-		     strlen("private-dir") + 1;
+	int drec_keysz = param->norm_sensitive ? sizeof(struct apfs_drec_key) :
+						 sizeof(struct apfs_drec_hashed_key);
+	int maxkey = drec_keysz + strlen("private-dir") + 1;
 	int maxval = sizeof(struct apfs_inode_val) +
 		     sizeof(struct apfs_xf_blob) + sizeof(struct apfs_x_field) +
 		     ROUND_UP(strlen("private-dir") + 1, 8);

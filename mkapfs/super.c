@@ -132,7 +132,9 @@ static void make_volume(u64 bno, u64 oid)
 	vsb->apfs_magic = cpu_to_le32(APFS_MAGIC);
 
 	vsb->apfs_features = cpu_to_le64(APFS_FEATURE_HARDLINK_MAP_RECORDS);
-	if (param->case_sensitive)
+	if (param->norm_sensitive)
+		vsb->apfs_incompatible_features = 0;
+	else if (param->case_sensitive)
 		vsb->apfs_incompatible_features =
 			cpu_to_le64(APFS_INCOMPAT_NORMALIZATION_INSENSITIVE);
 	else

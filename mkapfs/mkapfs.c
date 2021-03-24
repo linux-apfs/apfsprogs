@@ -149,7 +149,7 @@ int main(int argc, char *argv[])
 		system_error();
 
 	while (1) {
-		int opt = getopt(argc, argv, "L:U:u:sv");
+		int opt = getopt(argc, argv, "L:U:u:szv");
 
 		if (opt == -1)
 			break;
@@ -166,6 +166,9 @@ int main(int argc, char *argv[])
 			break;
 		case 's':
 			param->case_sensitive = true;
+			break;
+		case 'z':
+			param->norm_sensitive = true;
 			break;
 		case 'v':
 			version();
