@@ -90,6 +90,18 @@ static inline bool apfs_is_case_insensitive(void)
 		cpu_to_le64(APFS_INCOMPAT_CASE_INSENSITIVE)) != 0;
 }
 
+static inline bool apfs_is_normalization_insensitive(void)
+{
+	extern struct volume_superblock *vsb;
+	u64 flags = le64_to_cpu(vsb->v_raw->apfs_incompatible_features);
+
+	if (apfs_is_case_insensitive())
+		return true;
+	if (flags & APFS_INCOMPAT_NORMALIZATION_INSENSITIVE)
+		return true;
+	return false;
+}
+
 extern void parse_filesystem(void);
 
 #endif	/* _SUPER_H */

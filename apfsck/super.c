@@ -466,13 +466,9 @@ static void check_incompat_vol_features(u64 flags)
 	if (flags & APFS_INCOMPAT_ENC_ROLLED)
 		report_unknown("Change of encryption keys");
 
-	/*
-	 * I don't believe actual normalization-sensitive volumes exist, the
-	 * normalization-insensitive flag just means case-sensitive.
-	 */
-	if ((bool)(flags & APFS_INCOMPAT_CASE_INSENSITIVE) !=
-	    !(bool)(flags & APFS_INCOMPAT_NORMALIZATION_INSENSITIVE))
-		report("Volume superblock", "normalization sensitive?");
+	if ((bool)(flags & APFS_INCOMPAT_CASE_INSENSITIVE) &&
+	    (bool)(flags & APFS_INCOMPAT_NORMALIZATION_INSENSITIVE))
+		report("Volume superblock", "redundant flag for case sensitivity.");
 }
 
 /**
