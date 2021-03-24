@@ -126,9 +126,7 @@ void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
 		report("Object header", "bad transaction id in block 0x%llx.",
 		       (unsigned long long)bno);
 	if (vsb && vsb->v_first_xid > xid)
-		report("Object header",
-		       "transaction id in block 0x%llx is older than volume.",
-		       (unsigned long long)bno);
+		report_weird("Transaction id in block is older than volume");
 	if (omap_table && xid != omap_rec->o_xid)
 		report("Object header",
 		       "transaction id in omap key doesn't match block 0x%llx.",
