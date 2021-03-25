@@ -929,10 +929,11 @@ static void check_btree_footer(struct btree *btree)
 /**
  * parse_free_queue_btree - Parse and check a free-space queue tree
  * @oid:	object id for the b-tree root
+ * @index:	position of this free queue in the free queue array
  *
  * Returns a pointer to the free queue structure.
  */
-struct free_queue *parse_free_queue_btree(u64 oid)
+struct free_queue *parse_free_queue_btree(u64 oid, int index)
 {
 	struct free_queue *sfq;
 	struct btree *btree;
@@ -942,6 +943,7 @@ struct free_queue *parse_free_queue_btree(u64 oid)
 	if (!sfq)
 		system_error();
 	btree = &sfq->sfq_btree;
+	sfq->sfq_index = index;
 
 	btree->type = BTREE_TYPE_FREE_QUEUE;
 	btree->omap_table = NULL; /* These are ephemeral objects */

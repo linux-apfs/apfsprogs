@@ -25,6 +25,8 @@ struct spaceman {
 	u32 sm_cibs_per_cab;
 	u32 sm_cib_count;
 	u64 sm_chunk_count;
+	u64 sm_ip_base;
+	u64 sm_ip_block_count;
 
 	/* Spaceman info measured by the fsck */
 	u64 sm_chunks;	/* Number of chunks */
@@ -39,6 +41,7 @@ struct spaceman {
 struct free_queue {
 	/* This must always remain the first field */
 	struct btree sfq_btree; /* B-tree structure for the free queue */
+	int sfq_index;		/* Position in the free queue array */
 
 	/* Free queue stats as measured by the fsck */
 	u64 sfq_count;		/* Total count of free blocks in the queue */

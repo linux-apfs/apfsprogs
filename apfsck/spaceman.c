@@ -380,7 +380,7 @@ static void check_spaceman_free_queues(struct apfs_spaceman_free_queue *sfq)
 	}
 
 	sm->sm_ip_fq = parse_free_queue_btree(
-				le64_to_cpu(sfq[APFS_SFQ_IP].sfq_tree_oid));
+				le64_to_cpu(sfq[APFS_SFQ_IP].sfq_tree_oid), APFS_SFQ_IP);
 	if (le64_to_cpu(sfq[APFS_SFQ_IP].sfq_count) != sm->sm_ip_fq->sfq_count)
 		report("Spaceman free queue", "wrong block count.");
 	if (le64_to_cpu(sfq[APFS_SFQ_IP].sfq_oldest_xid) !=
@@ -391,7 +391,7 @@ static void check_spaceman_free_queues(struct apfs_spaceman_free_queue *sfq)
 		report("Spaceman free queue", "node count above limit.");
 
 	sm->sm_main_fq = parse_free_queue_btree(
-				le64_to_cpu(sfq[APFS_SFQ_MAIN].sfq_tree_oid));
+				le64_to_cpu(sfq[APFS_SFQ_MAIN].sfq_tree_oid), APFS_SFQ_MAIN);
 	if (le64_to_cpu(sfq[APFS_SFQ_MAIN].sfq_count) !=
 					sm->sm_main_fq->sfq_count)
 		report("Spaceman free queue", "wrong block count.");
@@ -614,6 +614,9 @@ void check_spaceman(u64 oid)
 		report("Space manager", "wrong object subtype.");
 	sm->sm_xid = obj.xid;
 
+	sm->sm_ip_base = le64_to_cpu(raw->sm_ip_base);
+	sm->sm_ip_block_count = le64_to_cpu(raw->sm_ip_block_count);
+
 	flags = le32_to_cpu(raw->sm_flags);
 	if ((flags & APFS_SM_FLAGS_VALID_MASK) != flags)
 		report("Space manager", "invalid flag in use.");
@@ -652,6 +655,35 @@ void check_spaceman(u64 oid)
 }
 
 /**
+ * block_in_ip - Does this block belong to the internal pool?
+ * @bno: block number to check
+ */
+static inline bool block_in_ip(u64 bno)
+{
+	struct spaceman *sm = &sb->s_spaceman;
+	u64 start = sm->sm_ip_base;
+	u64 end = start + sm->sm_ip_block_count;
+
+	return bno >= start && bno < end;
+}
+
+/**
+ * range_in_ip - Is this range included in the internal pool?
+ * @paddr:	first block of the range
+ * @length:	length of the range
+ */
+static bool range_in_ip(u64 paddr, u64 length)
+{
+	u64 last = paddr + length - 1;
+	bool first_in_ip = block_in_ip(paddr);
+	bool last_in_ip = block_in_ip(last);
+
+	if ((first_in_ip && !last_in_ip) || (!first_in_ip && last_in_ip))
+		report("Free queue record", "internal pool is overrun.");
+	return first_in_ip;
+}
+
+/**
  * parse_free_queue_record - Parse a free queue record and check for corruption
  * @key:	pointer to the raw key
  * @val:	pointer to the raw value
@@ -664,7 +696,8 @@ void parse_free_queue_record(struct apfs_spaceman_free_queue_key *key,
 			     void *val, int len, struct btree *btree)
 {
 	struct free_queue *sfq = (struct free_queue *)btree;
-	u64 length, xid;
+	u64 paddr, length, xid;
+	bool inside_ip;
 
 	if (!len) {
 		length = 1; /* Ghost records are for one block long extents */
@@ -681,6 +714,13 @@ void parse_free_queue_record(struct apfs_spaceman_free_queue_key *key,
 	}
 	sfq->sfq_count += length;
 
+	paddr = le64_to_cpu(key->sfqk_paddr);
+	inside_ip = range_in_ip(paddr, length);
+	if (sfq->sfq_index == APFS_SFQ_IP && !inside_ip)
+		report("Free queue record", "range should be inside the IP.");
+	if (sfq->sfq_index != APFS_SFQ_IP && inside_ip)
+		report("Free queue record", "range should be outside the IP.");
+
 	xid = le64_to_cpu(key->sfqk_xid);
 	if (xid > sb->s_xid)
 		report("Free queue record", "bad transaction id.");
@@ -691,5 +731,5 @@ void parse_free_queue_record(struct apfs_spaceman_free_queue_key *key,
 	 * These blocks are free, but still not marked as such.  The point
 	 * seems to be the preservation of recent checkpoints.
 	 */
-	container_bmap_mark_as_used(le64_to_cpu(key->sfqk_paddr), length);
+	container_bmap_mark_as_used(paddr, length);
 }
