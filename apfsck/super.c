@@ -151,11 +151,13 @@ static void main_super_compare(struct apfs_nx_superblock *desc,
 	}
 
 	/*
-	 * The nx_counters array doesn't always match.  Naturally, this means
+	 * The nx_counters array doesn't always match, and it seems that the
+	 * same is true of the flags for some reason. Naturally, this means
 	 * the checksum won't match either.
 	 */
 	if (memcmp(desc_bytes + 0x08, copy_bytes + 0x08, 0x3D8 - 0x08) ||
-	    memcmp(desc_bytes + 0x4D8, copy_bytes + 0x4D8, 4096 - 0x4D8))
+	    memcmp(desc_bytes + 0x4D8, copy_bytes + 0x4D8, 0x4F0 - 0x4D8) ||
+	    memcmp(desc_bytes + 0x4F8, copy_bytes + 0x4F8, 4096 - 0x4F8))
 		report("Block zero", "fields don't match the checkpoint.");
 }
 
