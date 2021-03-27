@@ -44,6 +44,7 @@ struct volume_superblock {
 struct super_block {
 	struct apfs_nx_superblock *s_raw;
 	void *s_bitmap;	/* Allocation bitmap for the whole container */
+	void *s_ip_bitmap; /* Allocation bitmap for the internal pool */
 	struct btree *s_omap;
 	struct object *s_reaper;
 	unsigned long s_blocksize;

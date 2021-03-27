@@ -17,6 +17,92 @@
 #include "super.h"
 
 /**
+ * block_in_ip - Does this block belong to the internal pool?
+ * @bno: block number to check
+ */
+static inline bool block_in_ip(u64 bno)
+{
+	struct spaceman *sm = &sb->s_spaceman;
+	u64 start = sm->sm_ip_base;
+	u64 end = start + sm->sm_ip_block_count;
+
+	return bno >= start && bno < end;
+}
+
+/**
+ * range_in_ip - Is this range included in the internal pool?
+ * @paddr:	first block of the range
+ * @length:	length of the range
+ */
+static bool range_in_ip(u64 paddr, u64 length)
+{
+	u64 last = paddr + length - 1;
+	bool first_in_ip = block_in_ip(paddr);
+	bool last_in_ip = block_in_ip(last);
+
+	if ((first_in_ip && !last_in_ip) || (!first_in_ip && last_in_ip))
+		report("Free queue record", "internal pool is overrun.");
+	return first_in_ip;
+}
+
+/**
+ * bmap_mark_as_used - Set a range to ones in a bitmap
+ * @bitmap:	the bitmap
+ * @paddr:	first block number
+ * @length:	block count
+ *
+ * Checks that an address range is still zeroed in the given bitmap, and then
+ * switches those bits.
+ */
+static void bmap_mark_as_used(u64 *bitmap, u64 paddr, u64 length)
+{
+	u64 *byte;
+	u64 flag;
+	u64 i;
+
+	for (i = paddr; i < paddr + length; ++i) {
+		byte = bitmap + i / 64;
+		flag = 1ULL << i % 64;
+		if (*byte & flag)
+			report(NULL /* context */, "A block is used twice.");
+		*byte |= flag;
+	}
+}
+
+/**
+ * ip_bmap_mark_as_used - Mark a range as used in the ip allocation bitmap
+ * @paddr:	first block number
+ * @length:	block count
+ *
+ * Checks that the given address range is still marked as free in the internal
+ * pool's allocation bitmap, and then switches those bits.
+ */
+void ip_bmap_mark_as_used(u64 paddr, u64 length)
+{
+	if (!range_in_ip(paddr, length))
+		report(NULL /* context */, "Out-of-range ip block number.");
+	paddr -= sb->s_spaceman.sm_ip_base;
+	bmap_mark_as_used(sb->s_ip_bitmap, paddr, length);
+}
+
+/**
+ * container_bmap_mark_as_used - Mark a range as used in the allocation bitmap
+ * @paddr:	first block number
+ * @length:	block count
+ *
+ * Checks that the given address range is still marked as free in the
+ * container's allocation bitmap, and then switches those bits.
+ */
+void container_bmap_mark_as_used(u64 paddr, u64 length)
+{
+	/* Avoid out-of-bounds writes to the allocation bitmap */
+	if (paddr + length >= sb->s_block_count || paddr + length < paddr)
+		report(NULL /* context */, "Out-of-range block number.");
+
+	bmap_mark_as_used(sb->s_bitmap, paddr, length);
+}
+
+/**
  * parse_spaceman_chunk_counts - Parse spaceman fields for chunk-related counts
  * @raw: pointer to the raw spaceman structure
  *
@@ -92,7 +178,7 @@ static void *read_chunk_bitmap(u64 addr, u64 bmap)
 	} while (read_bytes > 0);
 
 	/* Mark the bitmap block as used in the actual allocation bitmap */
-	container_bmap_mark_as_used(bmap, 1 /* length */);
+	ip_bmap_mark_as_used(bmap, 1 /* length */);
 	return ret;
 }
 
@@ -431,34 +517,6 @@ static void compare_container_bitmaps(u64 *sm_bmap, u64 *real_bmap, u64 chunks)
 }
 
 /**
- * container_bmap_mark_as_used - Mark a range as used in the allocation bitmap
- * @paddr:	first block number
- * @length:	block count
- *
- * Checks that the given address range is still marked as free in the
- * container's allocation bitmap, and then switches those bits.
- */
-void container_bmap_mark_as_used(u64 paddr, u64 length)
-{
-	u64 *bitmap = sb->s_bitmap;
-	u64 *byte;
-	u64 flag;
-	u64 i;
-
-	/* Avoid out-of-bounds writes to the allocation bitmap */
-	if (paddr + length >= sb->s_block_count || paddr + length < paddr)
-		report(NULL /* context */, "Out-of-range block number.");
-
-	for (i = paddr; i < paddr + length; ++i) {
-		byte = bitmap + i / 64;
-		flag = 1ULL << i % 64;
-		if (*byte & flag)
-			report(NULL /* context */, "A block is used twice.");
-		*byte |= flag;
-	}
-}
-
-/**
  * parse_ip_bitmap_list - Check consistency of the internal pool bitmap list
  * @raw: pointer to the raw space manager
  *
@@ -547,35 +605,23 @@ static void check_ip_bitmap_blocks(struct apfs_spaceman_phys *raw)
 /**
  * check_internal_pool - Check the internal pool of blocks
  * @raw:	pointer to the raw space manager
- * @real_bmap:	container allocation bitmap assembled by the fsck
  */
-static void check_internal_pool(struct apfs_spaceman_phys *raw, u64 *real_bmap)
+static void check_internal_pool(struct apfs_spaceman_phys *raw)
 {
 	u64 *pool_bmap;
 	u64 pool_base = le64_to_cpu(raw->sm_ip_base);
 	u64 pool_blocks = le64_to_cpu(raw->sm_ip_block_count);
+	u64 ip_chunk_count = DIV_ROUND_UP(pool_blocks, 8 * sb->s_blocksize);
 	u64 xid, free_next;
-	u64 i;
 
 	pool_bmap = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
 			 fd, parse_ip_bitmap_list(raw) * sb->s_blocksize);
 	if (pool_bmap == MAP_FAILED)
 		system_error();
 
-	for (i = 0; i < pool_blocks; ++i) {
-		u64 bno = pool_base + i;
-		u64 real_index = bno / 64;
-		u64 real_flag = 1ULL << bno % 64;
-		u64 pool_index = i / 64;
-		u64 pool_flag = 1ULL << i % 64;
-
-		if ((bool)(pool_bmap[pool_index] & pool_flag) !=
-		    (bool)(real_bmap[real_index] & real_flag))
-			report("Internal pool", "bad allocation bitmap.");
-
-		/* In the container bitmap, the whole pool is marked as used */
-		real_bmap[real_index] |= real_flag;
-	}
+	if (memcmp(pool_bmap, sb->s_ip_bitmap, ip_chunk_count * sb->s_blocksize))
+		report("Space manager", "bad ip allocation bitmap.");
+	container_bmap_mark_as_used(pool_base, pool_blocks);
 
 	munmap(pool_bmap, sb->s_blocksize);
 
@@ -605,6 +651,7 @@ void check_spaceman(u64 oid)
 	struct spaceman *sm = &sb->s_spaceman;
 	struct object obj;
 	struct apfs_spaceman_phys *raw;
+	u64 ip_chunk_count;
 	u32 flags;
 
 	raw = read_ephemeral_object(oid, &obj);
@@ -616,6 +663,10 @@ void check_spaceman(u64 oid)
 
 	sm->sm_ip_base = le64_to_cpu(raw->sm_ip_base);
 	sm->sm_ip_block_count = le64_to_cpu(raw->sm_ip_block_count);
+	ip_chunk_count = DIV_ROUND_UP(sm->sm_ip_block_count, 8 * sb->s_blocksize);
+	sb->s_ip_bitmap = calloc(ip_chunk_count, sb->s_blocksize);
+	if (!sb->s_ip_bitmap)
+		system_error();
 
 	flags = le32_to_cpu(raw->sm_flags);
 	if ((flags & APFS_SM_FLAGS_VALID_MASK) != flags)
@@ -644,7 +695,8 @@ void check_spaceman(u64 oid)
 	parse_spaceman_main_device(raw);
 	check_spaceman_tier2_device(raw);
 	check_spaceman_free_queues(raw->sm_fq);
-	check_internal_pool(raw, sb->s_bitmap);
+	check_internal_pool(raw);
+	free(sb->s_ip_bitmap);
 
 	if (raw->sm_fs_reserve_block_count || raw->sm_fs_reserve_alloc_count)
 		report_unknown("Reserved allocation blocks");
@@ -652,35 +704,6 @@ void check_spaceman(u64 oid)
 	compare_container_bitmaps(sm->sm_bitmap, sb->s_bitmap,
 				  sm->sm_chunk_count);
 	munmap(raw, sb->s_blocksize);
-}
-
-/**
- * block_in_ip - Does this block belong to the internal pool?
- * @bno: block number to check
- */
-static inline bool block_in_ip(u64 bno)
-{
-	struct spaceman *sm = &sb->s_spaceman;
-	u64 start = sm->sm_ip_base;
-	u64 end = start + sm->sm_ip_block_count;
-
-	return bno >= start && bno < end;
-}
-
-/**
- * range_in_ip - Is this range included in the internal pool?
- * @paddr:	first block of the range
- * @length:	length of the range
- */
-static bool range_in_ip(u64 paddr, u64 length)
-{
-	u64 last = paddr + length - 1;
-	bool first_in_ip = block_in_ip(paddr);
-	bool last_in_ip = block_in_ip(last);
-
-	if ((first_in_ip && !last_in_ip) || (!first_in_ip && last_in_ip))
-		report("Free queue record", "internal pool is overrun.");
-	return first_in_ip;
 }
 
 /**
@@ -731,5 +754,8 @@ void parse_free_queue_record(struct apfs_spaceman_free_queue_key *key,
 	 * These blocks are free, but still not marked as such.  The point
 	 * seems to be the preservation of recent checkpoints.
 	 */
-	container_bmap_mark_as_used(paddr, length);
+	if (inside_ip)
+		ip_bmap_mark_as_used(paddr, length);
+	else
+		container_bmap_mark_as_used(paddr, length);
 }

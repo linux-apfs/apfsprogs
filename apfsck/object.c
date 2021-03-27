@@ -108,7 +108,12 @@ void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
 	if (!ongoing_query) { /* Query code will revisit already parsed nodes */
 		if (vsb)
 			++vsb->v_block_count;
-		container_bmap_mark_as_used(bno, 1 /* length */);
+		if ((obj->type == APFS_OBJECT_TYPE_SPACEMAN_CIB) ||
+		     (obj->type == APFS_OBJECT_TYPE_SPACEMAN_CAB)) {
+			ip_bmap_mark_as_used(bno, 1 /* length */);
+		} else {
+			container_bmap_mark_as_used(bno, 1 /* length */);
+		}
 	}
 
 	if (oid != obj->oid)
