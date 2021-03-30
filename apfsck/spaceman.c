@@ -546,14 +546,14 @@ static u64 parse_ip_bitmap_list(struct apfs_spaceman_phys *raw)
 
 	free_head = le16_to_cpu(raw->sm_ip_bm_free_head);
 	free_tail = le16_to_cpu(raw->sm_ip_bm_free_tail);
-	free_length = (bmap_length + free_tail + 1 - free_head) % bmap_length;
+	free_length = (bmap_length + free_tail - free_head) % bmap_length;
 
 	if (free_head >= bmap_length || free_tail >= bmap_length)
 		report("Internal pool", "free bitmaps are out-of-bounds.");
 	if ((bmap_length + bmap_off - free_head) % bmap_length < free_length)
 		report("Internal pool", "current bitmap listed as free.");
-	if (free_length != bmap_length - 1)
-		report_unknown("Multiple internal pool bitmaps in use");
+	if (free_length != bmap_length - 2)
+		report_unknown("Internal pool bitmaps in use are not two");
 
 	container_bmap_mark_as_used(bmap_base, bmap_length);
 	return bmap_base + bmap_off;
