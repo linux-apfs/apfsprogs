@@ -325,6 +325,31 @@ static u64 spaceman_val_from_off(struct apfs_spaceman_phys *raw, u32 offset)
 }
 
 /**
+ * spaceman_256_from_off - Get a pointer to the 256 bits on a spaceman offset
+ * @raw:	pointer to the raw space manager
+ * @offset:	offset of the 256-bit value in @raw
+ *
+ * TODO: check that no values found by this function overlap with each other,
+ * and also with spaceman_val_from_off().
+ */
+static char *spaceman_256_from_off(struct apfs_spaceman_phys *raw, u32 offset)
+{
+	struct spaceman *sm = &sb->s_spaceman;
+	char *value_p = (char *)raw + offset;
+	int sz_256 = 256 / 8;
+
+	assert(sm->sm_struct_size);
+
+	if (offset & 0x7)
+		report("Spaceman", "offset is not aligned to 8 bytes.");
+	if (offset < sm->sm_struct_size)
+		report("Spaceman", "offset overlaps with structure.");
+	if (offset >= sb->s_blocksize || offset + sz_256 > sb->s_blocksize)
+		report("Spaceman", "offset is out of bounds.");
+	return value_p;
+}
+
+/**
  * parse_spaceman_main_device - Parse and check the spaceman main device struct
  * @raw: pointer to the raw space manager
  */
@@ -517,6 +542,40 @@ static void compare_container_bitmaps(u64 *sm_bmap, u64 *real_bmap, u64 chunks)
 }
 
 /**
+ * check_ip_free_next - Check the free_next field for the internal pool
+ * @free_next:	256-bit field to check
+ * @free_head:	first free block in the ip circular buffer
+ * @free_len:	number of free blocks in the ip circular buffer
+ */
+static void check_ip_free_next(__le16 *free_next, u16 free_head, u16 free_len)
+{
+	int bmap_count = 16;
+	__le16 *expected;
+	u32 i;
+
+	expected = calloc(bmap_count, sizeof(*free_next));
+	if (!expected)
+		system_error();
+
+	/*
+	 * Ip bitmap blocks are marked with numbers 1,2,3,...,14,15,0 in
+	 * free_next, except when they are in use: those get overwritten with
+	 * 0xFFFF.
+	 */
+	for (i = 0; i < bmap_count; i++) {
+		u32 index_in_free = (bmap_count + i - free_head) % bmap_count;
+
+		if (index_in_free < free_len)
+			expected[i] = cpu_to_le16((1 + i) % bmap_count);
+		else
+			expected[i] = cpu_to_le16(0xFFFF);
+	}
+
+	if (memcmp(free_next, expected, bmap_count * sizeof(*free_next)))
+		report("Space manager", "Bad ip_bm_free_next bitmap.");
+}
+
+/**
  * parse_ip_bitmap_list - Check consistency of the internal pool bitmap list
  * @raw: pointer to the raw space manager
  *
@@ -528,6 +587,7 @@ static u64 parse_ip_bitmap_list(struct apfs_spaceman_phys *raw)
 	u64 bmap_off;
 	u32 bmap_length = le32_to_cpu(raw->sm_ip_bm_block_count);
 	u16 free_head, free_tail, free_length;
+	char *free_next;
 
 	/*
 	 * So far all internal pool bitmaps encountered had only one block; the
@@ -557,6 +617,9 @@ static u64 parse_ip_bitmap_list(struct apfs_spaceman_phys *raw)
 		report("Internal pool", "current bitmap listed as free.");
 	if (free_length != bmap_length - 2)
 		report_unknown("Internal pool bitmaps in use are not two");
+
+	free_next = spaceman_256_from_off(raw, le32_to_cpu(raw->sm_ip_bm_free_next_offset));
+	check_ip_free_next((__le16 *)free_next, free_head, free_length);
 
 	container_bmap_mark_as_used(bmap_base, bmap_length);
 	return bmap_base + bmap_off;
@@ -615,7 +678,7 @@ static void check_internal_pool(struct apfs_spaceman_phys *raw)
 	u64 pool_base = le64_to_cpu(raw->sm_ip_base);
 	u64 pool_blocks = le64_to_cpu(raw->sm_ip_block_count);
 	u64 ip_chunk_count = DIV_ROUND_UP(pool_blocks, 8 * sb->s_blocksize);
-	u64 xid, free_next;
+	u64 xid;
 
 	pool_bmap = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
 			 fd, parse_ip_bitmap_list(raw) * sb->s_blocksize);
@@ -635,12 +698,6 @@ static void check_internal_pool(struct apfs_spaceman_phys *raw)
 	xid = spaceman_val_from_off(raw, le32_to_cpu(raw->sm_ip_bm_xid_offset));
 	if (xid > sb->s_xid)
 		report("Internal pool", "bad transaction id.");
-
-	/* TODO: actually figure out the sm_ip_bm_free_next_offset field */
-	free_next = spaceman_val_from_off(raw,
-				le32_to_cpu(raw->sm_ip_bm_free_next_offset));
-	if (free_next != 0x0004000300020001)
-		report_weird("Free next field of the space manager");
 
 	check_ip_bitmap_blocks(raw);
 }
