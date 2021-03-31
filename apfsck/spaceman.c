@@ -543,6 +543,9 @@ static u64 parse_ip_bitmap_list(struct apfs_spaceman_phys *raw)
 	/* The head and tail fit in 16-bit fields, so the length also should */
 	if (bmap_length > (u16)(~0U))
 		report("Internal pool", "bitmap list is too long.");
+	/* This may be wrong for huge containers, I haven't tested those yet */
+	if (bmap_length != 16)
+		report("Space manager", "ip doesn't have 16 bitmaps.");
 
 	free_head = le16_to_cpu(raw->sm_ip_bm_free_head);
 	free_tail = le16_to_cpu(raw->sm_ip_bm_free_tail);
