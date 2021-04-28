@@ -134,6 +134,9 @@ static void parse_spaceman_chunk_counts(struct apfs_spaceman_phys *raw)
 					  sm->sm_blocks_per_chunk);
 	sm->sm_cib_count = DIV_ROUND_UP(sm->sm_chunk_count,
 					sm->sm_chunks_per_cib);
+
+	if ((sm->sm_chunk_count + sm->sm_cib_count) * 3 != sm->sm_ip_block_count)
+		report("Space manager", "wrong size of internal pool.");
 }
 
 /**
