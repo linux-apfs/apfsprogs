@@ -44,6 +44,14 @@ struct parameters {
 #define CPOINT_DATA_BASE	(CPOINT_DESC_BASE + CPOINT_DESC_BLOCKS)
 #define CPOINT_DATA_BLOCKS	5904
 
+/*
+ * Constants describing the internal pool; these are hardcoded for now, but
+ * should actually change with the container size.
+ */
+#define IP_BMAP_BASE	21000				/* First ip bitmap */
+#define IP_BMAP_BLOCKS	16				/* Ip bitmap count */
+#define IP_BASE		(IP_BMAP_BASE + IP_BMAP_BLOCKS)	/* Start of pool */
+
 /* Hardcoded block numbers */
 #define CPOINT_MAP_BNO			CPOINT_DESC_BASE
 #define CPOINT_SB_BNO			(CPOINT_DESC_BASE + 1)
@@ -51,8 +59,8 @@ struct parameters {
 #define SPACEMAN_BNO			(CPOINT_DATA_BASE + 1)
 #define	IP_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 2)
 #define MAIN_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 3)
-#define FIRST_CIB_BNO			6000
-#define FIRST_CHUNK_BITMAP_BNO		8000
+#define FIRST_CHUNK_BITMAP_BNO		IP_BASE
+#define FIRST_CIB_BNO			(IP_BASE + 1)
 #define MAIN_OMAP_BNO			20000
 #define MAIN_OMAP_ROOT_BNO		20001
 #define FIRST_VOL_BNO			20002
@@ -61,14 +69,6 @@ struct parameters {
 #define FIRST_VOL_CAT_ROOT_BNO		20005
 #define FIRST_VOL_EXTREF_ROOT_BNO	20006
 #define FIRST_VOL_SNAP_ROOT_BNO		20007
-
-/*
- * Constants describing the internal pool; these are hardcoded for now, but
- * should actually change with the container size.
- */
-#define IP_BMAP_BASE	21000				/* First ip bitmap */
-#define IP_BMAP_BLOCKS	16				/* Ip bitmap count */
-#define IP_BASE		(IP_BMAP_BASE + IP_BMAP_BLOCKS)	/* Start of pool */
 
 /* Declarations for global variables */
 extern struct parameters *param;	/* Filesystem parameters */
