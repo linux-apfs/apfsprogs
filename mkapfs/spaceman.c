@@ -11,6 +11,13 @@
 #include "object.h"
 #include "spaceman.h"
 
+/* Extra information about the space manager */
+static struct spaceman_info {
+	u64 chunk_count;
+	u32 cib_count;
+	u64 ip_blocks;
+} sm_info;
+
 /**
  * blocks_per_chunk - Calculate the number of blocks per chunk
  */
@@ -45,19 +52,17 @@ static inline u32 cibs_per_cab(void)
  */
 static inline u32 count_used_blocks(void)
 {
-	u64 chunk_count = DIV_ROUND_UP(param->block_count, blocks_per_chunk());
-	u32 cib_count = DIV_ROUND_UP(chunk_count, chunks_per_cib());
 	u32 blocks = 0;
 
 	blocks += 1;			/* Block zero */
 	blocks += CPOINT_DESC_BLOCKS;	/* Checkpoint descriptor blocks */
 	blocks += CPOINT_DATA_BLOCKS;	/* Checkpoint data blocks */
-	blocks += cib_count;		/* Chunk-info blocks */
+	blocks += sm_info.cib_count;	/* Chunk-info blocks */
 	blocks += 1;			/* Allocation bitmap block */
 	blocks += 2;			/* Container object map and its root */
 	blocks += 6;			/* Volume superblock and its trees */
 	blocks += IP_BMAP_BLOCKS;	/* Internal pool bitmap blocks */
-	blocks += IP_BLOCKS;		/* Internal pool blocks */
+	blocks += sm_info.ip_blocks;	/* Internal pool blocks */
 	return blocks;
 }
 
@@ -86,8 +91,6 @@ static void bmap_mark_as_used(u64 *bitmap, u64 paddr, u64 length)
  */
 static void make_alloc_bitmap(u64 bno)
 {
-	u64 chunk_count = DIV_ROUND_UP(param->block_count, blocks_per_chunk());
-	u32 cib_count = DIV_ROUND_UP(chunk_count, chunks_per_cib());
 	void *bmap = get_zeroed_block(bno);
 
 	/* Block zero */
@@ -97,7 +100,7 @@ static void make_alloc_bitmap(u64 bno)
 	/* Checkpoint data blocks */
 	bmap_mark_as_used(bmap, CPOINT_DATA_BASE, CPOINT_DATA_BLOCKS);
 	/* Chunk-info blocks */
-	bmap_mark_as_used(bmap, FIRST_CIB_BNO, cib_count);
+	bmap_mark_as_used(bmap, FIRST_CIB_BNO, sm_info.cib_count);
 	/* Allocation bitmap block */
 	bmap_mark_as_used(bmap, bno, 1);
 	/* Container object map and its root */
@@ -107,7 +110,7 @@ static void make_alloc_bitmap(u64 bno)
 	/* Internal pool bitmap blocks */
 	bmap_mark_as_used(bmap, IP_BMAP_BASE, IP_BMAP_BLOCKS);
 	/* Internal pool blocks */
-	bmap_mark_as_used(bmap, IP_BASE, IP_BLOCKS);
+	bmap_mark_as_used(bmap, IP_BASE, sm_info.ip_blocks);
 
 	munmap(bmap, param->blocksize);
 }
@@ -265,7 +268,7 @@ static void make_internal_pool(struct apfs_spaceman_phys *sm)
 
 	sm->sm_ip_bm_tx_multiplier =
 				cpu_to_le32(APFS_SPACEMAN_IP_BM_TX_MULTIPLIER);
-	sm->sm_ip_block_count = cpu_to_le64(IP_BLOCKS);
+	sm->sm_ip_block_count = cpu_to_le64(sm_info.ip_blocks);
 	sm->sm_ip_base = cpu_to_le64(IP_BASE);
 	/* No support for multiblock bitmaps */
 	sm->sm_ip_bm_size_in_blocks = cpu_to_le32(1);
@@ -298,6 +301,10 @@ static void make_internal_pool(struct apfs_spaceman_phys *sm)
 void make_spaceman(u64 bno, u64 oid)
 {
 	struct apfs_spaceman_phys *sm = get_zeroed_block(bno);
+
+	sm_info.chunk_count = DIV_ROUND_UP(param->block_count, blocks_per_chunk());
+	sm_info.cib_count = DIV_ROUND_UP(sm_info.chunk_count, chunks_per_cib());
+	sm_info.ip_blocks = (sm_info.chunk_count + sm_info.cib_count) * 3;
 
 	sm->sm_block_size = cpu_to_le32(param->blocksize);
 	sm->sm_blocks_per_chunk = cpu_to_le32(blocks_per_chunk());

@@ -69,7 +69,6 @@ struct parameters {
 #define IP_BMAP_BASE	21000				/* First ip bitmap */
 #define IP_BMAP_BLOCKS	16				/* Ip bitmap count */
 #define IP_BASE		(IP_BMAP_BASE + IP_BMAP_BLOCKS)	/* Start of pool */
-#define IP_BLOCKS	183				/* Pool block count */
 
 /* Declarations for global variables */
 extern struct parameters *param;	/* Filesystem parameters */
