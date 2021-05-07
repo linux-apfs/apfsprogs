@@ -129,8 +129,12 @@ static void complete_parameters(void)
 		exit(1);
 	}
 
+	/* Every volume must have a label; use the same default as Apple */
+	if (!param->label || !*param->label)
+		param->label = "untitled";
+
 	/* Make sure the volume label fits, along with its null termination */
-	if (param->label && strlen(param->label) + 1 > APFS_VOLNAME_LEN)
+	if (strlen(param->label) + 1 > APFS_VOLNAME_LEN)
 		fprintf(stderr, "%s: volume label is too long\n", progname);
 
 	if (!param->main_uuid)

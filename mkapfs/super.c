@@ -155,8 +155,7 @@ static void make_volume(u64 bno, u64 oid)
 	vsb->apfs_formatted_by.timestamp = cpu_to_le64(get_timestamp());
 	vsb->apfs_formatted_by.last_xid = cpu_to_le64(MKFS_XID);
 
-	if (param->label)
-		strcpy((char *)vsb->apfs_volname, param->label);
+	strcpy((char *)vsb->apfs_volname, param->label);
 	vsb->apfs_next_doc_id = cpu_to_le32(APFS_MIN_DOC_ID);
 
 	vsb->apfs_root_tree_type = cpu_to_le32(APFS_OBJ_VIRTUAL |

@@ -565,6 +565,8 @@ static struct apfs_superblock *map_volume_super(int vol,
 		report("Volume superblock", "next document id is invalid.");
 
 	vol_name = (char *)vsb->v_raw->apfs_volname;
+	if (!*vol_name)
+		report("Volume superblock", "label is missing.");
 	if (strnlen(vol_name, APFS_VOLNAME_LEN) == APFS_VOLNAME_LEN)
 		report("Volume superblock", "name lacks NULL-termination.");
 
