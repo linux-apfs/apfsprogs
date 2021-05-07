@@ -13,12 +13,7 @@
  */
 u16 ip_fq_node_limit(u64 chunks)
 {
-	u16 ret;
-
-	if (chunks < 376)
-		ret = 1;
-	else
-		ret = 2 + 3 * (chunks - 376) / 1127;
+	u16 ret = 3 * (chunks + 751) / 1127 - 1;
 
 	if (ret == 2)
 		ret = 3; /* Leave room for a new root node */
