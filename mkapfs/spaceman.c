@@ -282,7 +282,7 @@ static void make_ip_bm_free_next(__le16 *addr)
 	addr[0] = cpu_to_le16(0xFFFF);
 	for (i = 1; i < IP_BMAP_BLOCKS - 1; i++)
 		addr[i] = cpu_to_le16(i + 1);
-	addr[IP_BMAP_BLOCKS - 1] = 0xFFFF;
+	addr[IP_BMAP_BLOCKS - 1] = cpu_to_le16(0xFFFF);
 }
 
 /**
