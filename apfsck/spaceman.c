@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <apfs/parameters.h>
 #include <apfs/raw.h>
 #include "apfsck.h"
 #include "btree.h"
@@ -503,6 +504,8 @@ static void check_spaceman_free_queues(struct apfs_spaceman_free_queue *sfq)
 	if (le16_to_cpu(sfq[APFS_SFQ_IP].sfq_tree_node_limit) <
 					sm->sm_ip_fq->sfq_btree.node_count)
 		report("Spaceman free queue", "node count above limit.");
+	if (le16_to_cpu(sfq[APFS_SFQ_IP].sfq_tree_node_limit) != ip_fq_node_limit(sm->sm_chunks))
+		report("Spaceman free queue", "wrong node limit.");
 
 	sm->sm_main_fq = parse_free_queue_btree(
 				le64_to_cpu(sfq[APFS_SFQ_MAIN].sfq_tree_oid), APFS_SFQ_MAIN);
@@ -515,6 +518,8 @@ static void check_spaceman_free_queues(struct apfs_spaceman_free_queue *sfq)
 	if (le16_to_cpu(sfq[APFS_SFQ_MAIN].sfq_tree_node_limit) <
 					sm->sm_main_fq->sfq_btree.node_count)
 		report("Spaceman free queue", "node count above limit.");
+	if (le16_to_cpu(sfq[APFS_SFQ_MAIN].sfq_tree_node_limit) != main_fq_node_limit(sm->sm_blocks))
+		report("Spaceman free queue", "wrong node limit.");
 }
 
 /**
