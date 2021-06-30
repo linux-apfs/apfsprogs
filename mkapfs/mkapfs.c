@@ -134,8 +134,10 @@ static void complete_parameters(void)
 		param->label = "untitled";
 
 	/* Make sure the volume label fits, along with its null termination */
-	if (strlen(param->label) + 1 > APFS_VOLNAME_LEN)
+	if (strlen(param->label) + 1 > APFS_VOLNAME_LEN) {
 		fprintf(stderr, "%s: volume label is too long\n", progname);
+		exit(1);
+	}
 
 	if (!param->main_uuid)
 		param->main_uuid = get_random_uuid();
