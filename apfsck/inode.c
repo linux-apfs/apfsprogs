@@ -244,9 +244,6 @@ static int read_rdev_xfield(char *xval, int len, struct inode *inode)
 	rdev = (__le32 *)xval;
 
 	inode->i_rdev = le32_to_cpu(*rdev);
-	if (!inode->i_rdev)
-		report("Device ID xfield", "null ID in use.");
-
 	return sizeof(*rdev);
 }
 
@@ -391,6 +388,7 @@ static void check_xfield_inode_flags(u16 bmap, u64 flags)
 static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 				struct inode *inode)
 {
+	u16 filetype = inode->i_mode & S_IFMT;
 	struct apfs_x_field *xfield;
 	u16 type_bitmap = 0;
 	char *xval;
@@ -509,6 +507,9 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 		report("Inode record", "length of xfields does not add up.");
 
 	check_xfield_inode_flags(type_bitmap, inode->i_flags);
+
+	if ((filetype == S_IFCHR || filetype == S_IFBLK) && !xbmap_test(type_bitmap, APFS_INO_EXT_TYPE_RDEV))
+		report("Inode record", "device file with no device ID.");
 }
 
 /**
@@ -663,9 +664,6 @@ void parse_inode_record(struct apfs_inode_key *key,
 
 	parse_inode_xfields((struct apfs_xf_blob *)val->xfields,
 			    len - sizeof(*val), inode);
-
-	if ((filetype == S_IFCHR || filetype == S_IFBLK) && !inode->i_rdev)
-		report("Inode record", "device file with no device ID.");
 }
 
 /**
