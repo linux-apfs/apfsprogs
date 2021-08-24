@@ -50,6 +50,16 @@ __attribute__((noreturn)) void system_error(void)
 }
 
 /**
+ * fatal - Print a message and exit with an error code
+ * @message: text to print
+ */
+__attribute__((noreturn)) void fatal(const char *message)
+{
+	fprintf(stderr, "%s: %s\n", progname, message);
+	exit(1);
+}
+
+/**
  * get_device_size - Get the block count of the device or image being checked
  * @blocksize: the filesystem blocksize
  */
