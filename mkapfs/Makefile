@@ -14,7 +14,7 @@ override CFLAGS += -Wall -Wno-address-of-packed-member -fno-strict-aliasing -I$(
 
 mkapfs: $(OBJS) $(LIBRARY)
 	@echo '  Linking...'
-	@gcc $(CFLAGS) -o mkapfs $(OBJS) $(LIBRARY)
+	@gcc $(CFLAGS) $(LDFLAGS) -o mkapfs $(OBJS) $(LIBRARY)
 	@echo '  Build complete'
 
 # Build the common libraries

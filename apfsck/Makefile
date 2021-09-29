@@ -15,7 +15,7 @@ override CFLAGS += -Wall -Wno-address-of-packed-member -fno-strict-aliasing -I$(
 
 apfsck: $(OBJS) $(LIBRARY)
 	@echo '  Linking...'
-	@gcc $(CFLAGS) -o apfsck $(OBJS) $(LIBRARY)
+	@gcc $(CFLAGS) $(LDFLAGS) -o apfsck $(OBJS) $(LIBRARY)
 	@echo '  Build complete'
 
 # Build the common libraries
