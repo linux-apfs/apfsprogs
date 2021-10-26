@@ -97,7 +97,7 @@ void ip_bmap_mark_as_used(u64 paddr, u64 length)
 void container_bmap_mark_as_used(u64 paddr, u64 length)
 {
 	/* Avoid out-of-bounds writes to the allocation bitmap */
-	if (paddr + length >= sb->s_block_count || paddr + length < paddr)
+	if (paddr + length > sb->s_block_count || paddr + length < paddr)
 		report(NULL /* context */, "Out-of-range block number.");
 
 	bmap_mark_as_used(sb->s_bitmap, paddr, length);
