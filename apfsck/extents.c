@@ -68,6 +68,13 @@ static void check_dstream_stats(struct dstream *dstream)
 	if (dstream->d_obj_type == APFS_TYPE_XATTR) {
 		if (dstream->d_seen || dstream->d_references != 1)
 			report("Data stream", "xattrs can't be cloned.");
+		if (dstream->d_sparse_bytes != 0) {
+			/*
+			 * I'm not actually sure about this, but let's leave a
+			 * check and see if it happens anywhere.
+			 */
+			report("Data stream", "xattrs can't have holes.");
+		}
 	} else {
 		if (!dstream->d_seen)
 			report("Data stream", "missing reference count.");
