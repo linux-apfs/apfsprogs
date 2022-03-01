@@ -5,8 +5,8 @@ lacking in features. Compatibility with the Apple implementations has barely
 been tested; please exercise caution, and report any issues that you find.
 
 A Linux kernel module for mounting the filesystem can be retrieved from
-<git://github.com/eafer/linux-apfs-oot.git>. The main purpose of apfsprogs
-is to assist in testing the upcoming write support.
+<git://github.com/eafer/linux-apfs-rw.git>. The main purpose of apfsprogs
+is to assist in testing the write support.
 
 Usage
 =====
