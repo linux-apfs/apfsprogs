@@ -2,10 +2,12 @@
  * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */
 
+#include <stdlib.h>
 #include <string.h>
 #include <apfs/raw.h>
 #include <apfs/types.h>
 #include "apfsck.h"
+#include "compress.h"
 #include "extents.h"
 #include "inode.h"
 #include "key.h"
@@ -69,6 +71,58 @@ static struct dstream *parse_xattr_dstream(struct apfs_xattr_dstream *xstream)
 }
 
 /**
+ * parse_decmpfs - Parse the contents of a compression xattr
+ * @inode:	inode for the file
+ * @xdata:	contents of the xattr
+ * @len:	length of @xdata
+ */
+static void parse_decmpfs(struct inode *inode, u8 *xdata, int len)
+{
+	struct compress *compress = inode->i_compress;
+	struct apfs_compress_hdr *hdr = NULL;
+	u32 algo;
+
+	if (!compress)
+		report("Inode", "is not compressed but has decmpfs xattr.");
+	if (len < sizeof(*hdr))
+		report("Decmpfs xattr", "too small for the header.");
+	hdr = (struct apfs_compress_hdr *)xdata;
+
+	if (hdr->signature)
+		report_unknown("Compression signature");
+	algo = le32_to_cpu(hdr->algo);
+	compress->size = le64_to_cpu(hdr->size);
+
+	compress->decmpfs = malloc(len);
+	if (!compress->decmpfs)
+		system_error();
+	memcpy(compress->decmpfs, xdata, len);
+	compress->decmpfs_len = len;
+
+	switch (algo) {
+	case APFS_COMPRESS_PLAIN_ATTR:
+	case APFS_COMPRESS_ZLIB_ATTR:
+		if (compress->rsrc_dstream)
+			report("Compressed inode", "should not have a resource fork.");
+		if (apfs_volume_is_sealed()) {
+			compress->rsrc_dstream = get_dstream(inode->i_ino);
+			compress->rsrc_dstream->d_inline = true;
+		}
+		break;
+	case APFS_COMPRESS_PLAIN_RSRC:
+	case APFS_COMPRESS_ZLIB_RSRC:
+	case APFS_COMPRESS_LZBITMAP_RSRC:
+		if (len != sizeof(*hdr))
+			report("Decmpfs xattr", "too big for non-inline.");
+		if (!compress->rsrc_dstream)
+			report("Inode", "should have resource fork for compression.");
+		break;
+	default:
+		report_unknown("Compression algorithm");
+	}
+}
+
+/**
  * parse_xattr_record - Parse a xattr record value and check for corruption
  * @key:	pointer to the raw key
  * @val:	pointer to the raw value
@@ -95,8 +149,8 @@ void parse_xattr_record(struct apfs_xattr_key *key,
 		report("Catalog", "xattr record with no inode.");
 
 	if (flags & APFS_XATTR_DATA_STREAM) {
-		struct apfs_xattr_dstream *dstream_raw;
 		struct dstream *dstream;
+		struct apfs_xattr_dstream *dstream_raw;
 
 		if (len != sizeof(*dstream_raw))
 			report("Xattr record",
@@ -109,6 +163,9 @@ void parse_xattr_record(struct apfs_xattr_key *key,
 		dstream = parse_xattr_dstream(dstream_raw);
 		dstream->d_owner = inode->i_ino;
 		dstream->d_xattr = true;
+
+		if (strcmp((char *)key->name, APFS_XATTR_NAME_RSRC_FORK) == 0 && inode->i_compress)
+			inode->i_compress->rsrc_dstream = dstream;
 
 		content_len = dstream->d_size;
 	} else {
@@ -146,5 +203,12 @@ void parse_xattr_record(struct apfs_xattr_key *key,
 		inode->i_xattr_bmap |= XATTR_BMAP_FINDER_INFO;
 		if (content_len != 32)
 			report("Finder info xattr", "wrong size");
+	} else if (!strcmp((char *)key->name, APFS_XATTR_NAME_COMPRESSED)) {
+		if (flags & APFS_XATTR_FILE_SYSTEM_OWNED)
+			report("Decmpfs xattr", "owned by system.");
+		if (inode->i_xattr_bmap & XATTR_BMAP_COMPRESSED)
+			report("Catalog", "inode has two compressed headers.");
+		inode->i_xattr_bmap |= XATTR_BMAP_COMPRESSED;
+		parse_decmpfs(inode, val->xdata, len);
 	}
 }

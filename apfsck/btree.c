@@ -1520,6 +1520,74 @@ fail:
 }
 
 /**
+ * extent_from_query - Read the info found by a successful file extent query
+ * @query:	the query for the extent record
+ * @fext:	fext record struct to receive the result
+ */
+static void extent_from_query(struct query *query, struct fext_record *fext)
+{
+	struct apfs_file_extent_val *ext;
+	struct apfs_file_extent_key *ext_key;
+	void *raw = query->node->raw;
+
+	if (query->len != sizeof(*ext))
+		report("File extent record", "wrong size of value.");
+
+	ext = (struct apfs_file_extent_val *)(raw + query->off);
+	ext_key = (struct apfs_file_extent_key *)(raw + query->key_off);
+
+	fext->log_addr = le64_to_cpu(ext_key->logical_addr);
+	fext->phys_bno = le64_to_cpu(ext->phys_block_num);
+	fext->length = le64_to_cpu(ext->len_and_flags) & APFS_FILE_EXTENT_LEN_MASK;
+}
+
+/**
+ * file_extent_lookup - Map a logical address to a physical one in an unsealed volume
+ * @oid:	dstream id
+ * @logaddr:	logical address inside the dstream
+ * @bno:	on return, the physical block number
+ *
+ * Returns 0 on success, or -1 if nothing was found.
+ */
+int file_extent_lookup(u64 oid, u64 logaddr, u64 *bno)
+{
+	struct query *query = NULL;
+	struct key key = {0};
+	struct fext_record fext = {0};
+	u64 off;
+	int ret = -1;
+
+	query = alloc_query(vsb->v_cat->root, NULL /* parent */);
+
+	init_file_extent_key(oid, logaddr, &key);
+	query->key = &key;
+	query->flags |= QUERY_CAT;
+
+	/*
+	 * The catalog nodes have already been parsed, and the allocation
+	 * bitmap has been updated accordingly.  This global variable tells
+	 * read_object() to ignore the bitmap this time.
+	 */
+	ongoing_query = true;
+	if (btree_query(&query))
+		goto fail;
+	ongoing_query = false;
+
+	extent_from_query(query, &fext);
+	if (fext.phys_bno == 0) {
+		*bno = 0;
+	} else {
+		off = (logaddr - fext.log_addr) >> sb->s_blocksize_bits;
+		*bno = fext.phys_bno + off;
+	}
+
+	ret = 0;
+fail:
+	free_query(query);
+	return ret;
+}
+
+/**
  * extentref_tree_lookup - Find best match for an extent in an extentref tree
  * @tbl:	root of the extent reference tree to be searched
  * @bno:	first block number for the extent

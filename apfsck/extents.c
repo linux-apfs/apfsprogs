@@ -11,6 +11,7 @@
 #include <apfs/sha256.h>
 #include "apfsck.h"
 #include "btree.h"
+#include "compress.h"
 #include "extents.h"
 #include "htable.h"
 #include "inode.h"
@@ -124,12 +125,45 @@ static void check_dstream_stats(struct dstream *dstream)
 	}
 }
 
+static void verify_compressed_dstream_info_hash(struct listed_hash *info, struct dstream *dstream, struct compress *compress)
+{
+	SHA256_CTX ctx = {0};
+	u8 true_hash[APFS_HASH_CCSHA256_SIZE] = {0};
+	u8 *block = NULL;
+	loff_t off;
+	ssize_t res;
+	u16 i;
+
+	block = malloc(sb->s_blocksize);
+	if (!block)
+		system_error();
+
+	sha256_init(&ctx);
+
+	for (i = 0; i < info->blkcnt; ++i) {
+		off = info->addr + i * sb->s_blocksize;
+
+		res = apfs_compress_read(compress, (char *)block, sb->s_blocksize, &off);
+		memset(block + res, 0, sb->s_blocksize - res);
+
+		sha256_update(&ctx, block, sb->s_blocksize);
+	}
+
+	sha256_final(&ctx, true_hash);
+
+	free(block);
+	block = NULL;
+
+	if (memcmp(info->hash, true_hash, APFS_HASH_CCSHA256_SIZE) != 0)
+		report("File info record", "incorrect hash of file data.");
+}
+
 /**
- * verify_info_hash - Verify that a a file info hash is correct
+ * verify_dstream_info_hash - Verify that a a file info hash is correct
  * @info:	information about the hash to check
  * @dstream:	dstream for the file to check
  */
-static void verify_info_hash(struct listed_hash *info, struct dstream *dstream)
+static void verify_dstream_info_hash(struct listed_hash *info, struct dstream *dstream)
 {
 	SHA256_CTX ctx = {0};
 	u8 true_hash[APFS_HASH_CCSHA256_SIZE] = {0};
@@ -162,6 +196,29 @@ static void verify_info_hash(struct listed_hash *info, struct dstream *dstream)
 		report("File info record", "incorrect hash of file data.");
 }
 
+void verify_dstream_hashes(struct dstream *dstream, struct compress *compress)
+{
+	struct listed_hash *hash = NULL;
+
+	if (!apfs_volume_is_sealed())
+		return;
+
+	if (!dstream)
+		report(NULL, "Bug!");
+
+	hash = dstream->d_hashes;
+
+	while (hash) {
+		if (compress)
+			verify_compressed_dstream_info_hash(hash, dstream, compress);
+		else
+			verify_dstream_info_hash(hash, dstream);
+		dstream->d_hashes = hash->prev;
+		free(hash);
+		hash = dstream->d_hashes;
+	}
+}
+
 /**
  * free_dstream - Free a dstream structure after performing some final checks
  * @entry: the entry to free
@@ -178,6 +235,13 @@ static void free_dstream(struct htable_entry *entry)
 	/* To check for reuse, put all filesystem object ids in a list */
 	cnid = get_listed_cnid(dstream->d_id);
 	cnid_set_state_flag(cnid, CNID_IN_DSTREAM);
+
+	/*
+	 * Not a real dstream, just a hack for working with inline compressed
+	 * files inside sealed volumes. Don't check anything.
+	 */
+	if(dstream->d_inline)
+		return free(entry);
 
 	/* Increase the refcount of each physical extent used by the dstream */
 	while (curr_extent) {
@@ -204,16 +268,8 @@ static void free_dstream(struct htable_entry *entry)
 	}
 
 	/* TODO: support resource forks for compressed files too */
-	if (!dstream->d_xattr) {
-		struct listed_hash *hash = dstream->d_hashes;
-
-		while (hash) {
-			verify_info_hash(hash, dstream);
-			dstream->d_hashes = hash->prev;
-			free(hash);
-			hash = dstream->d_hashes;
-		}
-	}
+	if (!dstream->d_xattr)
+		verify_dstream_hashes(dstream, NULL);
 
 	check_dstream_stats(dstream);
 	free(entry);

@@ -18,6 +18,7 @@ struct apfs_sibling_map_key;
 #define XATTR_BMAP_RSRC_FORK	0x02	/* Resource fork xattr */
 #define XATTR_BMAP_SECURITY	0x04	/* Security xattr */
 #define XATTR_BMAP_FINDER_INFO	0x08	/* Finder info xattr */
+#define XATTR_BMAP_COMPRESSED	0x10	/* Compression header xattr */
 
 /*
  * Inode data in memory
@@ -44,6 +45,7 @@ struct inode {
 	char		*i_purg_name;	/* Purgeable dentry name (can be NULL) */
 	u32		i_owner;	/* Id of the owner user */
 	struct dirstat	*i_dirstat;	/* Directory statistics (can be NULL) */
+	struct compress	*i_compress;	/* Compression data (can be NULL) */
 
 	/* Inode stats measured by the fsck */
 	u8		i_xattr_bmap;	/* Bitmap of system xattrs for inode */

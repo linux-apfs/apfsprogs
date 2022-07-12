@@ -385,6 +385,12 @@ struct apfs_crypto_state_val {
 #define APFS_INODE_PINNED_MASK			(APFS_INODE_PINNED_TO_MAIN \
 						| APFS_INODE_PINNED_TO_TIER2)
 
+/* BSD flags */
+#define APFS_INOBSD_NODUMP			0x00000001
+#define APFS_INOBSD_IMMUTABLE			0x00000002
+#define APFS_INOBSD_APPEND			0x00000004
+#define APFS_INOBSD_COMPRESSED			0x00000020
+
 /*
  * Structure of an inode as stored as a B-tree value
  */
@@ -1461,6 +1467,39 @@ struct apfs_btn_index_node_val {
 	 * SHA-256. TODO: check what happens with other hash functions.
 	 */
 	u8	binv_child_hash[APFS_HASH_CCSHA256_SIZE];
+} __packed;
+
+/*
+ * Compressed file header
+ */
+struct apfs_compress_hdr {
+	__le32 signature;
+	__le32 algo;
+	__le64 size;
+} __packed;
+
+#define APFS_COMPRESS_ZLIB_ATTR		3
+#define APFS_COMPRESS_ZLIB_RSRC		4
+#define APFS_COMPRESS_PLAIN_ATTR	9
+#define APFS_COMPRESS_PLAIN_RSRC	10
+#define APFS_COMPRESS_LZBITMAP_RSRC	14
+
+struct apfs_compress_rsrc_hdr {
+	__be32 data_offs;
+	__be32 mgmt_offs;
+	__be32 data_size;
+	__be32 mgmt_size;
+} __packed;
+
+#define APFS_COMPRESS_BLOCK		0x10000
+
+struct apfs_compress_rsrc_data {
+	__le32 unknown;
+	__le32 num;
+	struct apfs_compress_rsrc_block {
+		__le32 offs;
+		__le32 size;
+	} __packed block[0];
 } __packed;
 
 #endif	/* _RAW_H */

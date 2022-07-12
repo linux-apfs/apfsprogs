@@ -6,6 +6,7 @@
 #define _EXTENTS_H
 
 #include <apfs/types.h>
+#include "compress.h"
 #include "htable.h"
 
 struct apfs_file_extent_key;
@@ -82,6 +83,7 @@ struct dstream {
 	bool		d_seen;		/* Has the dstream record been seen? */
 	bool		d_orphan;	/* Is this an orphan file? */
 	bool		d_xattr;	/* Is this a xattr dstream? */
+	bool		d_inline;	/* Is this actually an inline xattr? */
 
 	/* Dstream stats read from the dstream structures */
 	u64		d_size;		/* Dstream size */
@@ -126,5 +128,6 @@ extern struct crypto_state *get_crypto_state(u64 id);
 extern void parse_crypto_state_record(struct apfs_crypto_state_key *key, struct apfs_crypto_state_val *val, int len);
 extern void parse_file_info_record(struct apfs_file_info_key *key, struct apfs_file_info_val *val, int len);
 extern void parse_fext_record(struct apfs_fext_tree_key *key, struct apfs_fext_tree_val *val, int len);
+extern void verify_dstream_hashes(struct dstream *dstream, struct compress *compress);
 
 #endif	/* _EXTENTS_H */

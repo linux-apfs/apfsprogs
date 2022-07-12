@@ -9,6 +9,7 @@
 #include <apfs/raw.h>
 #include <apfs/types.h>
 #include "apfsck.h"
+#include "compress.h"
 #include "dir.h"
 #include "extents.h"
 #include "htable.h"
@@ -236,6 +237,7 @@ static void free_inode_names(struct inode *inode)
 static void free_inode(struct htable_entry *entry)
 {
 	struct inode *inode = (struct inode *)entry;
+	struct compress *compress = inode->i_compress;
 	struct listed_cnid *cnid;
 
 	/* All of these must still be around for the inodes to access */
@@ -246,6 +248,16 @@ static void free_inode(struct htable_entry *entry)
 	/* To check for reuse, put all filesystem object ids in a list */
 	cnid = get_listed_cnid(inode->i_ino);
 	cnid_set_state_flag(cnid, CNID_IN_INODE);
+
+	if (compress) {
+		apfs_compress_open(compress);
+		apfs_compress_check(compress);
+		verify_dstream_hashes(compress->rsrc_dstream, compress);
+		apfs_compress_close(compress);
+		free(compress->decmpfs);
+		free(compress);
+		inode->i_compress = NULL;
+	}
 
 	check_inode_stats(inode);
 	free_inode_names(inode);
@@ -829,7 +841,7 @@ void parse_inode_record(struct apfs_inode_key *key,
 {
 	struct inode *inode;
 	u16 mode, filetype;
-	u32 def_prot_class;
+	u32 def_prot_class, bsd_flags;
 
 	if (len < sizeof(*val))
 		report("Inode record", "value is too small.");
@@ -860,6 +872,13 @@ void parse_inode_record(struct apfs_inode_key *key,
 	def_prot_class = le32_to_cpu(val->default_protection_class);
 	if (def_prot_class > APFS_PROTECTION_CLASS_F || def_prot_class == 5)
 		report("Inode record", "invalid default protection class");
+
+	bsd_flags = le32_to_cpu(val->bsd_flags);
+	if (bsd_flags & APFS_INOBSD_COMPRESSED) {
+		inode->i_compress = calloc(1, sizeof(*inode->i_compress));
+		if (!inode->i_compress)
+			system_error();
+	}
 
 	mode = le16_to_cpu(val->mode);
 	filetype = mode & S_IFMT;
