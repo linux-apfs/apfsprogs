@@ -340,20 +340,14 @@ static void check_ephemeral_information(__le64 *info)
  * software_strlen - Calculate the length of a software info string
  * @str: the string
  *
- * Also checks that the string has a proper null-termination, and only null
- * characters afterwards.
+ * Also checks that the string has a proper null-termination.
  */
 static int software_strlen(u8 *str)
 {
 	int length = strnlen((char *)str, APFS_MODIFIED_NAMELEN);
-	u8 *end = str + APFS_MODIFIED_NAMELEN;
 
 	if (length == APFS_MODIFIED_NAMELEN)
 		report("Volume software id", "no NULL-termination.");
-	for (str += length + 1; str != end; ++str) {
-		if (*str)
-			report("Volume software id", "goes on after NULL.");
-	}
 	return length;
 }
 
