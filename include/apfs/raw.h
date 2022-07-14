@@ -273,9 +273,12 @@ struct apfs_dstream_id_val {
 #define APFS_ROOT_DIR_INO_NUM		2	/* Root directory */
 #define APFS_PRIV_DIR_INO_NUM		3	/* Private directory */
 #define APFS_SNAP_DIR_INO_NUM		6	/* Snapshots metadata */
+#define APFS_PURGEABLE_DIR_INO_NUM	7	/* Parent of purgeable files */
 
 /* Smallest inode number available for user content */
 #define APFS_MIN_USER_INO_NUM		16
+
+#define APFS_UNIFIED_ID_SPACE_MARK	0x0800000000000000
 
 /* Inode internal flags */
 #define APFS_INODE_IS_APFS_PRIVATE		0x00000001
@@ -919,6 +922,7 @@ struct apfs_checkpoint_map_phys {
 						| APFS_FS_ONEKEY)
 
 /* Volume roles */
+#define APFS_VOLUME_ENUM_SHIFT		6
 #define APFS_VOL_ROLE_NONE		0x0000
 #define APFS_VOL_ROLE_SYSTEM		0x0001
 #define APFS_VOL_ROLE_USER		0x0002
@@ -926,9 +930,17 @@ struct apfs_checkpoint_map_phys {
 #define APFS_VOL_ROLE_VM		0x0008
 #define APFS_VOL_ROLE_PREBOOT		0x0010
 #define APFS_VOL_ROLE_INSTALLER		0x0020
-#define APFS_VOL_ROLE_DATA		0x0040
-#define APFS_VOL_ROLE_BASEBAND		0x0080
-#define APFS_VOL_ROLE_RESERVED_200	0x0200
+#define APFS_VOL_ROLE_DATA		(1 << APFS_VOLUME_ENUM_SHIFT)
+#define APFS_VOL_ROLE_BASEBAND		(2 << APFS_VOLUME_ENUM_SHIFT)
+#define APFS_VOL_ROLE_UPDATE		(3 << APFS_VOLUME_ENUM_SHIFT)
+#define APFS_VOL_ROLE_XART		(4 << APFS_VOLUME_ENUM_SHIFT)
+#define APFS_VOL_ROLE_HARDWARE		(5 << APFS_VOLUME_ENUM_SHIFT)
+#define APFS_VOL_ROLE_BACKUP		(6 << APFS_VOLUME_ENUM_SHIFT)
+#define APFS_VOL_ROLE_RESERVED_7	(7 << APFS_VOLUME_ENUM_SHIFT)
+#define APFS_VOL_ROLE_RESERVED_8	(8 << APFS_VOLUME_ENUM_SHIFT)
+#define APFS_VOL_ROLE_ENTERPRISE	(9 << APFS_VOLUME_ENUM_SHIFT)
+#define APFS_VOL_ROLE_RESERVED_10	(10 << APFS_VOLUME_ENUM_SHIFT)
+#define APFS_VOL_ROLE_PRELOGIN		(11 << APFS_VOLUME_ENUM_SHIFT)
 #define APFS_VOL_ROLES_VALID_MASK	(APFS_VOL_ROLE_SYSTEM \
 					| APFS_VOL_ROLE_USER \
 					| APFS_VOL_ROLE_RECOVERY \
@@ -937,16 +949,28 @@ struct apfs_checkpoint_map_phys {
 					| APFS_VOL_ROLE_INSTALLER \
 					| APFS_VOL_ROLE_DATA \
 					| APFS_VOL_ROLE_BASEBAND \
-					| APFS_VOL_ROLE_RESERVED_200)
+					| APFS_VOL_ROLE_UPDATE \
+					| APFS_VOL_ROLE_XART \
+					| APFS_VOL_ROLE_HARDWARE \
+					| APFS_VOL_ROLE_BACKUP \
+					| APFS_VOL_ROLE_RESERVED_7 \
+					| APFS_VOL_ROLE_RESERVED_8 \
+					| APFS_VOL_ROLE_ENTERPRISE \
+					| APFS_VOL_ROLE_RESERVED_10 \
+					| APFS_VOL_ROLE_PRELOGIN)
 
 /* Optional volume feature flags */
 #define APFS_FEATURE_DEFRAG_PRERELEASE		0x00000001LL
 #define APFS_FEATURE_HARDLINK_MAP_RECORDS	0x00000002LL
 #define APFS_FEATURE_DEFRAG			0x00000004LL
+#define APFS_FEATURE_STRICTATIME		0x00000008LL
+#define APFS_FEATURE_VOLGRP_SYSTEM_INO_SPACE	0x00000010LL
 
 #define APFS_SUPPORTED_FEATURES_MASK	(APFS_FEATURE_DEFRAG \
 					| APFS_FEATURE_DEFRAG_PRERELEASE \
-					| APFS_FEATURE_HARDLINK_MAP_RECORDS)
+					| APFS_FEATURE_HARDLINK_MAP_RECORDS \
+					| APFS_FEATURE_STRICTATIME \
+					| APFS_FEATURE_VOLGRP_SYSTEM_INO_SPACE)
 
 /* Read-only compatible volume feature flags */
 #define APFS_SUPPORTED_ROCOMPAT_MASK		(0x0ULL)
@@ -956,11 +980,17 @@ struct apfs_checkpoint_map_phys {
 #define APFS_INCOMPAT_DATALESS_SNAPS		0x00000002LL
 #define APFS_INCOMPAT_ENC_ROLLED		0x00000004LL
 #define APFS_INCOMPAT_NORMALIZATION_INSENSITIVE	0x00000008LL
+#define APFS_INCOMPAT_INCOMPLETE_RESTORE	0x00000010LL
+#define APFS_INCOMPAT_SEALED_VOLUME		0x00000020LL
+#define APFS_INCOMPAT_RESERVED_40		0x00000040LL
 
-#define APFS_SUPPORTED_INCOMPAT_MASK  (APFS_INCOMPAT_CASE_INSENSITIVE \
-				      | APFS_INCOMPAT_DATALESS_SNAPS \
-				      | APFS_INCOMPAT_ENC_ROLLED \
-				      | APFS_INCOMPAT_NORMALIZATION_INSENSITIVE)
+#define APFS_SUPPORTED_INCOMPAT_MASK (APFS_INCOMPAT_CASE_INSENSITIVE \
+				     | APFS_INCOMPAT_DATALESS_SNAPS \
+				     | APFS_INCOMPAT_ENC_ROLLED \
+				     | APFS_INCOMPAT_NORMALIZATION_INSENSITIVE \
+				     | APFS_INCOMPAT_INCOMPLETE_RESTORE \
+				     | APFS_INCOMPAT_SEALED_VOLUME \
+				     | APFS_INCOMPAT_RESERVED_40)
 
 #define APFS_MODIFIED_NAMELEN	      32
 
@@ -1058,6 +1088,21 @@ struct apfs_superblock {
 
 /*3C8*/	__le64 apfs_root_to_xid;
 	__le64 apfs_er_state_oid;
+
+	__le64 apfs_cloneinfo_id_epoch;
+	__le64 apfs_cloneinfo_xid;
+
+	__le64 apfs_snap_meta_ext_oid;
+
+	char apfs_volume_group_id[16];
+
+	__le64 apfs_integrity_meta_oid;
+
+	__le64 apfs_fext_tree_oid;
+	__le32 apfs_fext_tree_type;
+
+	__le32 reserved_type;
+	__le64 reserved_oid;
 } __packed;
 
 /* Extended attributes constants */

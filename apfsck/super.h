@@ -11,6 +11,12 @@
 #include "object.h"
 #include "spaceman.h"
 
+struct volume_group {
+	char vg_id[16];
+	bool vg_system_seen;
+	bool vg_data_seen;
+};
+
 struct volume_superblock {
 	struct apfs_superblock *v_raw;
 	struct btree *v_omap;
@@ -65,6 +71,9 @@ struct super_block {
 
 	struct spaceman s_spaceman; /* Information about the space manager */
 
+	/* Information about the one volume group in the container, if any */
+	struct volume_group *s_volume_group;
+
 	/* This is excessive in most cases.  TODO: switch to a linked list? */
 	struct volume_superblock *s_volumes[APFS_NX_MAX_FILE_SYSTEMS];
 };
@@ -101,6 +110,27 @@ static inline bool apfs_is_normalization_insensitive(void)
 	if (flags & APFS_INCOMPAT_NORMALIZATION_INSENSITIVE)
 		return true;
 	return false;
+}
+
+static inline bool apfs_volume_is_in_group(void)
+{
+	u64 features = le64_to_cpu(vsb->v_raw->apfs_features);
+
+	return features & APFS_FEATURE_VOLGRP_SYSTEM_INO_SPACE;
+}
+
+static inline bool apfs_is_data_volume_in_group(void)
+{
+	u16 role = le16_to_cpu(vsb->v_raw->apfs_role);
+
+	return apfs_volume_is_in_group() && role == APFS_VOL_ROLE_DATA;
+}
+
+static inline bool apfs_is_system_volume_in_group(void)
+{
+	u16 role = le16_to_cpu(vsb->v_raw->apfs_role);
+
+	return apfs_volume_is_in_group() && role == APFS_VOL_ROLE_SYSTEM;
 }
 
 extern void parse_filesystem(void);

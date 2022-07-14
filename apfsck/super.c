@@ -463,6 +463,8 @@ static void check_incompat_vol_features(u64 flags)
 {
 	if ((flags & APFS_SUPPORTED_INCOMPAT_MASK) != flags)
 		report("Volume superblock", "unknown incompatible feature.");
+	if (flags & APFS_INCOMPAT_RESERVED_40)
+		report("Volume superblock", "reserved incompatible feature.");
 	if (flags & APFS_INCOMPAT_DATALESS_SNAPS)
 		report_unknown("Dataless snapshots");
 	if (flags & APFS_INCOMPAT_ENC_ROLLED)
@@ -474,14 +476,45 @@ static void check_incompat_vol_features(u64 flags)
 }
 
 /**
+ * role_is_valid - Does the give number match a possible volume role?
+ * @role: the role number to check
+ */
+static bool role_is_valid(u16 role)
+{
+	switch (role) {
+	case APFS_VOL_ROLE_NONE:
+	case APFS_VOL_ROLE_SYSTEM:
+	case APFS_VOL_ROLE_USER:
+	case APFS_VOL_ROLE_RECOVERY:
+	case APFS_VOL_ROLE_VM:
+	case APFS_VOL_ROLE_PREBOOT:
+	case APFS_VOL_ROLE_INSTALLER:
+	case APFS_VOL_ROLE_DATA:
+	case APFS_VOL_ROLE_BASEBAND:
+	case APFS_VOL_ROLE_UPDATE:
+	case APFS_VOL_ROLE_XART:
+	case APFS_VOL_ROLE_HARDWARE:
+	case APFS_VOL_ROLE_BACKUP:
+	case APFS_VOL_ROLE_RESERVED_7:
+	case APFS_VOL_ROLE_RESERVED_8:
+	case APFS_VOL_ROLE_ENTERPRISE:
+	case APFS_VOL_ROLE_RESERVED_10:
+	case APFS_VOL_ROLE_PRELOGIN:
+		return true;
+	default:
+		return false;
+	}
+}
+
+/**
  * check_volume_role - Check that a volume's role flags are valid
  * @role: the volume role
  */
 static void check_volume_role(u16 role)
 {
-	if ((role & APFS_VOL_ROLES_VALID_MASK) != role)
+	if (!role_is_valid(role))
 		report("Volume superblock", "invalid role in use.");
-	if (role & APFS_VOL_ROLE_RESERVED_200)
+	if (role == APFS_VOL_ROLE_RESERVED_7 || role == APFS_VOL_ROLE_RESERVED_8 || role == APFS_VOL_ROLE_RESERVED_10)
 		report("Volume superblock", "reserved role in use.");
 }
 
@@ -506,6 +539,73 @@ static void check_meta_crypto(struct apfs_wrapped_meta_crypto_state *wmcs)
 
 	if (wmcs->unused)
 		report("Volume meta_crypto", "reserved field in use.");
+}
+
+/**
+ * uuid_is_null - Check if all bytes of a uuid are zero
+ * @uuid: the uuid to check
+ *
+ * TODO: reuse this for other uuid checks
+ */
+static bool uuid_is_null(char uuid[16])
+{
+	int i;
+
+	for (i = 0; i < 16; ++i) {
+		if (uuid[i])
+			return false;
+	}
+	return true;
+}
+
+/**
+ * get_volume_group - Find or create the volume group struct with the given uuid
+ */
+static struct volume_group *get_volume_group(char uuid[16])
+{
+	struct volume_group *vg = sb->s_volume_group;
+
+	if (uuid_is_null(uuid))
+		report("Volume group", "uuid is null.");
+
+	if (vg) {
+		if (memcmp(vg->vg_id, uuid, 16) != 0)
+			report_unknown("Two volume groups");
+		return vg;
+	}
+
+	vg = calloc(1, sizeof(*vg));
+	if (!vg)
+		system_error();
+	memcpy(vg->vg_id, uuid, 16);
+	return vg;
+}
+
+/**
+ * parse_volume_group_info - Parse the current volume's metadata for group info
+ */
+static void parse_volume_group_info(void)
+{
+	struct volume_group *vg = NULL;
+	char *vg_uuid = vsb->v_raw->apfs_volume_group_id;
+
+	if (apfs_volume_is_in_group()) {
+		vg = get_volume_group(vg_uuid);
+		if (apfs_is_data_volume_in_group()) {
+			if (vg->vg_data_seen)
+				report("Volume group", "two data volumes.");
+			vg->vg_data_seen = true;
+		} else if (apfs_is_system_volume_in_group()) {
+			if (vg->vg_system_seen)
+				report("Volume group", "two system volumes.");
+			vg->vg_system_seen = true;
+		} else {
+			report("Volume group", "volume is neither data nor system.");
+		}
+	} else {
+		if (!uuid_is_null(vg_uuid))
+			report("Volume group", "member has no feature flag.");
+	}
 }
 
 /**
@@ -602,10 +702,26 @@ static struct apfs_superblock *map_volume_super(int vol,
 	if (le64_to_cpu(vsb->v_raw->apfs_num_snapshots) != 0)
 		report_unknown("Snapshots");
 
+	parse_volume_group_info();
+
 	return vsb->v_raw;
 }
 
 static struct object *parse_reaper(u64 oid);
+
+/**
+ * check_volume_group - Check that a volume group (if any) was complete
+ * @vg: the volume group (may be NULL)
+ */
+static void check_volume_group(struct volume_group *vg)
+{
+	if (!vg)
+		return;
+	if (!vg->vg_system_seen)
+		report("Volume group", "system volume is missing.");
+	if (!vg->vg_data_seen)
+		report("Volume group", "data volume is missing.");
+}
 
 /**
  * check_container - Check the whole container for a given checkpoint
@@ -696,6 +812,10 @@ static void check_container(struct super_block *sb)
 	sb->s_omap_table = NULL;
 
 	check_spaceman(le64_to_cpu(sb->s_raw->nx_spaceman_oid));
+
+	check_volume_group(sb->s_volume_group);
+	free(sb->s_volume_group);
+	sb->s_volume_group = NULL;
 }
 
 /**

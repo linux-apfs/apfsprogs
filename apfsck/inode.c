@@ -554,6 +554,7 @@ void check_inode_ids(u64 ino, u64 parent_ino)
 		switch (ino) {
 		case APFS_INVALID_INO_NUM:
 		case APFS_ROOT_DIR_PARENT:
+		case APFS_PURGEABLE_DIR_INO_NUM:
 			report("Inode record", "invalid inode number.");
 		case APFS_ROOT_DIR_INO_NUM:
 		case APFS_PRIV_DIR_INO_NUM:
@@ -577,11 +578,26 @@ void check_inode_ids(u64 ino, u64 parent_ino)
 		case APFS_ROOT_DIR_INO_NUM:
 		case APFS_PRIV_DIR_INO_NUM:
 		case APFS_SNAP_DIR_INO_NUM:
+		case APFS_PURGEABLE_DIR_INO_NUM:
 			/* These are fine */
 			break;
 		default:
 			report("Inode record", "reserved parent inode number.");
 		}
+	}
+
+	if (apfs_is_data_volume_in_group()) {
+		if (ino >= APFS_UNIFIED_ID_SPACE_MARK || parent_ino >= APFS_UNIFIED_ID_SPACE_MARK)
+			report("Inode record", "bad number for data volume inode.");
+	} else if (apfs_is_system_volume_in_group()) {
+		/*
+		 * Reserved inode numbers in volume groups always seem to come
+		 * from the data range, even if this contradicts the reference.
+		 */
+		if (parent_ino < APFS_MIN_USER_INO_NUM)
+			return;
+		if (ino < APFS_UNIFIED_ID_SPACE_MARK + APFS_MIN_USER_INO_NUM || parent_ino < APFS_UNIFIED_ID_SPACE_MARK + APFS_MIN_USER_INO_NUM)
+			report("Inode record", "bad number for system volume inode.");
 	}
 }
 
