@@ -675,8 +675,10 @@ void parse_inode_record(struct apfs_inode_key *key,
 
 	inode->i_nlink = le32_to_cpu(val->nlink);
 
-	if (le16_to_cpu(val->pad1) || le64_to_cpu(val->pad2))
+	if (le16_to_cpu(val->pad1))
 		report("Inode record", "padding should be zeroes.");
+	if (!(inode->i_flags & APFS_INODE_HAS_UNCOMPRESSED_SIZE) && le64_to_cpu(val->uncompressed_size))
+		report("Inode record", "should not report uncompressed size.");
 
 	parse_inode_xfields((struct apfs_xf_blob *)val->xfields,
 			    len - sizeof(*val), inode);
