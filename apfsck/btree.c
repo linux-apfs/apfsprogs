@@ -912,6 +912,7 @@ static void check_btree_footer(struct btree *btree)
 				sizeof(struct apfs_spaceman_free_queue_key))
 			report(ctx, "wrong key size in info footer.");
 
+		/* Ghost records may also exist, but they don't count here */
 		if (le32_to_cpu(info->bt_fixed.bt_val_size) != 8)
 			report(ctx, "wrong value size in info footer.");
 
@@ -919,8 +920,7 @@ static void check_btree_footer(struct btree *btree)
 				sizeof(struct apfs_spaceman_free_queue_key))
 			report(ctx, "wrong maximum key size in info footer.");
 
-		/* TODO: could this be zero if all records are ghosts? */
-		if (le32_to_cpu(info->bt_longest_val) != 8)
+		if (le32_to_cpu(info->bt_longest_val) < btree->longest_val)
 			report(ctx, "wrong maximum value size in info footer.");
 
 		return;
