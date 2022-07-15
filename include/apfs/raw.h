@@ -772,7 +772,7 @@ struct apfs_nx_reaper_phys {
 	__le32			nr_nrle_flags;
 	__le32			nr_state_buffer_size;
 	u8			nr_state_buffer[];
-};
+} __packed;
 
 /* EFI constants */
 #define APFS_NX_EFI_JUMPSTART_MAGIC	0x5244534A
@@ -789,7 +789,7 @@ struct apfs_nx_efi_jumpstart {
 	__le32			nej_num_extents;
 	__le64			nej_reserved[16];
 	struct apfs_prange	nej_rec_extents[];
-};
+} __packed;
 
 /* Main container */
 
