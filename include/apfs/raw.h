@@ -774,6 +774,28 @@ struct apfs_nx_reaper_phys {
 	u8			nr_state_buffer[];
 } __packed;
 
+struct apfs_nx_reap_list_entry {
+	__le32	nrle_next;
+	__le32	nrle_flags;
+	__le32	nrle_type;
+	__le32	nrle_size;
+	__le64	nrle_fs_oid;
+	__le64	nrle_oid;
+	__le64	nrle_xid;
+} __packed;
+
+struct apfs_nx_reap_list_phys {
+	struct apfs_obj_phys		nrl_o;
+	__le64				nrl_next;
+	__le32				nrl_flags;
+	__le32				nrl_max;
+	__le32				nrl_count;
+	__le32				nrl_first;
+	__le32				nrl_last;
+	__le32				nrl_free;
+	struct apfs_nx_reap_list_entry	nrl_entries[];
+} __packed;
+
 /* EFI constants */
 #define APFS_NX_EFI_JUMPSTART_MAGIC	0x5244534A
 #define APFS_NX_EFI_JUMPSTART_VERSION	1

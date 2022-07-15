@@ -1143,6 +1143,20 @@ static struct object *parse_reaper(u64 oid)
 	if (le64_to_cpu(raw->nr_next_reap_id) != 1)
 		report_unknown("Nonempty reaper");
 
+	/* For now this only silences complaints about unused mappings */
+	if (raw->nr_head) {
+		struct apfs_nx_reap_list_phys *list_raw = NULL;
+		struct object list = {0};
+
+		list_raw = read_ephemeral_object(le64_to_cpu(raw->nr_head), &list);
+		if (list.type != APFS_OBJECT_TYPE_NX_REAP_LIST)
+			report("Reaper list", "wrong object type.");
+		if (list.subtype != APFS_OBJECT_TYPE_INVALID)
+			report("Reaper list", "wrong object subtype.");
+
+		munmap(list_raw, sb->s_blocksize);
+	}
+
 	flags = le32_to_cpu(raw->nr_flags);
 	if ((flags & APFS_NR_FLAGS_VALID_MASK) != flags)
 		report("Reaper", "invalid flag in use.");
