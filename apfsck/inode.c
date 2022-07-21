@@ -541,6 +541,30 @@ static void check_inode_internal_flags(u64 flags)
 }
 
 /**
+ * inos_valid_for_sysvol_in_group - Can a system vol in a group use these inos?
+ * @ino:	inode number
+ * @parent_ino:	parent inode number
+ */
+static bool inos_valid_for_sysvol_in_group(u64 ino, u64 parent_ino)
+{
+	/*
+	 * Reserved inode numbers in volume groups always seem to come
+	 * from the data range, even if this contradicts the reference.
+	 */
+	if (ino < APFS_MIN_USER_INO_NUM && parent_ino < APFS_MIN_USER_INO_NUM)
+		return true;
+	if (ino < APFS_UNIFIED_ID_SPACE_MARK + APFS_MIN_USER_INO_NUM)
+		return false;
+
+	if (parent_ino < APFS_MIN_USER_INO_NUM)
+		return true;
+	if (parent_ino < APFS_UNIFIED_ID_SPACE_MARK + APFS_MIN_USER_INO_NUM)
+		return false;
+
+	return true;
+}
+
+/**
  * check_inode_ids - Check that an inode id is consistent with its parent id
  * @ino:	inode number
  * @parent_ino:	parent inode number
@@ -590,13 +614,7 @@ void check_inode_ids(u64 ino, u64 parent_ino)
 		if (ino >= APFS_UNIFIED_ID_SPACE_MARK || parent_ino >= APFS_UNIFIED_ID_SPACE_MARK)
 			report("Inode record", "bad number for data volume inode.");
 	} else if (apfs_is_system_volume_in_group()) {
-		/*
-		 * Reserved inode numbers in volume groups always seem to come
-		 * from the data range, even if this contradicts the reference.
-		 */
-		if (parent_ino < APFS_MIN_USER_INO_NUM)
-			return;
-		if (ino < APFS_UNIFIED_ID_SPACE_MARK + APFS_MIN_USER_INO_NUM || parent_ino < APFS_UNIFIED_ID_SPACE_MARK + APFS_MIN_USER_INO_NUM)
+		if (!inos_valid_for_sysvol_in_group(ino, parent_ino))
 			report("Inode record", "bad number for system volume inode.");
 	}
 }
