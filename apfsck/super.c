@@ -559,8 +559,9 @@ static struct volume_group *get_volume_group(char uuid[16])
 {
 	struct volume_group *vg = sb->s_volume_group;
 
+	/* This shouldn't happen according to the reference, but it does */
 	if (uuid_is_null(uuid))
-		report("Volume group", "uuid is null.");
+		report_weird("Volume group uuid");
 
 	if (vg) {
 		if (memcmp(vg->vg_id, uuid, 16) != 0)
@@ -572,6 +573,7 @@ static struct volume_group *get_volume_group(char uuid[16])
 	if (!vg)
 		system_error();
 	memcpy(vg->vg_id, uuid, 16);
+	sb->s_volume_group = vg;
 	return vg;
 }
 
@@ -714,7 +716,7 @@ static void check_volume_group(struct volume_group *vg)
 	if (!vg->vg_system_seen)
 		report("Volume group", "system volume is missing.");
 	if (!vg->vg_data_seen)
-		report("Volume group", "data volume is missing.");
+		report_weird("Volume group with no data");
 }
 
 /**
