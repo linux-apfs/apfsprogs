@@ -123,7 +123,7 @@ void parse_dentry_record(void *key, struct apfs_drec_val *val, int len)
 
 	parent_ino = cat_cnid(key);
 	check_inode_ids(ino, parent_ino);
-	if (parent_ino != APFS_ROOT_DIR_PARENT) {
+	if (parent_ino != APFS_ROOT_DIR_PARENT && parent_ino != APFS_PURGEABLE_DIR_INO_NUM) {
 		parent = get_inode(parent_ino);
 		if (!parent->i_seen) /* The b-tree keys are in order */
 			report("Dentry record", "parent inode missing");
