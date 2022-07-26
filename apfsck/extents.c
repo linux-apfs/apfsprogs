@@ -303,10 +303,17 @@ u64 parse_phys_ext_record(struct apfs_phys_ext_key *key,
 	 * field to be meaningless.  At least check that the number is in range.
 	 */
 	owner = le64_to_cpu(val->owning_obj_id);
-	if (owner < APFS_MIN_USER_INO_NUM)
-		report("Physical extent record", "invalid or reserved id.");
-	if (owner >= vsb->v_next_obj_id)
-		report("Physical extent record", "free id in use.");
+	if (owner == APFS_OWNING_OBJ_ID_INVALID) {
+		if (kind != APFS_KIND_UPDATE)
+			report("Physical extent record", "invalid owner id for NEW.");
+	} else {
+		if (kind != APFS_KIND_NEW)
+			report("Physical extent record", "valid owner id for UPDATE.");
+		if (owner < APFS_MIN_USER_INO_NUM)
+			report("Physical extent record", "reserved id.");
+		if (owner >= vsb->v_next_obj_id)
+			report("Physical extent record", "free id in use.");
+	}
 
 	refcnt = le32_to_cpu(val->refcnt);
 	if (!refcnt)

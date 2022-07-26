@@ -236,6 +236,9 @@ enum {
 	APFS_KIND_INVALID	= 255 /* This is weird, won't fit in 4 bits */
 };
 
+#define APFS_OWNING_OBJ_ID_INVALID	(~0ULL)
+#define APFS_OWNING_OBJ_ID_UNKNOWN	(~1ULL)
+
 /*
  * Structure of a physical extent record
  */
