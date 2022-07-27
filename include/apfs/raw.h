@@ -574,6 +574,13 @@ struct apfs_xattr_key {
 } __packed;
 
 /*
+ * Structure of the key for a snapshot metadata record
+ */
+struct apfs_snap_metadata_key {
+	struct apfs_key_header hdr;
+} __packed;
+
+/*
  * Structure of the key for a snapshot name record
  */
 struct apfs_snap_name_key {
@@ -1192,6 +1199,28 @@ struct apfs_xattr_val {
 struct apfs_xattr_dstream {
 	__le64 xattr_obj_id;
 	struct apfs_dstream dstream;
+} __packed;
+
+/*
+ * Structure of the value of a snapshot metadata record
+ */
+struct apfs_snap_metadata_val {
+	__le64 extentref_tree_oid;
+	__le64 sblock_oid;
+	__le64 create_time;
+	__le64 change_time;
+	__le64 inum;
+	__le32 extentref_tree_type;
+	__le32 flags;
+	__le16 name_len;
+	u8 name[0];
+} __packed;
+
+/*
+ * Structure of the value of a snapshot name record
+ */
+struct apfs_snap_name_val {
+	__le64 snap_xid;
 } __packed;
 
 #endif	/* _RAW_H */

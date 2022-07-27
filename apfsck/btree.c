@@ -17,6 +17,7 @@
 #include "inode.h"
 #include "key.h"
 #include "object.h"
+#include "snapshot.h"
 #include "spaceman.h"
 #include "super.h"
 #include "xattr.h"
@@ -703,19 +704,12 @@ static void parse_subtree(struct node *root,
 		report("Catalog", "key size should not be fixed.");
 	if (btree_is_free_queue(btree) && !node_has_fixed_kv_size(root))
 		report("Free-space queue", "key size should be fixed.");
+	if (btree_is_snap_meta(btree) && node_has_fixed_kv_size(root))
+		report("Snap meta tree", "key size shouldn't be fixed.");
 
 	/* This makes little sense, but it appears to be true */
 	if (btree_is_extentref(btree) && node_has_fixed_kv_size(root))
 		report("Extent reference tree", "key size shouldn't be fixed.");
-	if (btree_is_snap_meta(btree) && node_has_fixed_kv_size(root))
-		report("Snap meta tree", "key size shouldn't be fixed.");
-
-	if (btree_is_snap_meta(btree)) {
-		if (root->records)
-			report_unknown("Snapshots");
-		if (!node_is_leaf(root))
-			report("Snap meta tree", "has no root node.");
-	}
 
 	for (i = 0; i < root->records; ++i) {
 		struct node *child;
@@ -744,6 +738,8 @@ static void parse_subtree(struct node *root,
 			read_extentref_key(raw_key, len, &curr_key);
 		if (btree_is_free_queue(btree))
 			read_free_queue_key(raw_key, len, &curr_key);
+		if (btree_is_snap_meta(btree))
+			read_snap_key(raw_key, len, &curr_key);
 
 		if (keycmp(last_key, &curr_key) > 0)
 			report("B-tree", "keys are out of order.");
@@ -773,6 +769,8 @@ static void parse_subtree(struct node *root,
 				/* Physical extents must not overlap */
 				last_key->id = parse_phys_ext_record(raw_key,
 								raw_val, len);
+			if (btree_is_snap_meta(btree))
+				parse_snap_record(raw_key, raw_val, len);
 			continue;
 		}
 
@@ -787,8 +785,7 @@ static void parse_subtree(struct node *root,
 			report("B-tree", "nonroot node is flagged as root.");
 
 		/* If a physical node changes, the parent must update the bno */
-		if ((btree_is_omap(btree) || btree_is_extentref(btree)) &&
-		    root->object.xid < child->object.xid)
+		if ((btree_is_omap(btree) || btree_is_extentref(btree) || btree_is_snap_meta(btree)) && root->object.xid < child->object.xid)
 			report("Physical tree",
 			       "xid of node is older than xid of its child.");
 
@@ -932,17 +929,11 @@ static void check_btree_footer(struct btree *btree)
 	if (le32_to_cpu(info->bt_fixed.bt_val_size) != 0)
 		report(ctx, "value size should not be set.");
 
-	if (btree_is_catalog(btree)) {
+	if (btree_is_catalog(btree) || btree_is_snap_meta(btree)) {
 		if (le32_to_cpu(info->bt_longest_key) < btree->longest_key)
 			report(ctx, "wrong maximum key size in info footer.");
 		if (le32_to_cpu(info->bt_longest_val) < btree->longest_val)
 			report(ctx, "wrong maximum value size in info footer.");
-		return;
-	}
-	if (btree_is_snap_meta(btree)) {
-		/* For now we only support empty snapshot metadata trees */
-		if (info->bt_longest_key || info->bt_longest_val)
-			report_unknown("Snapshots");
 		return;
 	}
 
@@ -1001,6 +992,7 @@ struct btree *parse_snap_meta_btree(u64 oid)
 {
 	struct btree *snap;
 	struct key last_key = {0};
+	char name_buf[256];
 
 	snap = calloc(1, sizeof(*snap));
 	if (!snap)
@@ -1009,7 +1001,7 @@ struct btree *parse_snap_meta_btree(u64 oid)
 	snap->omap_table = NULL; /* These are physical objects */
 	snap->root = read_node(oid, snap);
 
-	parse_subtree(snap->root, &last_key, NULL /* name_buf */);
+	parse_subtree(snap->root, &last_key, name_buf);
 
 	check_btree_footer(snap);
 	return snap;

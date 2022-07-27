@@ -20,6 +20,7 @@
 #include "htable.h"
 #include "inode.h"
 #include "object.h"
+#include "snapshot.h"
 #include "spaceman.h"
 #include "super.h"
 
@@ -695,8 +696,6 @@ static struct apfs_superblock *map_volume_super(int vol,
 		report_unknown("Revert to a snapshot");
 	if (le64_to_cpu(vsb->v_raw->apfs_revert_to_sblock_oid) != 0)
 		report_unknown("Revert to a volume superblock");
-	if (le64_to_cpu(vsb->v_raw->apfs_num_snapshots) != 0)
-		report_unknown("Snapshots");
 
 	parse_volume_group_info();
 
@@ -745,6 +744,7 @@ static void check_container(struct super_block *sb)
 		vsb->v_cnid_table = alloc_htable();
 		vsb->v_dstream_table = alloc_htable();
 		vsb->v_inode_table = alloc_htable();
+		vsb->v_snap_table = alloc_htable();
 
 		vsb_raw = map_volume_super(vol, vsb);
 		if (!vsb_raw) {
@@ -766,6 +766,8 @@ static void check_container(struct super_block *sb)
 		vsb->v_snap_meta = parse_snap_meta_btree(
 				le64_to_cpu(vsb_raw->apfs_snap_meta_tree_oid));
 
+		free_snap_table(vsb->v_snap_table);
+		vsb->v_snap_table = NULL;
 		free_inode_table(vsb->v_inode_table);
 		vsb->v_inode_table = NULL;
 		free_dstream_table(vsb->v_dstream_table);
@@ -795,6 +797,8 @@ static void check_container(struct super_block *sb)
 		if (le64_to_cpu(vsb_raw->apfs_num_other_fsobjects) !=
 							vsb->v_special_count)
 			report("Volume superblock", "bad special file count.");
+		if (le64_to_cpu(vsb_raw->apfs_num_snapshots) != vsb->v_snap_count)
+			report("Volume superblock", "bad snapshot count.");
 		if (le64_to_cpu(vsb_raw->apfs_fs_alloc_count) !=
 							vsb->v_block_count - 1)
 			/* The volume superblock itself does not count */

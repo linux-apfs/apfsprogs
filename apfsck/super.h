@@ -28,6 +28,7 @@ struct volume_superblock {
 	struct htable_entry **v_dstream_table;	/* Hash table of all dstreams */
 	struct htable_entry **v_cnid_table;	/* Hash table of all cnids */
 	struct htable_entry **v_extent_table;	/* Hash table of all extents */
+	struct htable_entry **v_snap_table;	/* Hash table of all snapshots */
 
 	/* Volume stats as measured by the fsck */
 	u64 v_file_count;	/* Number of files */
@@ -35,6 +36,7 @@ struct volume_superblock {
 	u64 v_symlink_count;	/* Number of symlinks */
 	u64 v_special_count;	/* Number of other filesystem objects */
 	u64 v_block_count;	/* Number of blocks currently allocated */
+	u64 v_snap_count;	/* Number of snapshots */
 	bool v_has_root;	/* Is there a root directory? */
 	bool v_has_priv;	/* Is there a private directory? */
 

@@ -1,5 +1,5 @@
 SRCS = apfsck.c btree.c dir.c extents.c htable.c \
-       inode.c key.c object.c spaceman.c super.c xattr.c
+       inode.c key.c object.c snapshot.c spaceman.c super.c xattr.c
 OBJS = $(SRCS:.c=.o)
 DEPS = $(SRCS:.c=.d)
 
