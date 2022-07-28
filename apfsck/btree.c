@@ -582,15 +582,24 @@ static void parse_cat_record(void *key, void *val, int len)
 }
 
 /**
- * free_omap_record - Free an object map record structure after a final check
+ * free_omap_record - Free an object map record list after a final check
  * @entry: the entry to free
  */
-static void free_omap_record(struct htable_entry *entry)
+static void free_omap_record_list(struct htable_entry *entry)
 {
-	struct omap_record *omap_rec = (struct omap_record *)entry;
+	struct omap_record_list *list = (struct omap_record_list *)entry;
+	struct omap_record *curr_rec = list->o_records;
 
-	if (!omap_rec->o_seen)
-		report("Omap record", "object id is never used.");
+	while (curr_rec) {
+		struct omap_record *next_rec = NULL;
+
+		if (!curr_rec->seen)
+			report("Omap record", "oid-xid combination is never used.");
+
+		next_rec = curr_rec->next;
+		free(curr_rec);
+		curr_rec = next_rec;
+	}
 
 	free(entry);
 }
@@ -601,22 +610,67 @@ static void free_omap_record(struct htable_entry *entry)
  */
 void free_omap_table(struct htable_entry **table)
 {
-	free_htable(table, free_omap_record);
+	free_htable(table, free_omap_record_list);
 }
 
 /**
  * get_omap_record - Find or create an omap record structure in a hash table
  * @oid:	object id to be mapped
+ * @xid:	transaction id
  * @table:	the hash table of omap records to be searched
  *
  * Returns the omap record structure, after creating it if necessary.
  */
-struct omap_record *get_omap_record(u64 oid, struct htable_entry **table)
+static struct omap_record *get_omap_record(u64 oid, u64 xid, struct htable_entry **table)
 {
-	struct htable_entry *entry;
+	struct omap_record_list *list = NULL;
+	struct omap_record **omap_p = NULL;
+	struct omap_record *omap = NULL;
+	struct omap_record *new = NULL;
 
-	entry = get_htable_entry(oid, sizeof(struct omap_record), table);
-	return (struct omap_record *)entry;
+	list = (struct omap_record_list *)get_htable_entry(oid, sizeof(struct omap_record), table);
+
+	omap_p = &list->o_records;
+	omap = *omap_p;
+	while (omap) {
+		if (xid == omap->xid)
+			return omap;
+		if (xid < omap->xid)
+			break;
+		omap_p = &omap->next;
+		omap = *omap_p;
+	}
+	new = calloc(1, sizeof(*new));
+	if (!new)
+		system_error();
+	new->xid = xid;
+	new->next = omap;
+	*omap_p = new;
+	return new;
+}
+
+/**
+ * get_latest_omap_record - Find the most recent omap record before a given xid
+ * @oid:	object id to be mapped
+ * @xid:	transaction id
+ * @table:	the hash table of omap records to be searched
+ *
+ * Returns the omap record structure, or NULL if there is none matches.
+ */
+struct omap_record *get_latest_omap_record(u64 oid, u64 xid, struct htable_entry **table)
+{
+	struct omap_record_list *list = NULL;
+	struct omap_record *omap = NULL, *prev_omap = NULL;
+
+	list = (struct omap_record_list *)get_htable_entry(oid, sizeof(struct omap_record), table);
+	omap = list->o_records;
+	while (omap) {
+		if (xid < omap->xid)
+			break;
+		prev_omap = omap;
+		omap = prev_omap->next;
+	}
+	return prev_omap;
 }
 
 /**
@@ -643,18 +697,15 @@ static void parse_omap_record(struct apfs_omap_key *key,
 
 	if (vsb) {
 		/* We are parsing a volume's object map */
-		omap_rec = get_omap_record(le64_to_cpu(key->ok_oid),
-					   vsb->v_omap_table);
+		omap_rec = get_omap_record(le64_to_cpu(key->ok_oid), le64_to_cpu(key->ok_xid), vsb->v_omap_table);
 	} else {
 		/* We are parsing the container's object map */
-		omap_rec = get_omap_record(le64_to_cpu(key->ok_oid),
-					   sb->s_omap_table);
+		omap_rec = get_omap_record(le64_to_cpu(key->ok_oid), le64_to_cpu(key->ok_xid), sb->s_omap_table);
 	}
 
-	if (omap_rec->o_xid) /* More than one omap record for the same oid */
-		report_unknown("Snapshots");
-	omap_rec->o_xid = le64_to_cpu(key->ok_xid);
-	omap_rec->o_bno = le64_to_cpu(val->ov_paddr);
+	if (omap_rec->bno)
+		report("Object map", "two entries with the same oid-xid.");
+	omap_rec->bno = le64_to_cpu(val->ov_paddr);
 
 	flags = le32_to_cpu(val->ov_flags);
 	if ((flags & APFS_OMAP_VAL_FLAGS_VALID_MASK) != flags)

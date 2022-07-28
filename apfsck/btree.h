@@ -18,11 +18,19 @@ struct free_queue;
  * Omap record data in memory
  */
 struct omap_record {
-	struct htable_entry o_htable; /* Hash table entry header */
+	struct omap_record *next; /* Next entry in linked list */
 
-	bool	o_seen;	/* Has this oid been seen in use? */
-	u64	o_xid;	/* Transaction id (snapshots are not supported) */
-	u64	o_bno;	/* Block number */
+	u64	xid;	/* Transaction id */
+	u64	bno;	/* Block number */
+	bool	seen;	/* Has this oid-xid pair been seen in use? */
+};
+
+/*
+ * List of all omap records for a given oid
+ */
+struct omap_record_list {
+	struct htable_entry	o_htable;	/* Hash table entry header */
+	struct omap_record 	*o_records;	/* Linked list of records */
 };
 
 /*
@@ -184,8 +192,7 @@ extern void free_query(struct query *query);
 extern int btree_query(struct query **query);
 extern struct node *omap_read_node(u64 id);
 extern void free_omap_table(struct htable_entry **table);
-extern struct omap_record *get_omap_record(u64 oid,
-					   struct htable_entry **table);
+extern struct omap_record *get_latest_omap_record(u64 oid, u64 xid, struct htable_entry **table);
 extern void extentref_lookup(struct node *tbl, u64 bno,
 			     struct extref_record *extref);
 

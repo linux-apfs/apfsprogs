@@ -91,15 +91,13 @@ void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
 	u32 storage_type;
 
 	if (omap_table) {
-		omap_rec = get_omap_record(oid, omap_table);
-		if (omap_rec->o_seen)
+		omap_rec = get_latest_omap_record(oid, sb->s_xid, omap_table);
+		if (!omap_rec || !omap_rec->bno)
+			report("Object map", "record missing for id 0x%llx.", (unsigned long long)oid);
+		if (omap_rec->seen)
 			report("Object map record", "oid was used twice.");
-		omap_rec->o_seen = true;
-
-		bno = omap_rec->o_bno;
-		if (!bno)
-			report("Object map", "record missing for id 0x%llx.",
-			       (unsigned long long)oid);
+		omap_rec->seen = true;
+		bno = omap_rec->bno;
 	} else {
 		bno = oid;
 	}
@@ -132,7 +130,7 @@ void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
 		       (unsigned long long)bno);
 	if (vsb && vsb->v_first_xid > xid)
 		report_weird("Transaction id in block is older than volume");
-	if (omap_table && xid != omap_rec->o_xid)
+	if (omap_table && xid != omap_rec->xid)
 		report("Object header",
 		       "transaction id in omap key doesn't match block 0x%llx.",
 		       (unsigned long long)bno);
