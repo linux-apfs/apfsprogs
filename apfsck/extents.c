@@ -168,39 +168,52 @@ struct dstream *get_dstream(u64 id)
 static void attach_extent_to_dstream(u64 paddr, u64 blk_count,
 				     struct dstream *dstream)
 {
-	struct listed_extent **ext_p = &dstream->d_extents;
-	struct listed_extent *ext = *ext_p;
+	struct listed_extent **ext_p = NULL;
+	struct listed_extent *ext = NULL;
 	struct listed_extent *new;
 	struct extref_record extref;
+	u64 paddr_end;
 
-	if (paddr + blk_count < paddr) /* Overflow */
+	paddr_end = paddr + blk_count;
+	if (paddr_end < paddr) /* Overflow */
 		report("Extent record", "physical address is too big.");
 
-	/* Find out which physical extent contains this address range */
-	extentref_lookup(vsb->v_extent_ref->root, paddr, &extref);
-	if (extref.phys_addr + extref.blocks < paddr + blk_count)
-		report("Extent record", "no entry in extent reference tree.");
-	paddr = extref.phys_addr;
+	/* Find out which physical extents overlap this address range */
+	while (paddr < paddr_end) {
+		extentref_lookup(vsb->v_extent_ref->root, paddr, &extref);
+		if (extref.phys_addr + extref.blocks < paddr)
+			report("Extent record", "not covered by physical extents.");
+		paddr = extref.phys_addr;
 
-	/* Entries are ordered by their physical address */
-	while (ext) {
-		/* Count physical extents only once for each owner */
-		if (paddr == ext->paddr)
-			return;
-
-		if (paddr < ext->paddr)
-			break;
-		ext_p = &ext->next;
+		/*
+		 * Each iteration will go through the whole extent list, but
+		 * looping more than once seems too rare to optimize it.
+		 */
+		ext_p = &dstream->d_extents;
 		ext = *ext_p;
+
+		/* Entries are ordered by their physical address */
+		while (ext) {
+			/* Count physical extents only once for each owner */
+			if (paddr == ext->paddr)
+				return;
+
+			if (paddr < ext->paddr)
+				break;
+			ext_p = &ext->next;
+			ext = *ext_p;
+		}
+
+		new = malloc(sizeof(*new));
+		if (!new)
+			system_error();
+
+		new->paddr = paddr;
+		new->next = ext;
+		*ext_p = new;
+
+		paddr += extref.blocks;
 	}
-
-	new = malloc(sizeof(*new));
-	if (!new)
-		system_error();
-
-	new->paddr = paddr;
-	new->next = ext;
-	*ext_p = new;
 }
 
 /**
