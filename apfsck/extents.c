@@ -22,7 +22,7 @@ static void free_extent(struct htable_entry *entry)
 {
 	struct extent *extent = (struct extent *)entry;
 
-	if (extent->e_refcnt != extent->e_references)
+	if (!vsb->v_in_snapshot && extent->e_refcnt != extent->e_references)
 		report("Physical extent record", "bad reference count.");
 
 	free(entry);
@@ -180,10 +180,19 @@ static void attach_extent_to_dstream(u64 paddr, u64 blk_count,
 
 	/* Find out which physical extents overlap this address range */
 	while (paddr < paddr_end) {
-		extentref_lookup(vsb->v_extent_ref->root, paddr, &extref);
-		if (extref.phys_addr + extref.blocks < paddr)
-			report("Extent record", "not covered by physical extents.");
+		bool ext_is_snap;
+
+		extentref_lookup(paddr, &extref, &ext_is_snap);
 		paddr = extref.phys_addr;
+
+		/*
+		 * I don't know yet how reference counting works for extents
+		 * in snapshots, I'll try to ignore it for now (TODO)
+		 */
+		if (ext_is_snap) {
+			paddr += extref.blocks;
+			continue;
+		}
 
 		/*
 		 * Each iteration will go through the whole extent list, but

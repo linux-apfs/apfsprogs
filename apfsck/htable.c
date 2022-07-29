@@ -46,6 +46,27 @@ void free_htable(struct htable_entry **table,
 }
 
 /**
+ * apply_on_htable - Apply a function to all entries in a hash table
+ * @table:	the hash table
+ * @fn:		function to apply
+ */
+void apply_on_htable(struct htable_entry **table, void (*fn)(struct htable_entry *))
+{
+	struct htable_entry *current;
+	struct htable_entry *next;
+	int i;
+
+	for (i = 0; i < HTABLE_BUCKETS; ++i) {
+		current = table[i];
+		while (current) {
+			next = current->h_next;
+			fn(current);
+			current = next;
+		}
+	}
+}
+
+/**
  * get_htable_entry - Find or create an entry in a hash table
  * @id:		id of the entry
  * @size:	size of the entry

@@ -22,7 +22,13 @@ struct omap_record {
 
 	u64	xid;	/* Transaction id */
 	u64	bno;	/* Block number */
-	bool	seen;	/* Has this oid-xid pair been seen in use? */
+
+	/* Was this oid-xid pair ever seen in use? */
+	bool	seen;
+	/* Was it ever seen in use for the latest checkpoint? */
+	bool	seen_for_latest;
+	/* If we are currently checking a snapshot, was it seen in use for it? */
+	bool	seen_for_snap;
 };
 
 /*
@@ -193,7 +199,7 @@ extern int btree_query(struct query **query);
 extern struct node *omap_read_node(u64 id);
 extern void free_omap_table(struct htable_entry **table);
 extern struct omap_record *get_latest_omap_record(u64 oid, u64 xid, struct htable_entry **table);
-extern void extentref_lookup(struct node *tbl, u64 bno,
-			     struct extref_record *extref);
+extern void extentref_lookup(u64 bno, struct extref_record *extref, bool *is_snap);
+extern void omap_htable_clear_seen_for_snap(struct htable_entry **table);
 
 #endif	/* _BTREE_H */

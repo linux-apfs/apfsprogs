@@ -34,6 +34,7 @@ struct listed_cnid {
 extern struct htable_entry **alloc_htable();
 extern void free_htable(struct htable_entry **table,
 			void (*free_entry)(struct htable_entry *));
+extern void apply_on_htable(struct htable_entry **table, void (*fn)(struct htable_entry *));
 extern struct htable_entry *get_htable_entry(u64 id, int size,
 					     struct htable_entry **table);
 extern void free_cnid_table(struct htable_entry **table);

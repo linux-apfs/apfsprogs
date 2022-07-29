@@ -614,6 +614,28 @@ void free_omap_table(struct htable_entry **table)
 }
 
 /**
+ * omap_list_clear_seen_for_snap - Clear seen_for_snap for all omap recs in list
+ * @entry: a list of omap records
+ */
+static void omap_list_clear_seen_for_snap(struct htable_entry *entry)
+{
+	struct omap_record_list *list = (struct omap_record_list *)entry;
+	struct omap_record *rec = NULL;
+
+	for (rec = list->o_records; rec; rec = rec->next)
+		rec->seen_for_snap = false;
+}
+
+/**
+ * omap_htable_clear_seen_for_snap - Clear seen_for_snap on all omap recs
+ * @table: the hash table of omap records to be cleared
+ */
+void omap_htable_clear_seen_for_snap(struct htable_entry **table)
+{
+	return apply_on_htable(table, omap_list_clear_seen_for_snap);
+}
+
+/**
  * get_omap_record - Find or create an omap record structure in a hash table
  * @oid:	object id to be mapped
  * @xid:	transaction id
@@ -1224,15 +1246,18 @@ static void extref_rec_from_query(struct query *query,
 }
 
 /**
- * extentref_lookup - Find the best match for an extent in the extentref tree
+ * extentref_tree_lookup - Find best match for an extent in an extentref tree
  * @tbl:	root of the extent reference tree to be searched
  * @bno:	first block number for the extent
  * @extref:	extentref record struct to receive the result
+ *
+ * Returns 0 on success, or -1 if nothing was found.
  */
-void extentref_lookup(struct node *tbl, u64 bno, struct extref_record *extref)
+static int extentref_tree_lookup(struct node *tbl, u64 bno, struct extref_record *extref)
 {
 	struct query *query;
 	struct key key;
+	int ret = -1;
 
 	query = alloc_query(tbl, NULL /* parent */);
 
@@ -1246,15 +1271,46 @@ void extentref_lookup(struct node *tbl, u64 bno, struct extref_record *extref)
 	 * read_object() to ignore the bitmap this time.
 	 */
 	ongoing_query = true;
-	if (btree_query(&query)) {
-		report("Extent reference tree",
-		       "record missing for block number 0x%llx.",
-		       (unsigned long long)bno);
-	}
+	if (btree_query(&query))
+		goto fail;
 	ongoing_query = false;
 
 	extref_rec_from_query(query, extref);
+	ret = 0;
+fail:
 	free_query(query);
+	return ret;
+}
+
+/**
+ * extentref_lookup - Find the best match for an extent in the extentref trees
+ * @bno:	first block number for the extent
+ * @extref:	extentref record struct to receive the result
+ * @is_snap:	is this psysical extent part of a snapshot?
+ */
+void extentref_lookup(u64 bno, struct extref_record *extref, bool *is_snap)
+{
+	struct listed_btree *ext_tree = NULL;
+	int ret;
+
+	if (!vsb->v_in_snapshot) {
+		ret = extentref_tree_lookup(vsb->v_extent_ref->root, bno, extref);
+		if (ret == 0 && extref->phys_addr <= bno && extref->phys_addr + extref->blocks > bno) {
+			*is_snap = false;
+			return;
+		}
+	}
+
+	/* We look at the most recent snapshots first */
+	for (ext_tree = vsb->v_snap_extrefs; ext_tree; ext_tree = ext_tree->next) {
+		ret = extentref_tree_lookup(ext_tree->btree->root, bno, extref);
+		if (ret == 0 && extref->phys_addr <= bno && extref->phys_addr + extref->blocks > bno) {
+			*is_snap = true;
+			return;
+		}
+	}
+
+	report("Extent record", "not covered by physical extents.");
 }
 
 /**

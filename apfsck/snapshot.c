@@ -74,6 +74,47 @@ static void parse_snap_name_record(struct apfs_snap_name_key *key, struct apfs_s
 }
 
 /**
+ * check_snapshot - Check a whole snapshot
+ * @xid:		transaction for the snapshot
+ * @vol_bno:		block number for the snapshot volume superblock
+ * @extentref_bno:	block number for the snapshot's extentref tree
+ */
+static void check_snapshot(u64 xid, u64 vol_bno, u64 extentref_bno)
+{
+	struct volume_superblock *latest_vsb = vsb;
+	u64 latest_xid = sb->s_xid;
+
+	vsb = NULL;
+
+	sb->s_xid = xid;
+	vsb = alloc_volume_super(true);
+	/* The list of extref trees is shared by all transactions */
+	vsb->v_snap_extrefs = latest_vsb->v_snap_extrefs;
+	vsb->v_raw = read_object(vol_bno, NULL, &vsb->v_obj);
+	read_volume_super(latest_vsb->v_index, vsb, &vsb->v_obj);
+
+	if (vsb->v_extref_oid != 0)
+		report("Snapshot volume superblock", "has extentref tree.");
+	vsb->v_extref_oid = extentref_bno;
+
+	if (vsb->v_omap_oid != 0)
+		report("Snapshot volume superblock", "has object map.");
+	vsb->v_omap = latest_vsb->v_omap;
+	vsb->v_omap_table = latest_vsb->v_omap_table;
+	omap_htable_clear_seen_for_snap(latest_vsb->v_omap_table);
+
+	if (vsb->v_snap_meta_oid != 0)
+		report("Snapshot volume superblock", "has snapshot tree.");
+
+	check_volume_super();
+
+	/* Go back to the latest transaction */
+	sb->s_xid = latest_xid;
+	latest_vsb->v_snap_extrefs = vsb->v_snap_extrefs;
+	vsb = latest_vsb; /* TODO: don't leak */
+}
+
+/**
  * parse_snap_metadata_record - Parse and check a snapshot metadata record value
  * @key:	pointer to the raw key
  * @val:	pointer to the raw value
@@ -84,6 +125,7 @@ static void parse_snap_name_record(struct apfs_snap_name_key *key, struct apfs_s
 static void parse_snap_metadata_record(struct apfs_snap_metadata_key *key, struct apfs_snap_metadata_val *val, int len)
 {
 	struct snapshot *snap = NULL;
+	u64 snap_xid;
 	int namelen;
 
 	if (len < sizeof(*val) + 1)
@@ -97,7 +139,8 @@ static void parse_snap_metadata_record(struct apfs_snap_metadata_key *key, struc
 	if (len != sizeof(*val) + namelen)
 		report("Snapshot metadata record", "size of value doesn't match name length.");
 
-	snap = get_snapshot(cat_cnid(&key->hdr));
+	snap_xid = cat_cnid(&key->hdr);
+	snap = get_snapshot(snap_xid);
 	if (snap->sn_meta_seen)
 		report("Snapshot tree", "snap with two metadata records.");
 	snap->sn_meta_seen = true;
@@ -111,6 +154,8 @@ static void parse_snap_metadata_record(struct apfs_snap_metadata_key *key, struc
 		report("Snapshot metadata", "wrong type for extentref tree.");
 	if (val->flags)
 		report_unknown("Snapshot flags");
+
+	check_snapshot(snap_xid, le64_to_cpu(val->sblock_oid), le64_to_cpu(val->extentref_tree_oid));
 }
 
 /**

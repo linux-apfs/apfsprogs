@@ -85,7 +85,7 @@ u32 parse_object_flags(u32 flags)
 void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
 {
 	struct apfs_obj_phys *raw;
-	struct omap_record *omap_rec;
+	struct omap_record *omap_rec = NULL;
 	u64 bno;
 	u64 xid;
 	u32 storage_type;
@@ -94,9 +94,15 @@ void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
 		omap_rec = get_latest_omap_record(oid, sb->s_xid, omap_table);
 		if (!omap_rec || !omap_rec->bno)
 			report("Object map", "record missing for id 0x%llx.", (unsigned long long)oid);
-		if (omap_rec->seen)
-			report("Object map record", "oid was used twice.");
-		omap_rec->seen = true;
+		if (vsb && vsb->v_in_snapshot) {
+			if (omap_rec->seen_for_snap)
+				report("Object map record", "oid used twice for same snapshot.");
+			omap_rec->seen_for_snap = true;
+		} else {
+			if (omap_rec->seen_for_latest)
+				report("Object map record", "oid used twice in latest checkpoint.");
+			omap_rec->seen_for_latest = true;
+		}
 		bno = omap_rec->bno;
 	} else {
 		bno = oid;
@@ -109,6 +115,11 @@ void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
 		if ((obj->type == APFS_OBJECT_TYPE_SPACEMAN_CIB) ||
 		     (obj->type == APFS_OBJECT_TYPE_SPACEMAN_CAB)) {
 			ip_bmap_mark_as_used(bno, 1 /* length */);
+		} else if (omap_table) {
+			/* Virtual objects may be shared between snapshots */
+			if (!omap_rec->seen)
+				container_bmap_mark_as_used(bno, 1 /* length */);
+			omap_rec->seen = true;
 		} else {
 			container_bmap_mark_as_used(bno, 1 /* length */);
 		}

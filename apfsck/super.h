@@ -17,11 +17,20 @@ struct volume_group {
 	bool vg_data_seen;
 };
 
+/**
+ * An entry in a linked list of b-trees
+ */
+struct listed_btree {
+	struct btree *btree;
+	struct listed_btree *next;
+};
+
 struct volume_superblock {
 	struct apfs_superblock *v_raw;
 	struct btree *v_omap;
 	struct btree *v_cat;
 	struct btree *v_extent_ref;
+	struct listed_btree *v_snap_extrefs;	/* Snapshots have their own */
 	struct btree *v_snap_meta;
 	struct htable_entry **v_omap_table;	/* Hash table of omap records */
 	struct htable_entry **v_inode_table;	/* Hash table of all inodes */
@@ -29,6 +38,8 @@ struct volume_superblock {
 	struct htable_entry **v_cnid_table;	/* Hash table of all cnids */
 	struct htable_entry **v_extent_table;	/* Hash table of all extents */
 	struct htable_entry **v_snap_table;	/* Hash table of all snapshots */
+
+	bool v_in_snapshot;			/* Is this a snapshot volume? */
 
 	/* Volume stats as measured by the fsck */
 	u64 v_file_count;	/* Number of files */
@@ -41,9 +52,13 @@ struct volume_superblock {
 	bool v_has_priv;	/* Is there a private directory? */
 
 	/* Volume information read from the on-disk structure */
+	u64 v_extref_oid;	/* Object id for the extent reference tree */
+	u64 v_omap_oid;		/* Object id for object map tree */
+	u64 v_snap_meta_oid;	/* Object id for the snapshot metadata tree */
 	u64 v_first_xid;	/* Transaction that created the volume */
 	u64 v_next_obj_id;	/* Next cnid to be assigned */
 	u32 v_next_doc_id;	/* Next document identifier to be assigned */
+	u32 v_index;		/* Index in the container's volume array */
 
 	struct object v_obj;		/* Object holding the volume sb */
 };
@@ -136,7 +151,7 @@ static inline bool apfs_is_system_volume_in_group(void)
 }
 
 extern void parse_filesystem(void);
-extern struct volume_superblock *alloc_volume_super(void);
+extern struct volume_superblock *alloc_volume_super(bool snap);
 extern void read_volume_super(int vol, struct volume_superblock *vsb, struct object *obj);
 extern void check_volume_super(void);
 

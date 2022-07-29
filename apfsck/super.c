@@ -588,6 +588,8 @@ static void parse_volume_group_info(void)
 
 	if (apfs_volume_is_in_group()) {
 		vg = get_volume_group(vg_uuid);
+		if (vsb->v_in_snapshot)
+			return;
 		if (apfs_is_data_volume_in_group()) {
 			if (vg->vg_data_seen)
 				report("Volume group", "two data volumes.");
@@ -620,7 +622,8 @@ void read_volume_super(int vol, struct volume_superblock *vsb, struct object *ob
 	if (vsb->v_obj.subtype != APFS_OBJECT_TYPE_INVALID)
 		report("Volume superblock", "wrong object subtype.");
 
-	if (le32_to_cpu(vsb->v_raw->apfs_fs_index) != vol)
+	vsb->v_index = le32_to_cpu(vsb->v_raw->apfs_fs_index);
+	if (vsb->v_index != vol)
 		report("Volume superblock", "wrong reported volume number.");
 	if (le32_to_cpu(vsb->v_raw->apfs_magic) != APFS_MAGIC)
 		report("Volume superblock", "wrong magic.");
@@ -681,6 +684,10 @@ void read_volume_super(int vol, struct volume_superblock *vsb, struct object *ob
 		report_unknown("Revert to a volume superblock");
 
 	parse_volume_group_info();
+
+	vsb->v_extref_oid = le64_to_cpu(vsb->v_raw->apfs_extentref_tree_oid);
+	vsb->v_omap_oid = le64_to_cpu(vsb->v_raw->apfs_omap_oid);
+	vsb->v_snap_meta_oid = le64_to_cpu(vsb->v_raw->apfs_snap_meta_tree_oid);
 }
 
 /**
@@ -731,21 +738,25 @@ static void check_volume_group(struct volume_group *vg)
 
 /**
  * alloc_volume_super - Allocate an in-memory volume superblock struct
+ * @snap:	is this a snapshot?
  */
-struct volume_superblock *alloc_volume_super(void)
+struct volume_superblock *alloc_volume_super(bool snap)
 {
 	struct volume_superblock *ret = NULL;
 
 	ret = calloc(1, sizeof(*ret));
 	if (!ret)
 		system_error();
+	ret->v_in_snapshot = snap;
 
-	ret->v_omap_table = alloc_htable();
+	if (!snap) {
+		ret->v_omap_table = alloc_htable();
+		ret->v_snap_table = alloc_htable();
+	}
 	ret->v_extent_table = alloc_htable();
 	ret->v_cnid_table = alloc_htable();
 	ret->v_dstream_table = alloc_htable();
 	ret->v_inode_table = alloc_htable();
-	ret->v_snap_table = alloc_htable();
 
 	return ret;
 }
@@ -757,17 +768,32 @@ void check_volume_super(void)
 {
 	struct apfs_superblock *vsb_raw = vsb->v_raw;
 
-	/* Check for corruption in the volume object map... */
-	vsb->v_omap = parse_omap_btree(le64_to_cpu(vsb_raw->apfs_omap_oid));
-	/* ...in the extent reference tree... */
-	vsb->v_extent_ref = parse_extentref_btree(le64_to_cpu(vsb_raw->apfs_extentref_tree_oid));
-	/* ...in the catalog... */
-	vsb->v_cat = parse_cat_btree(le64_to_cpu(vsb_raw->apfs_root_tree_oid), vsb->v_omap_table);
-	/* ...and in the snapshot metadata tree */
-	vsb->v_snap_meta = parse_snap_meta_btree(le64_to_cpu(vsb_raw->apfs_snap_meta_tree_oid));
+	if (!vsb->v_in_snapshot) {
+		vsb->v_omap = parse_omap_btree(vsb->v_omap_oid);
+		vsb->v_snap_meta = parse_snap_meta_btree(vsb->v_snap_meta_oid);
+	}
 
-	free_snap_table(vsb->v_snap_table);
-	vsb->v_snap_table = NULL;
+	/* The first tree is for the latest xid, the others are for snapshots */
+	if (!vsb->v_in_snapshot) {
+		vsb->v_extent_ref = parse_extentref_btree(vsb->v_extref_oid);
+	} else {
+		/* We want the most recent snapshots first */
+		struct listed_btree *new = NULL;
+
+		new = calloc(1, sizeof(*new));
+		if (!new)
+			system_error();
+		new->btree = parse_extentref_btree(vsb->v_extref_oid);
+		new->next = vsb->v_snap_extrefs;
+		vsb->v_snap_extrefs = new;
+	}
+
+	vsb->v_cat = parse_cat_btree(le64_to_cpu(vsb_raw->apfs_root_tree_oid), vsb->v_omap_table);
+
+	if (!vsb->v_in_snapshot) {
+		free_snap_table(vsb->v_snap_table);
+		vsb->v_snap_table = NULL;
+	}
 	free_inode_table(vsb->v_inode_table);
 	vsb->v_inode_table = NULL;
 	free_dstream_table(vsb->v_dstream_table);
@@ -776,8 +802,10 @@ void check_volume_super(void)
 	vsb->v_cnid_table = NULL;
 	free_extent_table(vsb->v_extent_table);
 	vsb->v_extent_table = NULL;
-	free_omap_table(vsb->v_omap_table);
-	vsb->v_omap_table = NULL;
+	if (!vsb->v_in_snapshot) {
+		free_omap_table(vsb->v_omap_table);
+		vsb->v_omap_table = NULL;
+	}
 
 	if (!vsb->v_has_root)
 		report("Catalog", "the root directory is missing.");
@@ -818,7 +846,7 @@ static void check_container(struct super_block *sb)
 	for (vol = 0; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol) {
 		struct apfs_superblock *vsb_raw;
 
-		vsb = alloc_volume_super();
+		vsb = alloc_volume_super(false);
 
 		vsb_raw = map_volume_super(vol, vsb);
 		if (!vsb_raw) {
@@ -827,8 +855,8 @@ static void check_container(struct super_block *sb)
 		}
 		check_volume_super();
 		sb->s_volumes[vol] = vsb;
+		vsb = NULL;
 	}
-	vsb = NULL;
 
 	free_omap_table(sb->s_omap_table);
 	sb->s_omap_table = NULL;
