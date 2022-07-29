@@ -136,5 +136,8 @@ static inline bool apfs_is_system_volume_in_group(void)
 }
 
 extern void parse_filesystem(void);
+extern struct volume_superblock *alloc_volume_super(void);
+extern void read_volume_super(int vol, struct volume_superblock *vsb, struct object *obj);
+extern void check_volume_super(void);
 
 #endif	/* _SUPER_H */

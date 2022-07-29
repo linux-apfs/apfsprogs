@@ -606,32 +606,15 @@ static void parse_volume_group_info(void)
 }
 
 /**
- * map_volume_super - Find the volume superblock and map it into memory
+ * read_volume_super - Read the volume superblock and run some checks
  * @vol:	volume number
  * @vsb:	volume superblock struct to receive the results
- *
- * Returns the in-memory location of the volume superblock, or NULL if there
- * is no volume with this number.
+ * @obj:	volume superblock object
  */
-static struct apfs_superblock *map_volume_super(int vol,
-						struct volume_superblock *vsb)
+void read_volume_super(int vol, struct volume_superblock *vsb, struct object *obj)
 {
-	struct apfs_nx_superblock *msb_raw = sb->s_raw;
-	char *vol_name;
-	u64 vol_id;
+	char *vol_name = NULL;
 
-	vol_id = le64_to_cpu(msb_raw->nx_fs_oid[vol]);
-	if (vol_id == 0) {
-		if (vol > sb->s_max_vols)
-			report("Container superblock", "too many volumes.");
-		for (++vol; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol)
-			if (msb_raw->nx_fs_oid[vol])
-				report("Container superblock",
-				       "volume array goes on after NULL.");
-		return NULL;
-	}
-
-	vsb->v_raw = read_object(vol_id, sb->s_omap_table, &vsb->v_obj);
 	if (vsb->v_obj.type != APFS_OBJECT_TYPE_FS)
 		report("Volume superblock", "wrong object type.");
 	if (vsb->v_obj.subtype != APFS_OBJECT_TYPE_INVALID)
@@ -698,7 +681,35 @@ static struct apfs_superblock *map_volume_super(int vol,
 		report_unknown("Revert to a volume superblock");
 
 	parse_volume_group_info();
+}
 
+/**
+ * map_volume_super - Find the volume superblock and map it into memory
+ * @vol:	volume number
+ * @vsb:	volume superblock struct to receive the results
+ *
+ * Returns the in-memory location of the volume superblock, or NULL if there
+ * is no volume with this number.
+ */
+static struct apfs_superblock *map_volume_super(int vol,
+						struct volume_superblock *vsb)
+{
+	struct apfs_nx_superblock *msb_raw = sb->s_raw;
+	u64 vol_id;
+
+	vol_id = le64_to_cpu(msb_raw->nx_fs_oid[vol]);
+	if (vol_id == 0) {
+		if (vol > sb->s_max_vols)
+			report("Container superblock", "too many volumes.");
+		for (++vol; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol)
+			if (msb_raw->nx_fs_oid[vol])
+				report("Container superblock",
+				       "volume array goes on after NULL.");
+		return NULL;
+	}
+
+	vsb->v_raw = read_object(vol_id, sb->s_omap_table, &vsb->v_obj);
+	read_volume_super(vol, vsb, &vsb->v_obj);
 	return vsb->v_raw;
 }
 
@@ -719,6 +730,77 @@ static void check_volume_group(struct volume_group *vg)
 }
 
 /**
+ * alloc_volume_super - Allocate an in-memory volume superblock struct
+ */
+struct volume_superblock *alloc_volume_super(void)
+{
+	struct volume_superblock *ret = NULL;
+
+	ret = calloc(1, sizeof(*ret));
+	if (!ret)
+		system_error();
+
+	ret->v_omap_table = alloc_htable();
+	ret->v_extent_table = alloc_htable();
+	ret->v_cnid_table = alloc_htable();
+	ret->v_dstream_table = alloc_htable();
+	ret->v_inode_table = alloc_htable();
+	ret->v_snap_table = alloc_htable();
+
+	return ret;
+}
+
+/**
+ * check_volume_super - Parse and check the whole current volume superblock
+ */
+void check_volume_super(void)
+{
+	struct apfs_superblock *vsb_raw = vsb->v_raw;
+
+	/* Check for corruption in the volume object map... */
+	vsb->v_omap = parse_omap_btree(le64_to_cpu(vsb_raw->apfs_omap_oid));
+	/* ...in the extent reference tree... */
+	vsb->v_extent_ref = parse_extentref_btree(le64_to_cpu(vsb_raw->apfs_extentref_tree_oid));
+	/* ...in the catalog... */
+	vsb->v_cat = parse_cat_btree(le64_to_cpu(vsb_raw->apfs_root_tree_oid), vsb->v_omap_table);
+	/* ...and in the snapshot metadata tree */
+	vsb->v_snap_meta = parse_snap_meta_btree(le64_to_cpu(vsb_raw->apfs_snap_meta_tree_oid));
+
+	free_snap_table(vsb->v_snap_table);
+	vsb->v_snap_table = NULL;
+	free_inode_table(vsb->v_inode_table);
+	vsb->v_inode_table = NULL;
+	free_dstream_table(vsb->v_dstream_table);
+	vsb->v_dstream_table = NULL;
+	free_cnid_table(vsb->v_cnid_table);
+	vsb->v_cnid_table = NULL;
+	free_extent_table(vsb->v_extent_table);
+	vsb->v_extent_table = NULL;
+	free_omap_table(vsb->v_omap_table);
+	vsb->v_omap_table = NULL;
+
+	if (!vsb->v_has_root)
+		report("Catalog", "the root directory is missing.");
+	if (!vsb->v_has_priv)
+		report("Catalog", "the private directory is missing.");
+
+	if (le64_to_cpu(vsb_raw->apfs_num_files) != vsb->v_file_count)
+		/* Sometimes this is off by one.  TODO: why? */
+		report_weird("File count in volume superblock");
+	if (le64_to_cpu(vsb_raw->apfs_num_directories) != vsb->v_dir_count)
+		report("Volume superblock", "bad directory count.");
+	if (le64_to_cpu(vsb_raw->apfs_num_symlinks) != vsb->v_symlink_count)
+		report("Volume superblock", "bad symlink count.");
+	if (le64_to_cpu(vsb_raw->apfs_num_other_fsobjects) != vsb->v_special_count)
+		report("Volume superblock", "bad special file count.");
+	if (le64_to_cpu(vsb_raw->apfs_num_snapshots) != vsb->v_snap_count)
+		report("Volume superblock", "bad snapshot count.");
+	if (le64_to_cpu(vsb_raw->apfs_fs_alloc_count) != vsb->v_block_count - 1)
+		/* The volume superblock itself does not count */
+		report("Volume superblock", "bad block count.");
+}
+
+/**
  * check_container - Check the whole container for a given checkpoint
  * @sb: checkpoint superblock
  */
@@ -736,74 +818,14 @@ static void check_container(struct super_block *sb)
 	for (vol = 0; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol) {
 		struct apfs_superblock *vsb_raw;
 
-		vsb = calloc(1, sizeof(*vsb));
-		if (!vsb)
-			system_error();
-		vsb->v_omap_table = alloc_htable();
-		vsb->v_extent_table = alloc_htable();
-		vsb->v_cnid_table = alloc_htable();
-		vsb->v_dstream_table = alloc_htable();
-		vsb->v_inode_table = alloc_htable();
-		vsb->v_snap_table = alloc_htable();
+		vsb = alloc_volume_super();
 
 		vsb_raw = map_volume_super(vol, vsb);
 		if (!vsb_raw) {
 			free(vsb);
 			break;
 		}
-
-		/* Check for corruption in the volume object map... */
-		vsb->v_omap = parse_omap_btree(
-				le64_to_cpu(vsb_raw->apfs_omap_oid));
-		/* ...in the extent reference tree... */
-		vsb->v_extent_ref = parse_extentref_btree(
-				le64_to_cpu(vsb_raw->apfs_extentref_tree_oid));
-		/* ...in the catalog... */
-		vsb->v_cat = parse_cat_btree(
-				le64_to_cpu(vsb_raw->apfs_root_tree_oid),
-				vsb->v_omap_table);
-		/* ...and in the snapshot metadata tree */
-		vsb->v_snap_meta = parse_snap_meta_btree(
-				le64_to_cpu(vsb_raw->apfs_snap_meta_tree_oid));
-
-		free_snap_table(vsb->v_snap_table);
-		vsb->v_snap_table = NULL;
-		free_inode_table(vsb->v_inode_table);
-		vsb->v_inode_table = NULL;
-		free_dstream_table(vsb->v_dstream_table);
-		vsb->v_dstream_table = NULL;
-		free_cnid_table(vsb->v_cnid_table);
-		vsb->v_cnid_table = NULL;
-		free_extent_table(vsb->v_extent_table);
-		vsb->v_extent_table = NULL;
-		free_omap_table(vsb->v_omap_table);
-		vsb->v_omap_table = NULL;
-
-		if (!vsb->v_has_root)
-			report("Catalog", "the root directory is missing.");
-		if (!vsb->v_has_priv)
-			report("Catalog", "the private directory is missing.");
-
-		if (le64_to_cpu(vsb_raw->apfs_num_files) !=
-							vsb->v_file_count)
-			/* Sometimes this is off by one.  TODO: why? */
-			report_weird("File count in volume superblock");
-		if (le64_to_cpu(vsb_raw->apfs_num_directories) !=
-							vsb->v_dir_count)
-			report("Volume superblock", "bad directory count.");
-		if (le64_to_cpu(vsb_raw->apfs_num_symlinks) !=
-							vsb->v_symlink_count)
-			report("Volume superblock", "bad symlink count.");
-		if (le64_to_cpu(vsb_raw->apfs_num_other_fsobjects) !=
-							vsb->v_special_count)
-			report("Volume superblock", "bad special file count.");
-		if (le64_to_cpu(vsb_raw->apfs_num_snapshots) != vsb->v_snap_count)
-			report("Volume superblock", "bad snapshot count.");
-		if (le64_to_cpu(vsb_raw->apfs_fs_alloc_count) !=
-							vsb->v_block_count - 1)
-			/* The volume superblock itself does not count */
-			report("Volume superblock", "bad block count.");
-
+		check_volume_super();
 		sb->s_volumes[vol] = vsb;
 	}
 	vsb = NULL;
