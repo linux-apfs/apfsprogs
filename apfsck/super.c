@@ -823,9 +823,17 @@ void check_volume_super(void)
 		report("Volume superblock", "bad special file count.");
 	if (le64_to_cpu(vsb_raw->apfs_num_snapshots) != vsb->v_snap_count)
 		report("Volume superblock", "bad snapshot count.");
-	if (le64_to_cpu(vsb_raw->apfs_fs_alloc_count) != vsb->v_block_count - 1)
-		/* The volume superblock itself does not count */
-		report("Volume superblock", "bad block count.");
+
+	/*
+	 * The original omap for a snapshot is not preserved, so there is no way
+	 * to know the real value of v_block_count back then.
+	 */
+	if (!vsb->v_in_snapshot) {
+		if (le64_to_cpu(vsb_raw->apfs_fs_alloc_count) != vsb->v_block_count - 1) {
+			/* The volume superblock itself does not count */
+			report("Volume superblock", "bad block count.");
+		}
+	}
 }
 
 /**
