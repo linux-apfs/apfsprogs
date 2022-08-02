@@ -111,6 +111,7 @@ static void check_snapshot(u64 xid, u64 vol_bno, u64 extentref_bno)
 	/* Go back to the latest transaction */
 	sb->s_xid = latest_xid;
 	latest_vsb->v_snap_extrefs = vsb->v_snap_extrefs;
+	latest_vsb->v_block_count += vsb->v_block_count;
 	vsb = latest_vsb; /* TODO: don't leak */
 }
 

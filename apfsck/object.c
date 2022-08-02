@@ -110,18 +110,21 @@ void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
 
 	raw = read_object_nocheck(bno, obj);
 	if (!ongoing_query) { /* Query code will revisit already parsed nodes */
-		if (vsb)
-			++vsb->v_block_count;
 		if ((obj->type == APFS_OBJECT_TYPE_SPACEMAN_CIB) ||
 		     (obj->type == APFS_OBJECT_TYPE_SPACEMAN_CAB)) {
 			ip_bmap_mark_as_used(bno, 1 /* length */);
 		} else if (omap_table) {
 			/* Virtual objects may be shared between snapshots */
-			if (!omap_rec->seen)
+			if (!omap_rec->seen) {
 				container_bmap_mark_as_used(bno, 1 /* length */);
+				if (vsb)
+					++vsb->v_block_count;
+			}
 			omap_rec->seen = true;
 		} else {
 			container_bmap_mark_as_used(bno, 1 /* length */);
+			if (vsb)
+				++vsb->v_block_count;
 		}
 	}
 
