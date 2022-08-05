@@ -120,6 +120,15 @@ struct apfs_omap_val {
 	__le64 ov_paddr;
 } __packed;
 
+/*
+ * Structure of a value in an omap's snapshot tree
+ */
+struct apfs_omap_snapshot {
+	__le32 oms_flags;
+	__le32 oms_pad;
+	__le64 oms_oid;
+} __packed;
+
 /* B-tree node flags */
 #define APFS_BTNODE_ROOT		0x0001
 #define APFS_BTNODE_LEAF		0x0002

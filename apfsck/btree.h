@@ -127,6 +127,7 @@ struct query {
 #define BTREE_TYPE_EXTENTREF	3 /* The tree is for extent references */
 #define BTREE_TYPE_SNAP_META	4 /* The tree is for snapshot metadata */
 #define BTREE_TYPE_FREE_QUEUE	5 /* The tree is for a free-space queue */
+#define BTREE_TYPE_SNAPSHOTS	6 /* The tree is for omap snapshots */
 
 /* In-memory structure representing a b-tree */
 struct btree {
@@ -150,6 +151,11 @@ struct btree {
 static inline bool btree_is_free_queue(struct btree *btree)
 {
 	return btree->type == BTREE_TYPE_FREE_QUEUE;
+}
+
+static inline bool btree_is_snapshots(struct btree *btree)
+{
+	return btree->type == BTREE_TYPE_SNAPSHOTS;
 }
 
 /**

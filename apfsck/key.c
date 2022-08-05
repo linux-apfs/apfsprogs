@@ -373,3 +373,17 @@ void read_snap_key(void *raw, int size, struct key *key)
 		report("Snapshot metadata tree", "invalid key type.");
 	}
 }
+
+void read_omap_snap_key(void *raw, int size, struct key *key)
+{
+	__le64 *xid;
+
+	if (size != sizeof(*xid))
+		report("Omap snapshot tree", "wrong size of key.");
+	xid = raw;
+
+	key->id = le64_to_cpu(*xid);
+	key->type = 0;
+	key->number = 0;
+	key->name = NULL;
+}

@@ -311,6 +311,8 @@ static struct node *read_node(u64 oid, struct btree *btree)
 	if (btree_is_free_queue(btree) && obj_subtype !=
 					 APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE)
 		report("Free queue node", "wrong object subtype.");
+	if (btree_is_snapshots(btree) && obj_subtype != APFS_OBJECT_TYPE_OMAP_SNAPSHOT)
+		report("Omap snapshot tree node", "wrong object subtype.");
 
 	node_prepare_bitmaps(node);
 
@@ -359,7 +361,7 @@ static int node_locate_key(struct node *node, int index, int *off)
 		struct apfs_kvoff *entry;
 
 		entry = (struct apfs_kvoff *)raw->btn_data + index;
-		len = 16;
+		len = btree_is_snapshots(node->btree) ? 8 : 16;
 		off_in_area = le16_to_cpu(entry->k);
 	} else {
 		/* These node types have variable length keys and data */
@@ -416,6 +418,8 @@ static int node_locate_data(struct node *node, int index, int *off)
 		}
 		if (btree_is_omap(btree))
 			len = node_is_leaf(node) ? 16 : 8;
+		if (btree_is_snapshots(btree))
+			len = node_is_leaf(node) ? sizeof(struct apfs_omap_snapshot) : 8;
 
 		/* Value offsets are backwards from the end of the value area */
 		off_in_area = area_len - le16_to_cpu(entry->v);
@@ -779,6 +783,8 @@ static void parse_subtree(struct node *root,
 		report("Free-space queue", "key size should be fixed.");
 	if (btree_is_snap_meta(btree) && node_has_fixed_kv_size(root))
 		report("Snap meta tree", "key size shouldn't be fixed.");
+	if (btree_is_snapshots(btree) && !node_has_fixed_kv_size(root))
+		report("Omap snapshot tree", "key size should be fixed.");
 
 	/* This makes little sense, but it appears to be true */
 	if (btree_is_extentref(btree) && node_has_fixed_kv_size(root))
@@ -813,6 +819,8 @@ static void parse_subtree(struct node *root,
 			read_free_queue_key(raw_key, len, &curr_key);
 		if (btree_is_snap_meta(btree))
 			read_snap_key(raw_key, len, &curr_key);
+		if (btree_is_snapshots(btree))
+			read_omap_snap_key(raw_key, len, &curr_key);
 
 		if (keycmp(last_key, &curr_key) > 0)
 			report("B-tree", "keys are out of order.");
@@ -844,6 +852,8 @@ static void parse_subtree(struct node *root,
 								raw_val, len);
 			if (btree_is_snap_meta(btree))
 				parse_snap_record(raw_key, raw_val, len);
+			if (btree_is_snapshots(btree))
+				parse_omap_snap_record(raw_key, raw_val, len);
 			continue;
 		}
 
@@ -858,7 +868,7 @@ static void parse_subtree(struct node *root,
 			report("B-tree", "nonroot node is flagged as root.");
 
 		/* If a physical node changes, the parent must update the bno */
-		if ((btree_is_omap(btree) || btree_is_extentref(btree) || btree_is_snap_meta(btree)) && root->object.xid < child->object.xid)
+		if ((btree_is_omap(btree) || btree_is_extentref(btree) || btree_is_snap_meta(btree) || btree_is_snapshots(btree)) && root->object.xid < child->object.xid)
 			report("Physical tree",
 			       "xid of node is older than xid of its child.");
 
@@ -896,7 +906,7 @@ static void check_btree_footer_flags(u32 flags, struct btree *btree, char *ctx)
 		report(ctx, "nonpersistent flag is set.");
 
 	/* TODO: are these really the only allowed settings for the flag? */
-	aligned = btree_is_omap(btree) || btree_is_free_queue(btree);
+	aligned = btree_is_omap(btree) || btree_is_free_queue(btree) || btree_is_snapshots(btree);
 	if (aligned != !(flags & APFS_BTREE_KV_NONALIGNED))
 		report(ctx, "wrong alignment flag.");
 
@@ -936,6 +946,9 @@ static void check_btree_footer(struct btree *btree)
 		break;
 	case BTREE_TYPE_FREE_QUEUE:
 		ctx = "Free-space queue";
+		break;
+	case BTREE_TYPE_SNAPSHOTS:
+		ctx = "Omap snapshot tree";
 		break;
 	default:
 		report(NULL, "Bug!");
@@ -993,6 +1006,18 @@ static void check_btree_footer(struct btree *btree)
 		if (le32_to_cpu(info->bt_longest_val) < btree->longest_val)
 			report(ctx, "wrong maximum value size in info footer.");
 
+		return;
+	}
+
+	if (btree_is_snapshots(btree)) {
+		if (le32_to_cpu(info->bt_fixed.bt_key_size) != 8)
+			report(ctx, "wrong key size in info footer.");
+		if (le32_to_cpu(info->bt_fixed.bt_val_size) != sizeof(struct apfs_omap_snapshot))
+			report(ctx, "wrong value size in info footer.");
+		if (le32_to_cpu(info->bt_longest_key) != 8)
+			report(ctx, "wrong maximum key size in info footer.");
+		if (le32_to_cpu(info->bt_longest_val) != sizeof(struct apfs_omap_snapshot))
+			report(ctx, "wrong maximum value size in info footer.");
 		return;
 	}
 
@@ -1126,6 +1151,25 @@ static void check_omap_flags(u32 flags)
 		report("Container object map", "isn't manually managed.");
 }
 
+static struct btree *parse_snapshot_tree(u64 oid)
+{
+	struct btree *snaps = NULL;
+	struct key last_key = {0};
+
+	snaps = calloc(1, sizeof(*snaps));
+	if (!snaps)
+		system_error();
+
+	snaps->type = BTREE_TYPE_SNAPSHOTS;
+	snaps->omap_table = NULL;
+	snaps->root = read_node(oid, snaps);
+
+	parse_subtree(snaps->root, &last_key, NULL);
+
+	check_btree_footer(snaps);
+	return snaps;
+}
+
 /**
  * parse_omap_btree - Parse an object map and check for corruption
  * @oid:	object id for the omap
@@ -1148,9 +1192,17 @@ struct btree *parse_omap_btree(u64 oid)
 
 	check_omap_flags(le32_to_cpu(raw->om_flags));
 
-	if (raw->om_snap_count || raw->om_snapshot_tree_oid ||
-	    raw->om_most_recent_snap)
-		report_unknown("Snapshots");
+	if (raw->om_snapshot_tree_oid) {
+		if (!vsb)
+			report("Container omap", "has snapshot tree.");
+		vsb->v_snapshots = parse_snapshot_tree(le64_to_cpu(raw->om_snapshot_tree_oid));
+		if (vsb->v_snapshots->key_count != le32_to_cpu(raw->om_snap_count))
+			report("Omap snapshot tree", "snap count doesn't match keys.");
+		if (vsb->v_snap_max_xid != le64_to_cpu(raw->om_most_recent_snap))
+			report("Omap snapshot tree", "latest xid doesn't match keys.");
+	} else if (raw->om_snap_count || raw->om_most_recent_snap) {
+		report("Object map", "has snapshots but no snapshot tree.");
+	}
 
 	/* Oddly, the type is still reported even when the tree is not set */
 	if (le32_to_cpu(raw->om_snapshot_tree_type) !=

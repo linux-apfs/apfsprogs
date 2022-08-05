@@ -32,6 +32,7 @@ struct volume_superblock {
 	struct btree *v_extent_ref;
 	struct listed_btree *v_snap_extrefs;	/* Snapshots have their own */
 	struct btree *v_snap_meta;
+	struct btree *v_snapshots;
 	struct htable_entry **v_omap_table;	/* Hash table of omap records */
 	struct htable_entry **v_inode_table;	/* Hash table of all inodes */
 	struct htable_entry **v_dstream_table;	/* Hash table of all dstreams */
@@ -48,6 +49,7 @@ struct volume_superblock {
 	u64 v_special_count;	/* Number of other filesystem objects */
 	u64 v_block_count;	/* Number of blocks currently allocated */
 	u64 v_snap_count;	/* Number of snapshots */
+	u64 v_snap_max_xid;	/* Maximum xid among snapshots */
 	bool v_has_root;	/* Is there a root directory? */
 	bool v_has_priv;	/* Is there a private directory? */
 

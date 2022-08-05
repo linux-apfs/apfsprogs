@@ -14,11 +14,17 @@
 #include "super.h"
 
 /**
- * free_snap - Free a snapshot structure
+ * free_snap - Free a snapshot structure after some final checks
  * @entry: the entry to free
  */
 static void free_snap(struct htable_entry *entry)
 {
+	struct snapshot *snap = (struct snapshot *)entry;
+
+	if (!snap->sn_name_seen || !snap->sn_meta_seen)
+		report("Snapshot", "missing metadata entry.");
+	if (!snap->sn_omap_seen)
+		report("Snapshot", "missing omap entry.");
 	free(entry);
 }
 
@@ -177,4 +183,45 @@ void parse_snap_record(void *key, void *val, int len)
 	default:
 		report(NULL, "Bug!");
 	}
+}
+
+/**
+ * parse_omap_snap_record - Parse and check an omap snapshot tree record value
+ * @key:	pointer to the raw key
+ * @val:	pointer to the raw value
+ * @len:	length of the raw value
+ *
+ * Internal consistency of @key must be checked before calling this function.
+ */
+void parse_omap_snap_record(__le64 *key, struct apfs_omap_snapshot *val, int len)
+{
+	struct snapshot *snapshot = NULL;
+	u64 snap_xid;
+
+	/*
+	 * These keys and values must be aligned to eight bytes.
+	 * TODO: add the same check to the free queue?
+	 */
+	if ((u64)key & 7 || (u64)val & 7)
+		report("Omap snapshot record", "bad alignment for key or value.");
+
+	if (len != sizeof(*val))
+		report("Omap snapshot record", "value is too small.");
+
+	snap_xid = le64_to_cpu(*key);
+	if (snap_xid == 0)
+		report("Omap snapshot record", "xid is zero.");
+	if (snap_xid >= sb->s_xid)
+		report("Omap snapshot record", "xid is in the future.");
+	if (snap_xid >= vsb->v_snap_max_xid)
+		vsb->v_snap_max_xid = snap_xid;
+	snapshot = get_snapshot(snap_xid);
+	snapshot->sn_omap_seen = true;
+
+	if (val->oms_flags)
+		report_unknown("Deleted or reverted snapshot");
+	if (val->oms_pad)
+		report("Omap snapshot record", "padding should be zeroes.");
+	if (val->oms_oid)
+		report("Omap snapshot record", "oid should be zero.");
 }
