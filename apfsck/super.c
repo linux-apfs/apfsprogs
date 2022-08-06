@@ -761,6 +761,51 @@ struct volume_superblock *alloc_volume_super(bool snap)
 	return ret;
 }
 
+static void check_snap_meta_ext(u64 oid)
+{
+	struct apfs_snap_meta_ext *sme = NULL;
+	struct object obj;
+
+	if (vsb->v_snap_max_xid == 0) {
+		if (oid)
+			report("Volume superblock", "has extended snap meta but no snapshots.");
+		return;
+	}
+
+	/*
+	 * I've only seen extended snapshot metadata in the current transaction,
+	 * and in the latest snapshot. I don't how it would work for older
+	 * snapshots anyway.
+	 */
+	if (sb->s_xid < vsb->v_snap_max_xid) {
+		if (oid)
+			report("Volume superblock", "should not have extended snap metadata.");
+		return;
+	}
+
+	sme = read_object(oid, vsb->v_omap_table, &obj);
+	if (obj.type != OBJECT_TYPE_SNAP_META_EXT)
+		report("Extended snapshot metadata", "wrong object type.");
+	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
+		report("Extended snapshot metadata", "wrong object subtype.");
+
+	if (!vsb->v_in_snapshot) {
+		if (memcmp(sme, &vsb->v_snap_meta_ext, sizeof(*sme)) != 0)
+			report("Extended snapshot metadata", "current doesn't match snapshot.");
+		return;
+	}
+	vsb->v_snap_meta_ext = *sme;
+
+	if (le32_to_cpu(sme->sme_version) != 1)
+		report("Extended snapshot metadata", "wrong version.");
+	if (sme->sme_flags)
+		report("Extended snapshot metadata", "undocumented flags.");
+	if (le64_to_cpu(sme->sme_snap_xid) != vsb->v_snap_max_xid)
+		report("Extended snapshot metadata", "wrong transaction id.");
+
+	munmap(sme, sb->s_blocksize);
+}
+
 /**
  * check_volume_super - Parse and check the whole current volume superblock
  */
@@ -789,6 +834,8 @@ void check_volume_super(void)
 	}
 
 	vsb->v_cat = parse_cat_btree(le64_to_cpu(vsb_raw->apfs_root_tree_oid), vsb->v_omap_table);
+
+	check_snap_meta_ext(le64_to_cpu(vsb_raw->apfs_snap_meta_ext_oid));
 
 	if (!vsb->v_in_snapshot) {
 		free_snap_table(vsb->v_snap_table);

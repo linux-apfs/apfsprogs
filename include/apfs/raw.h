@@ -47,6 +47,11 @@
 #define APFS_OBJECT_TYPE_GBITMAP		0x00000019
 #define APFS_OBJECT_TYPE_GBITMAP_TREE		0x0000001a
 #define APFS_OBJECT_TYPE_GBITMAP_BLOCK		0x0000001b
+#define OBJECT_TYPE_ER_RECOVERY_BLOCK		0x0000001c
+#define OBJECT_TYPE_SNAP_META_EXT		0x0000001d
+#define OBJECT_TYPE_INTEGRITY_META		0x0000001e
+#define OBJECT_TYPE_FEXT_TREE			0x0000001f
+#define OBJECT_TYPE_RESERVED_20			0x00000020
 #define APFS_OBJECT_TYPE_INVALID		0x00000000
 #define APFS_OBJECT_TYPE_TEST			0x000000ff
 
@@ -1230,6 +1235,19 @@ struct apfs_snap_metadata_val {
  */
 struct apfs_snap_name_val {
 	__le64 snap_xid;
+} __packed;
+
+/*
+ * Structure of the extended snapshot metadata
+ */
+struct apfs_snap_meta_ext {
+	struct apfs_obj_phys sme_o;
+
+	__le32	sme_version;
+	__le32	sme_flags;
+	__le64	sme_snap_xid;
+	char 	sme_uuid[16];
+	__le64	sme_token;
 } __packed;
 
 #endif	/* _RAW_H */

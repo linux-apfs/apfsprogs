@@ -108,6 +108,7 @@ static void check_snapshot(u64 xid, u64 vol_bno, u64 extentref_bno)
 	vsb->v_omap = latest_vsb->v_omap;
 	vsb->v_omap_table = latest_vsb->v_omap_table;
 	omap_htable_clear_seen_for_snap(latest_vsb->v_omap_table);
+	vsb->v_snap_max_xid = latest_vsb->v_snap_max_xid;
 
 	if (vsb->v_snap_meta_oid != 0)
 		report("Snapshot volume superblock", "has snapshot tree.");
@@ -116,6 +117,7 @@ static void check_snapshot(u64 xid, u64 vol_bno, u64 extentref_bno)
 
 	/* Go back to the latest transaction */
 	sb->s_xid = latest_xid;
+	latest_vsb->v_snap_meta_ext = vsb->v_snap_meta_ext;
 	latest_vsb->v_snap_extrefs = vsb->v_snap_extrefs;
 	latest_vsb->v_block_count += vsb->v_block_count;
 	vsb = latest_vsb; /* TODO: don't leak */

@@ -62,6 +62,9 @@ struct volume_superblock {
 	u32 v_next_doc_id;	/* Next document identifier to be assigned */
 	u32 v_index;		/* Index in the container's volume array */
 
+	/* Extended snapshot metadata for the latest transaction */
+	struct apfs_snap_meta_ext v_snap_meta_ext;
+
 	struct object v_obj;		/* Object holding the volume sb */
 };
 
