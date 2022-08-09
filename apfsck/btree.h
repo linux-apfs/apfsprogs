@@ -205,7 +205,7 @@ extern int btree_query(struct query **query);
 extern struct node *omap_read_node(u64 id);
 extern void free_omap_table(struct htable_entry **table);
 extern struct omap_record *get_latest_omap_record(u64 oid, u64 xid, struct htable_entry **table);
-extern void extentref_lookup(u64 bno, struct extref_record *extref, bool *is_snap);
+extern void extentref_lookup(u64 bno, struct extref_record *extref);
 extern void omap_htable_clear_seen_for_snap(struct htable_entry **table);
 
 #endif	/* _BTREE_H */

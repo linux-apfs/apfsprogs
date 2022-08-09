@@ -1282,6 +1282,7 @@ static void extref_rec_from_query(struct query *query,
 	struct apfs_phys_ext_val *extref_val;
 	struct apfs_phys_ext_key *extref_key;
 	void *raw = query->node->raw;
+	int kind;
 
 	if (query->len != sizeof(*extref_val))
 		report("Extent reference record", "wrong size of value.");
@@ -1295,6 +1296,9 @@ static void extref_rec_from_query(struct query *query,
 							APFS_PEXT_LEN_MASK;
 	extref->owner = le64_to_cpu(extref_val->owning_obj_id);
 	extref->refcnt = le32_to_cpu(extref_val->refcnt);
+
+	kind = le64_to_cpu(extref_val->len_and_kind) >> APFS_PEXT_KIND_SHIFT;
+	extref->update = kind == APFS_KIND_UPDATE;
 }
 
 /**
@@ -1338,18 +1342,21 @@ fail:
  * extentref_lookup - Find the best match for an extent in the extentref trees
  * @bno:	first block number for the extent
  * @extref:	extentref record struct to receive the result
- * @is_snap:	is this psysical extent part of a snapshot?
  */
-void extentref_lookup(u64 bno, struct extref_record *extref, bool *is_snap)
+void extentref_lookup(u64 bno, struct extref_record *extref)
 {
 	struct listed_btree *ext_tree = NULL;
+	int32_t refcnt_update = 0;
 	int ret;
 
 	if (!vsb->v_in_snapshot) {
 		ret = extentref_tree_lookup(vsb->v_extent_ref->root, bno, extref);
 		if (ret == 0 && extref->phys_addr <= bno && extref->phys_addr + extref->blocks > bno) {
-			*is_snap = false;
-			return;
+			if (extref->update) {
+				refcnt_update += (int32_t)extref->refcnt;
+			} else {
+				return;
+			}
 		}
 	}
 
@@ -1357,8 +1364,12 @@ void extentref_lookup(u64 bno, struct extref_record *extref, bool *is_snap)
 	for (ext_tree = vsb->v_snap_extrefs; ext_tree; ext_tree = ext_tree->next) {
 		ret = extentref_tree_lookup(ext_tree->btree->root, bno, extref);
 		if (ret == 0 && extref->phys_addr <= bno && extref->phys_addr + extref->blocks > bno) {
-			*is_snap = true;
-			return;
+			if (extref->update) {
+				refcnt_update += (int32_t)extref->refcnt;
+			} else {
+				extref->refcnt += refcnt_update;
+				return;
+			}
 		}
 	}
 

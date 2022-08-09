@@ -22,7 +22,12 @@ static void free_extent(struct htable_entry *entry)
 {
 	struct extent *extent = (struct extent *)entry;
 
-	if (!vsb->v_in_snapshot && extent->e_refcnt != extent->e_references)
+	if (!extent->e_update) {
+		vsb->v_block_count += extent->e_blocks;
+		container_bmap_mark_as_used(extent->e_bno, extent->e_blocks);
+	}
+
+	if (extent->e_total_refcnt != extent->e_references)
 		report("Physical extent record", "bad reference count.");
 
 	free(entry);
@@ -113,6 +118,7 @@ static void free_dstream(struct htable_entry *entry)
 		struct extent *extent;
 
 		extent = get_extent(curr_extent->paddr);
+		extent->e_total_refcnt = curr_extent->refcnt;
 		if (extent->e_references) {
 			if (extent->e_obj_type != dstream->d_obj_type)
 				report("Physical extent record",
@@ -180,19 +186,8 @@ static void attach_extent_to_dstream(u64 paddr, u64 blk_count,
 
 	/* Find out which physical extents overlap this address range */
 	while (paddr < paddr_end) {
-		bool ext_is_snap;
-
-		extentref_lookup(paddr, &extref, &ext_is_snap);
+		extentref_lookup(paddr, &extref);
 		paddr = extref.phys_addr;
-
-		/*
-		 * I don't know yet how reference counting works for extents
-		 * in snapshots, I'll try to ignore it for now (TODO)
-		 */
-		if (ext_is_snap) {
-			paddr += extref.blocks;
-			continue;
-		}
 
 		/*
 		 * Each iteration will go through the whole extent list, but
@@ -218,6 +213,7 @@ static void attach_extent_to_dstream(u64 paddr, u64 blk_count,
 			system_error();
 
 		new->paddr = paddr;
+		new->refcnt = extref.refcnt;
 		new->next = ext;
 		*ext_p = new;
 
@@ -313,8 +309,6 @@ u64 parse_phys_ext_record(struct apfs_phys_ext_key *key,
 	kind = le64_to_cpu(val->len_and_kind) >> APFS_PEXT_KIND_SHIFT;
 	if (kind != APFS_KIND_NEW && kind != APFS_KIND_UPDATE)
 		report("Physical extent record", "invalid kind");
-	if (kind == APFS_KIND_UPDATE)
-		report_unknown("Snapshots");
 
 	length = le64_to_cpu(val->len_and_kind) & APFS_PEXT_LEN_MASK;
 	if (!length)
@@ -342,10 +336,10 @@ u64 parse_phys_ext_record(struct apfs_phys_ext_key *key,
 		report("Physical extent record", "should have been deleted.");
 
 	extent = get_extent(cat_cnid(&key->hdr));
+	extent->e_blocks = length;
 	extent->e_refcnt = refcnt;
-
-	vsb->v_block_count += length;
-	container_bmap_mark_as_used(extent->e_bno, length);
+	/* TODO: check that all update extents have a matching NEW extent */
+	extent->e_update = kind == APFS_KIND_UPDATE;
 
 	return extent->e_bno + length - 1;
 }

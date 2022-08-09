@@ -20,6 +20,7 @@ struct extref_record {
 	u64 blocks;	/* Block count */
 	u64 owner;	/* Owning object id */
 	u32 refcnt;	/* Reference count */
+	bool update;	/* An update record? */
 };
 
 /*
@@ -32,9 +33,12 @@ struct extent {
 
 	/* Extent stats read from the physical extent structure */
 	u32		e_refcnt;	/* Reference count */
+	u64		e_blocks;	/* Block count */
+	bool		e_update;	/* Is this an update record? */
 
 	/* Extent stats measured by the fsck */
 	u32		e_references;	/* Number of references to extent */
+	u32		e_total_refcnt; /* Total refcnt, considering updates */
 	u64		e_latest_owner;	/* Last owner counted on e_references */
 };
 #define e_bno	e_htable.h_id		/* First physical block in the extent */
@@ -46,6 +50,7 @@ struct extent {
  */
 struct listed_extent {
 	u64			paddr;	 /* Physical address for the extent */
+	u32			refcnt;	 /* Total refcnt, considering updates */
 	struct listed_extent	*next;	 /* Next entry in linked list */
 };
 
