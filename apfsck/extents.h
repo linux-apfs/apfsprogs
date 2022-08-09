@@ -50,7 +50,6 @@ struct extent {
  */
 struct listed_extent {
 	u64			paddr;	 /* Physical address for the extent */
-	u32			refcnt;	 /* Total refcnt, considering updates */
 	struct listed_extent	*next;	 /* Next entry in linked list */
 };
 

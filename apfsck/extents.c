@@ -15,6 +15,23 @@
 #include "super.h"
 
 /**
+ * calculate_total_refcnt - Fill in the e_total_refcnt field of an extent
+ * @extent: the physical extent
+ */
+static void calculate_total_refcnt(struct extent *extent)
+{
+	struct extref_record extref;
+	u64 paddr_end;
+
+	paddr_end = extent->e_bno + extent->e_blocks;
+	if (paddr_end < extent->e_bno) /* Overflow */
+		report("Extent record", "physical address is too big.");
+
+	extentref_lookup(extent->e_bno, &extref);
+	extent->e_total_refcnt = extref.refcnt;
+}
+
+/**
  * free_extent - Free an extent structure after performing a final check
  * @entry: the entry to free
  */
@@ -27,6 +44,7 @@ static void free_extent(struct htable_entry *entry)
 		container_bmap_mark_as_used(extent->e_bno, extent->e_blocks);
 	}
 
+	calculate_total_refcnt(extent);
 	if (extent->e_total_refcnt != extent->e_references)
 		report("Physical extent record", "bad reference count.");
 
@@ -118,7 +136,6 @@ static void free_dstream(struct htable_entry *entry)
 		struct extent *extent;
 
 		extent = get_extent(curr_extent->paddr);
-		extent->e_total_refcnt = curr_extent->refcnt;
 		if (extent->e_references) {
 			if (extent->e_obj_type != dstream->d_obj_type)
 				report("Physical extent record",
@@ -213,7 +230,6 @@ static void attach_extent_to_dstream(u64 paddr, u64 blk_count,
 			system_error();
 
 		new->paddr = paddr;
-		new->refcnt = extref.refcnt;
 		new->next = ext;
 		*ext_p = new;
 
@@ -338,7 +354,6 @@ u64 parse_phys_ext_record(struct apfs_phys_ext_key *key,
 	extent = get_extent(cat_cnid(&key->hdr));
 	extent->e_blocks = length;
 	extent->e_refcnt = refcnt;
-	/* TODO: check that all update extents have a matching NEW extent */
 	extent->e_update = kind == APFS_KIND_UPDATE;
 
 	return extent->e_bno + length - 1;
