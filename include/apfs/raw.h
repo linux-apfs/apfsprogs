@@ -555,7 +555,10 @@ struct apfs_dstream_id_key {
 /* Bit masks for the 'type' field of a directory entry */
 enum {
 	APFS_DREC_TYPE_MASK	= 0x000f,
-	APFS_DREC_RESERVED_10	= 0x0010
+	APFS_DREC_RESERVED_10	= 0x0010,
+
+	/* This flag is not documented */
+	APFS_DREC_PURGEABLE	= 0x0800,
 };
 
 /*

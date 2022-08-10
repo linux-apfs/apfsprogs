@@ -95,7 +95,7 @@ void parse_dentry_record(void *key, struct apfs_drec_val *val, int len)
 	struct inode *inode, *parent;
 	char *name;
 	int namelen;
-	u16 filetype, dtype;
+	u16 filetype, dtype, flags;
 	u64 sibling_id;
 	struct sibling *sibling;
 
@@ -141,17 +141,32 @@ void parse_dentry_record(void *key, struct apfs_drec_val *val, int len)
 		inode->i_first_parent = parent_ino;
 	}
 
-	dtype = le16_to_cpu(val->flags) & APFS_DREC_TYPE_MASK;
-	if (dtype != le16_to_cpu(val->flags))
+	flags = le16_to_cpu(val->flags);
+	dtype = flags & APFS_DREC_TYPE_MASK;
+	if (flags & ~(APFS_DREC_TYPE_MASK | APFS_DREC_PURGEABLE))
 		report("Dentry record", "reserved flags in use.");
 
-	/* The mode may have already been set by the inode or another dentry */
-	filetype = inode->i_mode >> 12;
-	if (filetype && filetype != dtype)
-		report("Dentry record", "file mode doesn't match dentry type.");
-	if (dtype == 0) /* Don't save a 0, that means the mode is not set */
-		report("Dentry record", "invalid dentry type.");
-	inode->i_mode |= dtype << 12;
+	if (flags & APFS_DREC_PURGEABLE) {
+		if (inode->i_purg_dentry)
+			report("Inode", "has two purgeable dentry records.");
+		inode->i_purg_dentry = true;
+	}
+	if ((bool)(flags & APFS_DREC_PURGEABLE) != (parent_ino == APFS_PURGEABLE_DIR_INO_NUM))
+		report("Dentry record", "the purgeable dir is for purgeable dentries.");
+
+	if (flags & APFS_DREC_PURGEABLE) {
+		/* No idea. The inode and other hardlinks have normal modes */
+		if (dtype != (S_IFDIR >> 12))
+			report("Dentry record", "wrong type for purgeable dentry.");
+	} else {
+		/* The mode may have already been set by the inode or another dentry */
+		filetype = inode->i_mode >> 12;
+		if (filetype && filetype != dtype)
+			report("Dentry record", "file mode doesn't match dentry type.");
+		if (dtype == 0) /* Don't save a 0, that means the mode is not set */
+			report("Dentry record", "invalid dentry type.");
+		inode->i_mode |= dtype << 12;
+	}
 
 	parse_dentry_xfields((struct apfs_xf_blob *)val->xfields,
 			     len - sizeof(*val), &sibling_id);

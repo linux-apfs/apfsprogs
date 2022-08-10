@@ -39,6 +39,7 @@ struct inode {
 	char		*i_name;	/* Name of primary link */
 	u64		i_parent_id;	/* Parent id for the primary link */
 	struct dstream	*i_dstream;	/* The inode's dstream (can be NULL) */
+	bool		i_purg_dentry;	/* Have we seen a purgeable dentry? */
 
 	/* Inode stats measured by the fsck */
 	u8		i_xattr_bmap;	/* Bitmap of system xattrs for inode */
