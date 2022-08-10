@@ -55,6 +55,9 @@ static void check_inode_stats(struct inode *inode)
 	if ((bool)(inode->i_xattr_bmap & XATTR_BMAP_SECURITY) !=
 	    (bool)(inode->i_flags & APFS_INODE_HAS_SECURITY_EA))
 		report("Inode record", "wrong flag for access control list.");
+
+	if (inode->i_purg_dentry != (bool)(inode->i_flags & APFS_INODE_IS_PURGEABLE))
+		report("Inode record", "wrong purgeability flag.");
 }
 
 /**
