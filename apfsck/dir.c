@@ -114,14 +114,17 @@ void parse_dentry_record(void *key, struct apfs_drec_val *val, int len)
 
 	ino = le64_to_cpu(val->file_id);
 	inode = get_inode(ino);
-	inode->i_link_count++;
+	parent_ino = cat_cnid(key);
+
+	/* The purgeable dentry doesn't count for nlink */
+	if (parent_ino != APFS_PURGEABLE_DIR_INO_NUM)
+		inode->i_link_count++;
 
 	if (ino == APFS_ROOT_DIR_INO_NUM && strcmp(name, "root"))
 		report("Root directory", "wrong name.");
 	if (ino == APFS_PRIV_DIR_INO_NUM && strcmp(name, "private-dir"))
 		report("Private directory", "wrong name.");
 
-	parent_ino = cat_cnid(key);
 	check_inode_ids(ino, parent_ino);
 	if (parent_ino != APFS_ROOT_DIR_PARENT && parent_ino != APFS_PURGEABLE_DIR_INO_NUM) {
 		parent = get_inode(parent_ino);
@@ -132,7 +135,8 @@ void parse_dentry_record(void *key, struct apfs_drec_val *val, int len)
 		parent->i_child_count++;
 	}
 
-	if (!inode->i_first_name) {
+	/* The purgeable dentry is never reported as inode name and parent id */
+	if (parent_ino != APFS_PURGEABLE_DIR_INO_NUM && !inode->i_first_name) {
 		/* No dentry for this inode has been seen before */
 		inode->i_first_name = malloc(namelen);
 		if (!inode->i_first_name)
