@@ -649,6 +649,8 @@ void parse_inode_record(struct apfs_inode_key *key,
 
 	inode->i_flags = le64_to_cpu(val->internal_flags);
 	check_inode_internal_flags(inode->i_flags);
+	if (inode->i_ino != inode->i_private_id && !(inode->i_flags & (APFS_INODE_WAS_CLONED | APFS_INODE_WAS_EVER_CLONED)))
+		report("Inode record", "not a clone but changed private id.");
 
 	def_prot_class = le32_to_cpu(val->default_protection_class);
 	/* These protection classes have been seen in unencrypted volumes */
