@@ -40,6 +40,8 @@ static void check_inode_stats(struct inode *inode)
 	if (dstream) {
 		if (dstream->d_sparse_bytes != inode->i_sparse_bytes)
 			report("Inode record", "wrong count of sparse bytes.");
+		if (dstream->d_refcnt > 1 && !(inode->i_flags & (APFS_INODE_WAS_CLONED | APFS_INODE_WAS_EVER_CLONED)))
+			report("Inode record", "wrong flags for cloned inode.");
 	} else {
 		if (inode->i_sparse_bytes)
 			report("Inode record", "sparse bytes without dstream.");
