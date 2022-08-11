@@ -19,8 +19,9 @@ struct htable_entry {
 
 /* State of the in-memory listed cnid structure */
 #define CNID_UNUSED		0 /* The cnid is unused */
-#define CNID_USED		1 /* The cnid is used, and can't be reused */
-#define CNID_DSTREAM_ALLOWED	2 /* The cnid can be reused by one dstream */
+#define CNID_IN_SIBLING_LINK	1 /* The cnid was seen in a sibling link */
+#define CNID_IN_INODE		2 /* The cnid was seen in an inode */
+#define CNID_IN_DSTREAM		4 /* The cnid was seen in a dstream */
 
 /*
  * Structure used to register each catalog node id (cnid) that has been seen,
@@ -30,6 +31,13 @@ struct listed_cnid {
 	struct htable_entry	c_htable;	/* Hash table entry header */
 	u8			c_state;
 };
+
+static inline void cnid_set_state_flag(struct listed_cnid *cnid, u8 flag)
+{
+	if (cnid->c_state & flag)
+		report("Catalog", "a filesystem object id was used twice.");
+	cnid->c_state |= flag;
+}
 
 extern struct htable_entry **alloc_htable();
 extern void free_htable(struct htable_entry **table,

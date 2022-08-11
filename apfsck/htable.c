@@ -103,14 +103,29 @@ struct htable_entry *get_htable_entry(u64 id, int size,
 	return new;
 }
 
+static void free_cnid(struct htable_entry *entry)
+{
+	struct listed_cnid *cnid = (struct listed_cnid *)entry;
+
+	if (cnid->c_state & CNID_IN_SIBLING_LINK) {
+		if (cnid->c_state & ~CNID_IN_SIBLING_LINK)
+			report("Catalog", "sibling link oid reused elsewhere.");
+	}
+
+	free(entry);
+}
+
 /**
  * free_cnid_table - Free the cnid hash table and all its entries
  * @table: table to free
+ *
+ * Also performs some consistency checks that can only be done after the whole
+ * catalog has been parsed.
  */
 void free_cnid_table(struct htable_entry **table)
 {
 	/* No checks needed here, just call free() on each entry */
-	free_htable(table, (void (*)(struct htable_entry *))free);
+	free_htable(table, free_cnid);
 }
 
 /**

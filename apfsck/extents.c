@@ -126,9 +126,7 @@ static void free_dstream(struct htable_entry *entry)
 
 	/* To check for reuse, put all filesystem object ids in a list */
 	cnid = get_listed_cnid(dstream->d_id);
-	if (cnid->c_state == CNID_USED)
-		report("Catalog", "a filesystem object id was used twice.");
-	cnid->c_state = CNID_USED;
+	cnid_set_state_flag(cnid, CNID_IN_DSTREAM);
 
 	/* Increase the refcount of each physical extent used by the dstream */
 	while (curr_extent) {
