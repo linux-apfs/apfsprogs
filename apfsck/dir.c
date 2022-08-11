@@ -82,6 +82,33 @@ static void parse_dentry_xfields(struct apfs_xf_blob *xblob, int len,
 }
 
 /**
+ * check_orphan_name - Check the dentry name for an orphan inode
+ * @name: the filename (as reported by the dentry, not the inode)
+ * @ino: the inode number
+ */
+static void check_orphan_name(const char *name, u64 ino)
+{
+	const char *format = "0x%llx-dead";
+	char *buf;
+	int buflen;
+
+	buflen = snprintf(NULL, 0, format, (unsigned long long)ino);
+	if (buflen < 0)
+		system_error();
+	buf = calloc(1, ++buflen);
+	if (!buf)
+		system_error();
+	buflen = snprintf(buf, buflen, format, (unsigned long long)ino);
+	if (buflen < 0)
+		system_error();
+
+	if (strcmp(name, buf) != 0)
+		report("Orphan inode", "wrong name.");
+
+	free(buf);
+}
+
+/**
  * parse_dentry_record - Parse a dentry record value and check for corruption
  * @key:	pointer to the raw key
  * @val:	pointer to the raw value
@@ -125,6 +152,18 @@ void parse_dentry_record(void *key, struct apfs_drec_val *val, int len)
 	if (ino == APFS_PRIV_DIR_INO_NUM && strcmp(name, "private-dir"))
 		report("Private directory", "wrong name.");
 
+	/* Not required by the specification, but follow what apple does */
+	if (parent_ino == APFS_PRIV_DIR_INO_NUM)
+		check_orphan_name(name, ino);
+
+	if (parent_ino == APFS_PURGEABLE_DIR_INO_NUM) {
+		if (inode->i_purg_name)
+			report("Inode", "has two purgeable dentry records.");
+		inode->i_purg_name = strdup(name);
+		if (!inode->i_purg_name)
+			system_error();
+	}
+
 	check_inode_ids(ino, parent_ino);
 	if (parent_ino != APFS_ROOT_DIR_PARENT && parent_ino != APFS_PURGEABLE_DIR_INO_NUM) {
 		parent = get_inode(parent_ino);
@@ -150,11 +189,6 @@ void parse_dentry_record(void *key, struct apfs_drec_val *val, int len)
 	if (flags & ~(APFS_DREC_TYPE_MASK | APFS_DREC_PURGEABLE))
 		report("Dentry record", "reserved flags in use.");
 
-	if (flags & APFS_DREC_PURGEABLE) {
-		if (inode->i_purg_dentry)
-			report("Inode", "has two purgeable dentry records.");
-		inode->i_purg_dentry = true;
-	}
 	if ((bool)(flags & APFS_DREC_PURGEABLE) != (parent_ino == APFS_PURGEABLE_DIR_INO_NUM))
 		report("Dentry record", "the purgeable dir is for purgeable dentries.");
 

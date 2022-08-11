@@ -63,8 +63,35 @@ static void check_inode_stats(struct inode *inode)
 	    (bool)(inode->i_flags & APFS_INODE_HAS_SECURITY_EA))
 		report("Inode record", "wrong flag for access control list.");
 
-	if (inode->i_purg_dentry != (bool)(inode->i_flags & APFS_INODE_IS_PURGEABLE))
+	if ((bool)(inode->i_purg_name) != (bool)(inode->i_flags & APFS_INODE_IS_PURGEABLE))
 		report("Inode record", "wrong purgeability flag.");
+}
+
+static void check_purgeable_name(struct inode *inode)
+{
+	const char *format = "0x%llx-0x%llx:%u";
+	char *buf;
+	int buflen;
+	struct dstream *dstream = NULL;
+	unsigned long long filesize;
+
+	dstream = inode->i_dstream;
+	filesize = dstream ? dstream->d_bytes : 0;
+
+	buflen = snprintf(NULL, 0, format, filesize, (unsigned long long)inode->i_ino, (unsigned int)inode->i_owner);
+	if (buflen < 0)
+		system_error();
+	buf = calloc(1, ++buflen);
+	if (!buf)
+		system_error();
+	buflen = snprintf(buf, buflen, format, filesize, (unsigned long long)inode->i_ino, (unsigned int)inode->i_owner);
+	if (buflen < 0)
+		system_error();
+
+	if (strcmp(inode->i_purg_name, buf) != 0)
+		report("Purgeable inode", "wrong name for purgeable dentry.");
+
+	free(buf);
 }
 
 /**
@@ -84,6 +111,12 @@ static void free_inode_names(struct inode *inode)
 		report("Inode record", "no name for primary link.");
 	if (!inode->i_first_name)
 		report("Catalog", "inode with no dentries.");
+
+	if (inode->i_purg_name) {
+		check_purgeable_name(inode);
+		free(inode->i_purg_name);
+		inode->i_purg_name = NULL;
+	}
 
 	if (current) {
 		/* Primary link has lowest id, so it comes first in the list */
@@ -709,6 +742,7 @@ void parse_inode_record(struct apfs_inode_key *key,
 	}
 
 	inode->i_nlink = le32_to_cpu(val->nlink);
+	inode->i_owner = le32_to_cpu(val->owner);
 
 	if (le16_to_cpu(val->pad1))
 		report("Inode record", "padding should be zeroes.");
