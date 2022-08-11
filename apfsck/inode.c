@@ -31,6 +31,11 @@ static void check_inode_stats(struct inode *inode)
 			report("Inode record", "directory has hard links.");
 		if (inode->i_nchildren != inode->i_child_count)
 			report("Inode record", "wrong directory child count.");
+	} else if (inode->i_first_parent == APFS_PRIV_DIR_INO_NUM) {
+		if (inode->i_link_count != 1)
+			report("Orphan inode", "not really orphaned.");
+		if (inode->i_nlink != 0)
+			report("Orphan inode", "has a link count.");
 	} else {
 		if (inode->i_nlink != inode->i_link_count)
 			report("Inode record", "wrong link count.");
@@ -86,8 +91,12 @@ static void free_inode_names(struct inode *inode)
 			report("Inode record", "wrong name for primary link.");
 		if (inode->i_parent_id != current->s_parent_ino)
 			report("Inode record", "bad parent for primary link.");
-	} else {
-		/* No siblings, so the primary link is the first and only */
+	} else if (inode->i_first_parent != APFS_PRIV_DIR_INO_NUM) {
+		/*
+		 * No siblings, so the primary link is the first and only.
+		 * Files moved to the private directory preserve their original
+		 * name and parent_id, so there's nothing to check.
+		 */
 		if (strcmp(inode->i_name, inode->i_first_name))
 			report("Inode record", "wrong name for only link.");
 		if (inode->i_parent_id != inode->i_first_parent)
@@ -115,6 +124,12 @@ static void free_inode_names(struct inode *inode)
 		free(current);
 		current = next;
 		++count;
+	}
+
+	if (inode->i_first_parent == APFS_PRIV_DIR_INO_NUM) {
+		if (count != 0)
+			report("Orphan inode", "has sibling links.");
+		return;
 	}
 
 	/* Inodes with one link can have a sibling record, but don't need it */
@@ -643,6 +658,10 @@ void parse_inode_record(struct apfs_inode_key *key,
 
 	inode->i_parent_id = le64_to_cpu(val->parent_id);
 	check_inode_ids(inode->i_ino, inode->i_parent_id);
+	if (inode->i_parent_id == APFS_PRIV_DIR_INO_NUM) {
+		/* The reported parent id is not updated when orphaned */
+		report("Inode record", "parent is private directory.");
+	}
 
 	if (inode->i_ino == APFS_ROOT_DIR_INO_NUM)
 		vsb->v_has_root = true;
