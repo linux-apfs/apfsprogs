@@ -206,6 +206,33 @@ void parse_dentry_record(void *key, struct apfs_drec_val *val, int len)
 		inode->i_mode |= dtype << 12;
 	}
 
+	/*
+	 * Orphans aren't counted for the file totals, but I can't tell them
+	 * apart inside parse_inode_record(), so do it here instead.
+	 */
+	if (parent_ino == APFS_PRIV_DIR_INO_NUM) {
+		switch (dtype << 12) {
+		case S_IFREG:
+			vsb->v_file_count--;
+			break;
+		case S_IFDIR:
+			if (inode->i_ino >= APFS_MIN_USER_INO_NUM)
+				vsb->v_dir_count--;
+			break;
+		case S_IFLNK:
+			vsb->v_symlink_count--;
+			break;
+		case S_IFSOCK:
+		case S_IFBLK:
+		case S_IFCHR:
+		case S_IFIFO:
+			vsb->v_special_count--;
+			break;
+		default:
+			report("Dentry record", "invalid file mode.");
+		}
+	}
+
 	parse_dentry_xfields((struct apfs_xf_blob *)val->xfields,
 			     len - sizeof(*val), &sibling_id);
 

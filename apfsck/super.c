@@ -860,8 +860,7 @@ void check_volume_super(void)
 		report("Catalog", "the private directory is missing.");
 
 	if (le64_to_cpu(vsb_raw->apfs_num_files) != vsb->v_file_count)
-		/* Sometimes this is off by one.  TODO: why? */
-		report_weird("File count in volume superblock");
+		report("Volume superblock", "bad regular file count.");
 	if (le64_to_cpu(vsb_raw->apfs_num_directories) != vsb->v_dir_count)
 		report("Volume superblock", "bad directory count.");
 	if (le64_to_cpu(vsb_raw->apfs_num_symlinks) != vsb->v_symlink_count)
