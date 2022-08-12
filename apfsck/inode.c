@@ -9,6 +9,7 @@
 #include <apfs/raw.h>
 #include <apfs/types.h>
 #include "apfsck.h"
+#include "dir.h"
 #include "extents.h"
 #include "htable.h"
 #include "inode.h"
@@ -183,8 +184,9 @@ static void free_inode(struct htable_entry *entry)
 	struct inode *inode = (struct inode *)entry;
 	struct listed_cnid *cnid;
 
-	/* The inodes must be freed before the cnids */
+	/* The inodes must be freed before the cnids and the dirstats */
 	assert(vsb->v_cnid_table);
+	assert(vsb->v_dirstat_table);
 
 	/* To check for reuse, put all filesystem object ids in a list */
 	cnid = get_listed_cnid(inode->i_ino);
@@ -193,6 +195,36 @@ static void free_inode(struct htable_entry *entry)
 	check_inode_stats(inode);
 	free_inode_names(inode);
 	free(entry);
+}
+
+static void collect_dirstats(struct htable_entry *entry)
+{
+	struct inode *inode = (struct inode *)entry;
+	u16 filetype = inode->i_mode & S_IFMT;
+	struct dirstat *stat = inode->i_dirstat;
+	struct dirstat *parent_stat = NULL;
+
+	if (inode->i_parent_id >= APFS_MIN_USER_INO_NUM) {
+		parent_stat = get_inode(inode->i_parent_id)->i_dirstat;
+		if (stat && parent_stat && stat != parent_stat)
+			report("Inode record", "dirstat id differs from parent.");
+	}
+
+	if (inode->i_flags & APFS_INODE_MAINTAIN_DIR_STATS) {
+		assert(stat);
+		if (!stat->ds_seen)
+			report("Inode record", "missing a dirstats record.");
+		if (!(inode->i_flags & APFS_INODE_DIR_STATS_ORIGIN) && !parent_stat)
+			report("Directory statistics", "origin missing.");
+		stat->ds_child_count += inode->i_nchildren;
+	} else if (parent_stat) {
+		if (inode->i_flags & APFS_INODE_DIR_STATS_ORIGIN)
+			report_unknown("Nested dirstat origins.");
+		if (filetype == S_IFDIR)
+			report("Inode record", "should gather dir stats for ancestor.");
+		else if (inode->i_dstream)
+			parent_stat->ds_total_size += inode->i_dstream->d_size;
+	}
 }
 
 /**
@@ -204,6 +236,12 @@ static void free_inode(struct htable_entry *entry)
  */
 void free_inode_table(struct htable_entry **table)
 {
+	/*
+	 * Collect directory statistics, and check that descendant directories
+	 * inherit the APFS_INODE_MAINTAIN_DIR_STATS flag.
+	 */
+	apply_on_htable(table, collect_dirstats);
+
 	free_htable(table, free_inode);
 }
 
@@ -367,6 +405,39 @@ static int read_dstream_xfield(char *xval, int len, struct inode *inode)
 }
 
 /**
+ * read_dir_stats_xfield - Parse a dir stats xfield and check its consistency
+ * @xval:	pointer to the xfield value
+ * @len:	remaining length of the inode value
+ * @inode:	struct to receive the results
+ *
+ * Returns the length of the xfield value.
+ */
+static int read_dir_stats_xfield(char *xval, int len, struct inode *inode)
+{
+	u16 filetype = inode->i_mode & S_IFMT;
+	__le64 *oid = NULL;
+	struct dirstat *stats = NULL;
+
+	/* TODO: I'm yet to see a file with stats, this is probably wrong */
+	if (filetype != S_IFDIR)
+		report("Dir stats xfield", "inode is not a directory.");
+
+	if (len != sizeof(*oid))
+		report("Dir stats xfield", "doesn't fit in inode record.");
+	oid = (__le64 *)xval;
+
+	stats = inode->i_dirstat = get_dirstat(le64_to_cpu(*oid));
+	if (inode->i_flags & APFS_INODE_DIR_STATS_ORIGIN) {
+		/* TODO: this will be a problem for nested origins */
+		if (stats->ds_origin_seen)
+			report("Dir stats", "has two origins.");
+		stats->ds_origin_seen = true;
+		stats->ds_origin = inode->i_ino;
+	}
+	return sizeof(*oid);
+}
+
+/**
  * check_xfield_flags - Run common flag checks for all xfield types
  * @flags: flags to check
  */
@@ -517,8 +588,9 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 				report("Data stream xfield", "wrong flags.");
 			break;
 		case APFS_INO_EXT_TYPE_DIR_STATS_KEY:
-			xlen = sizeof(struct apfs_dir_stats_val);
-			report_unknown("Directory statistics xfield");
+			xlen = read_dir_stats_xfield(xval, len, inode);
+			if (xflags != (APFS_XF_SYSTEM_FIELD | APFS_XF_DO_NOT_COPY))
+				report("Dir stats xfield", "wrong flags.");
 			break;
 		case APFS_INO_EXT_TYPE_RESERVED_6:
 		case APFS_INO_EXT_TYPE_RESERVED_9:
@@ -580,8 +652,6 @@ static void check_inode_internal_flags(u64 flags)
 	    flags & APFS_INODE_PINNED_TO_TIER2 ||
 	    flags & APFS_INODE_ALLOCATION_SPILLEDOVER)
 		report_unknown("Fusion drive");
-	if (flags & APFS_INODE_MAINTAIN_DIR_STATS)
-		report_unknown("Directory statistics");
 	if (flags & APFS_INODE_IS_APFS_PRIVATE)
 		report_unknown("Private implementation inode");
 }

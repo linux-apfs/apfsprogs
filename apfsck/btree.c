@@ -579,8 +579,11 @@ static void parse_cat_record(void *key, void *val, int len)
 	case APFS_TYPE_DSTREAM_ID:
 		parse_dstream_id_record(key, val, len);
 		break;
+	case APFS_TYPE_DIR_STATS:
+		parse_dir_stats_record(key, val, len);
+		break;
 	default:
-		report_unknown("Snapshots, encryption, directory statistics");
+		report_unknown("Encryption");
 		break;
 	}
 }

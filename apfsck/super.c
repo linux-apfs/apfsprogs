@@ -16,6 +16,7 @@
 #include <apfs/types.h>
 #include "apfsck.h"
 #include "btree.h"
+#include "dir.h"
 #include "extents.h"
 #include "htable.h"
 #include "inode.h"
@@ -757,6 +758,7 @@ struct volume_superblock *alloc_volume_super(bool snap)
 	ret->v_cnid_table = alloc_htable();
 	ret->v_dstream_table = alloc_htable();
 	ret->v_inode_table = alloc_htable();
+	ret->v_dirstat_table = alloc_htable();
 
 	return ret;
 }
@@ -853,6 +855,8 @@ void check_volume_super(void)
 		free_omap_table(vsb->v_omap_table);
 		vsb->v_omap_table = NULL;
 	}
+	free_dirstat_table(vsb->v_dirstat_table);
+	vsb->v_dirstat_table = NULL;
 
 	if (!vsb->v_has_root)
 		report("Catalog", "the root directory is missing.");

@@ -2,6 +2,7 @@
  * Copyright (C) 2019 Ernesto A. Fernández <ernesto.mnd.fernandez@gmail.com>
  */
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -240,4 +241,52 @@ void parse_dentry_record(void *key, struct apfs_drec_val *val, int len)
 		return;
 	sibling = get_sibling(sibling_id, inode);
 	set_or_check_sibling(parent_ino, namelen, (u8 *)name, sibling);
+}
+
+/* TODO: update the checks for cnid reuse, here and elsewhere */
+static void free_dirstat(struct htable_entry *entry)
+{
+	struct dirstat *stats = (struct dirstat *)entry;
+
+	/* The inodes must be parsed before the dirstats */
+	assert(!vsb->v_inode_table);
+
+	if (!stats->ds_origin_seen)
+		report("Directory stats", "have no inode.");
+
+	if (stats->ds_num_children != stats->ds_child_count)
+		report("Directory stats", "wrong child count.");
+	if (stats->ds_total_size != stats->ds_child_size)
+		report("Directory stats", "wrong total size.");
+	if (stats->ds_chained_key)
+		report_unknown("Chained key in directory stats");
+
+	free(entry);
+}
+
+void free_dirstat_table(struct htable_entry **table)
+{
+	free_htable(table, free_dirstat);
+}
+
+struct dirstat *get_dirstat(u64 oid)
+{
+	struct htable_entry *entry;
+
+	entry = get_htable_entry(oid, sizeof(struct dirstat), vsb->v_dirstat_table);
+	return (struct dirstat *)entry;
+}
+
+void parse_dir_stats_record(void *key, struct apfs_dir_stats_val *val, int len)
+{
+	struct dirstat *stats = NULL;
+
+	if (len != sizeof(*val))
+		report("Dir stats record", "wrong size of value.");
+
+	stats = get_dirstat(cat_cnid(key));
+	stats->ds_seen = true;
+	stats->ds_num_children = le64_to_cpu(val->num_children);
+	stats->ds_total_size = le64_to_cpu(val->total_size);
+	stats->ds_chained_key = le64_to_cpu(val->chained_key);
 }

@@ -41,6 +41,7 @@ struct inode {
 	struct dstream	*i_dstream;	/* The inode's dstream (can be NULL) */
 	char		*i_purg_name;	/* Purgeable dentry name (can be NULL) */
 	u32		i_owner;	/* Id of the owner user */
+	struct dirstat	*i_dirstat;	/* Directory statistics (can be NULL) */
 
 	/* Inode stats measured by the fsck */
 	u8		i_xattr_bmap;	/* Bitmap of system xattrs for inode */

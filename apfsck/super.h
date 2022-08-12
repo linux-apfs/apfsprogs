@@ -39,6 +39,7 @@ struct volume_superblock {
 	struct htable_entry **v_cnid_table;	/* Hash table of all cnids */
 	struct htable_entry **v_extent_table;	/* Hash table of all extents */
 	struct htable_entry **v_snap_table;	/* Hash table of all snapshots */
+	struct htable_entry **v_dirstat_table;	/* Hash table of all dir stats */
 
 	bool v_in_snapshot;			/* Is this a snapshot volume? */
 
