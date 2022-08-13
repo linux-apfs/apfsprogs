@@ -65,6 +65,7 @@ struct dstream {
 	u8		d_obj_type;	/* Type of the owner objects */
 	u64		d_owner;	/* Owner id for the extentref tree */
 	bool		d_seen;		/* Has the dstream record been seen? */
+	bool		d_orphan;	/* Is this an orphan file? */
 
 	/* Dstream stats read from the dstream structures */
 	u64		d_size;		/* Dstream size */

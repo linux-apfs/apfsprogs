@@ -50,6 +50,8 @@ static void check_inode_stats(struct inode *inode)
 			report("Inode record", "wrong count of sparse bytes.");
 		if (dstream->d_refcnt > 1 && !(inode->i_flags & (APFS_INODE_WAS_CLONED | APFS_INODE_WAS_EVER_CLONED)))
 			report("Inode record", "wrong flags for cloned inode.");
+		if (inode->i_first_parent == APFS_PRIV_DIR_INO_NUM)
+			dstream->d_orphan = true;
 	} else {
 		if (inode->i_sparse_bytes)
 			report("Inode record", "sparse bytes without dstream.");
@@ -186,9 +188,10 @@ static void free_inode(struct htable_entry *entry)
 	struct inode *inode = (struct inode *)entry;
 	struct listed_cnid *cnid;
 
-	/* The inodes must be freed before the cnids and the dirstats */
+	/* All of these must still be around for the inodes to access */
 	assert(vsb->v_cnid_table);
 	assert(vsb->v_dirstat_table);
+	assert(vsb->v_dstream_table);
 
 	/* To check for reuse, put all filesystem object ids in a list */
 	cnid = get_listed_cnid(inode->i_ino);

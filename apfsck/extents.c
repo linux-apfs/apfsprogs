@@ -105,10 +105,18 @@ static void check_dstream_stats(struct dstream *dstream)
 			report("Data stream", "bad reference count.");
 	}
 
-	if (dstream->d_bytes < dstream->d_size)
-		report("Data stream", "some extents are missing.");
-	if (dstream->d_bytes != dstream->d_alloced_size)
-		report("Data stream", "wrong allocated space.");
+	/* Orphan inodes can have missing extents */
+	if (dstream->d_orphan) {
+		if (dstream->d_size > dstream->d_alloced_size)
+			report("Orphan dstream", "reported sizes make no sense.");
+		if (dstream->d_bytes != 0)
+			report_weird("Orphan dstream");
+	} else {
+		if (dstream->d_bytes < dstream->d_size)
+			report("Data stream", "some extents are missing.");
+		if (dstream->d_bytes != dstream->d_alloced_size)
+			report("Data stream", "wrong allocated space.");
+	}
 }
 
 /**
