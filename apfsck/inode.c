@@ -32,6 +32,8 @@ static void check_inode_stats(struct inode *inode)
 			report("Inode record", "directory has hard links.");
 		if (inode->i_nchildren != inode->i_child_count)
 			report("Inode record", "wrong directory child count.");
+		if (inode->i_first_parent == APFS_PRIV_DIR_INO_NUM && inode->i_nchildren != 0)
+			report("Orphan directory", "has children of its own.");
 	} else if (inode->i_first_parent == APFS_PRIV_DIR_INO_NUM) {
 		if (inode->i_link_count != 1)
 			report("Orphan inode", "not really orphaned.");
