@@ -223,7 +223,7 @@ static void attach_extent_to_dstream(u64 paddr, u64 blk_count,
 		while (ext) {
 			/* Count physical extents only once for each owner */
 			if (paddr == ext->paddr)
-				return;
+				goto next;
 
 			if (paddr < ext->paddr)
 				break;
@@ -238,7 +238,7 @@ static void attach_extent_to_dstream(u64 paddr, u64 blk_count,
 		new->paddr = paddr;
 		new->next = ext;
 		*ext_p = new;
-
+next:
 		paddr += extref.blocks;
 	}
 }
