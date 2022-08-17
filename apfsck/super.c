@@ -781,18 +781,18 @@ static void check_snap_meta_ext(u64 oid)
 	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
 		report("Extended snapshot metadata", "wrong object subtype.");
 
-	if (!vsb->v_in_snapshot) {
-		if (memcmp(sme, &vsb->v_snap_meta_ext, sizeof(*sme)) != 0)
-			report("Extended snapshot metadata", "current doesn't match latest snapshot.");
-		return;
-	}
-	vsb->v_snap_meta_ext = *sme;
-
 	if (le32_to_cpu(sme->sme_version) != 1)
 		report("Extended snapshot metadata", "wrong version.");
 	if (sme->sme_flags)
 		report("Extended snapshot metadata", "undocumented flags.");
-	if (le64_to_cpu(sme->sme_snap_xid) != sb->s_xid)
+	if (!sme->sme_snap_xid)
+		report("Extended snapshot metadata", "null transaction id.");
+
+	/*
+	 * The current transaction has the same content as the latest snapshot,
+	 * but this may be impossible to check if that snapshot got deleted.
+	 */
+	if (vsb->v_in_snapshot && le64_to_cpu(sme->sme_snap_xid) != sb->s_xid)
 		report("Extended snapshot metadata", "wrong transaction id.");
 
 	munmap(sme, sb->s_blocksize);
