@@ -768,22 +768,12 @@ static void check_snap_meta_ext(u64 oid)
 	struct apfs_snap_meta_ext *sme = NULL;
 	struct object obj;
 
-	if (vsb->v_snap_max_xid == 0) {
-		if (oid)
-			report("Volume superblock", "has extended snap meta but no snapshots.");
+	/* Older implementations of apfs just don't set this */
+	if (!oid)
 		return;
-	}
 
-	/*
-	 * I've only seen extended snapshot metadata in the current transaction,
-	 * and in the latest snapshot. I don't how it would work for older
-	 * snapshots anyway.
-	 */
-	if (sb->s_xid < vsb->v_snap_max_xid) {
-		if (oid)
-			report("Volume superblock", "should not have extended snap metadata.");
-		return;
-	}
+	if (vsb->v_snap_max_xid == 0)
+		report("Volume superblock", "has extended snap meta but no snapshots.");
 
 	sme = read_object(oid, vsb->v_omap_table, &obj);
 	if (obj.type != OBJECT_TYPE_SNAP_META_EXT)
@@ -793,7 +783,7 @@ static void check_snap_meta_ext(u64 oid)
 
 	if (!vsb->v_in_snapshot) {
 		if (memcmp(sme, &vsb->v_snap_meta_ext, sizeof(*sme)) != 0)
-			report("Extended snapshot metadata", "current doesn't match snapshot.");
+			report("Extended snapshot metadata", "current doesn't match latest snapshot.");
 		return;
 	}
 	vsb->v_snap_meta_ext = *sme;
@@ -802,7 +792,7 @@ static void check_snap_meta_ext(u64 oid)
 		report("Extended snapshot metadata", "wrong version.");
 	if (sme->sme_flags)
 		report("Extended snapshot metadata", "undocumented flags.");
-	if (le64_to_cpu(sme->sme_snap_xid) != vsb->v_snap_max_xid)
+	if (le64_to_cpu(sme->sme_snap_xid) != sb->s_xid)
 		report("Extended snapshot metadata", "wrong transaction id.");
 
 	munmap(sme, sb->s_blocksize);
