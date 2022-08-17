@@ -871,8 +871,20 @@ void check_volume_super(void)
 		report("Volume superblock", "bad symlink count.");
 	if (le64_to_cpu(vsb_raw->apfs_num_other_fsobjects) != vsb->v_special_count)
 		report("Volume superblock", "bad special file count.");
-	if (le64_to_cpu(vsb_raw->apfs_num_snapshots) != vsb->v_snap_count)
-		report("Volume superblock", "bad snapshot count.");
+
+	/*
+	 * Older snapshots may have been deleted after this one was created, so
+	 * there is no way to check apfs_num_snapshots exactly.
+	 *
+	 * TODO: check that each snapshot has more snaps than the previous one?
+	 */
+	if (vsb->v_in_snapshot) {
+		if (le64_to_cpu(vsb_raw->apfs_num_snapshots) < vsb->v_snap_count)
+			report("Volume superblock", "bad snapshot count.");
+	} else {
+		if (le64_to_cpu(vsb_raw->apfs_num_snapshots) != vsb->v_snap_count)
+			report("Volume superblock", "bad snapshot count.");
+	}
 
 	/*
 	 * The original omap for a snapshot is not preserved, so there is no way

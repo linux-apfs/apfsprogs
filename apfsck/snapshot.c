@@ -75,8 +75,6 @@ static void parse_snap_name_record(struct apfs_snap_name_key *key, struct apfs_s
 		report("Snapshot tree", "missing a metadata record.");
 	if (strcmp((char *)key->name, snap->sn_meta_name) != 0)
 		report("Snapshot tree", "inconsistent names for snapshot.");
-
-	++vsb->v_snap_count;
 }
 
 /**
@@ -96,6 +94,7 @@ static void check_snapshot(u64 xid, u64 vol_bno, u64 extentref_bno)
 	vsb = alloc_volume_super(true);
 	/* The list of extref trees is shared by all transactions */
 	vsb->v_snap_extrefs = latest_vsb->v_snap_extrefs;
+	vsb->v_snap_count = latest_vsb->v_snap_count;
 	vsb->v_raw = read_object(vol_bno, NULL, &vsb->v_obj);
 	read_volume_super(latest_vsb->v_index, vsb, &vsb->v_obj);
 
@@ -165,6 +164,7 @@ static void parse_snap_metadata_record(struct apfs_snap_metadata_key *key, struc
 		report_unknown("Snapshot flags");
 
 	check_snapshot(snap_xid, le64_to_cpu(val->sblock_oid), le64_to_cpu(val->extentref_tree_oid));
+	++vsb->v_snap_count;
 }
 
 /**
