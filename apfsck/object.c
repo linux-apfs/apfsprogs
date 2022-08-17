@@ -139,9 +139,17 @@ void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
 		       (unsigned long long)bno);
 
 	xid = obj->xid;
-	if (!xid || sb->s_xid < xid)
-		report("Object header", "bad transaction id in block 0x%llx.",
-		       (unsigned long long)bno);
+	if (!xid)
+		report("Object header", "null transaction id in block 0x%llx.", (unsigned long long)bno);
+	if (sb->s_xid < xid) {
+		/*
+		 * When a snapshot is deleted, the following one is given its
+		 * physical extents; so its extent reference tree gets altered
+		 * under the current transaction.
+		 */
+		if (!vsb->v_in_snapshot || obj->subtype != APFS_OBJECT_TYPE_BLOCKREFTREE)
+			report("Object header", "bad transaction id in block 0x%llx.", (unsigned long long)bno);
+	}
 	if (vsb && vsb->v_first_xid > xid)
 		report_weird("Transaction id in block is older than volume");
 	if (omap_table && xid != omap_rec->xid)
