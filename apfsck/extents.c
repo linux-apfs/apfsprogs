@@ -109,7 +109,7 @@ static void check_dstream_stats(struct dstream *dstream)
 	if (dstream->d_orphan) {
 		if (dstream->d_size > dstream->d_alloced_size)
 			report("Orphan dstream", "reported sizes make no sense.");
-		if (dstream->d_bytes != 0)
+		if (dstream->d_bytes != 0 && dstream->d_bytes != dstream->d_alloced_size)
 			report_weird("Orphan dstream");
 	} else {
 		if (dstream->d_bytes < dstream->d_size)
