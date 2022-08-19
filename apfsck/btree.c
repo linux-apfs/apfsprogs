@@ -582,9 +582,11 @@ static void parse_cat_record(void *key, void *val, int len)
 	case APFS_TYPE_DIR_STATS:
 		parse_dir_stats_record(key, val, len);
 		break;
-	default:
-		report_unknown("Encryption");
+	case APFS_TYPE_CRYPTO_STATE:
+		parse_crypto_state_record(key, val, len);
 		break;
+	default:
+		report(NULL, "Bug!");
 	}
 }
 

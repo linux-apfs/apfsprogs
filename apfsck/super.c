@@ -759,6 +759,7 @@ struct volume_superblock *alloc_volume_super(bool snap)
 	ret->v_dstream_table = alloc_htable();
 	ret->v_inode_table = alloc_htable();
 	ret->v_dirstat_table = alloc_htable();
+	ret->v_crypto_table = alloc_htable();
 
 	return ret;
 }
@@ -847,6 +848,8 @@ void check_volume_super(void)
 	}
 	free_dirstat_table(vsb->v_dirstat_table);
 	vsb->v_dirstat_table = NULL;
+	free_crypto_table(vsb->v_crypto_table);
+	vsb->v_crypto_table = NULL;
 
 	if (!vsb->v_has_root)
 		report("Catalog", "the root directory is missing.");

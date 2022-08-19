@@ -40,11 +40,13 @@ static struct dstream *parse_xattr_dstream(struct apfs_xattr_dstream *xstream)
 	struct apfs_dstream *dstream_raw = &xstream->dstream;
 	u64 id = le64_to_cpu(xstream->xattr_obj_id);
 	u64 size, alloced_size;
+	u64 crypid;
 
 	size = le64_to_cpu(dstream_raw->size);
 	alloced_size = le64_to_cpu(dstream_raw->alloced_size);
-	if (dstream_raw->default_crypto_id)
-		report_unknown("Dstream encryption");
+	crypid = le64_to_cpu(dstream_raw->default_crypto_id);
+	if (crypid && crypid != APFS_CRYPTO_SW_ID)
+		++get_crypto_state(crypid)->c_references;
 
 	dstream = get_dstream(id);
 	if (dstream->d_references) {

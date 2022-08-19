@@ -79,6 +79,20 @@ struct dstream {
 };
 #define d_id	d_htable.h_id		/* Dstream id */
 
+/*
+ * Crypto state data in memory
+ */
+struct crypto_state {
+	struct htable_entry c_htable; /* Hash table entry header */
+
+	/* Crypto state dtats read from the record */
+	u32		c_refcnt;
+
+	/* Crypto state stats measured by the fsck */
+	u32		c_references;	/* Number of refs to crypto state */
+};
+#define c_id	c_htable.h_id		/* Crypto id */
+
 extern void free_dstream_table(struct htable_entry **table);
 extern void free_extent_table(struct htable_entry **table);
 extern struct dstream *get_dstream(u64 ino);
@@ -88,5 +102,8 @@ extern void parse_dstream_id_record(struct apfs_dstream_id_key *key,
 				    struct apfs_dstream_id_val *val, int len);
 extern u64 parse_phys_ext_record(struct apfs_phys_ext_key *key,
 				 struct apfs_phys_ext_val *val, int len);
+extern void free_crypto_table(struct htable_entry **table);
+extern struct crypto_state *get_crypto_state(u64 id);
+extern void parse_crypto_state_record(struct apfs_crypto_state_key *key, struct apfs_crypto_state_val *val, int len);
 
 #endif	/* _EXTENTS_H */

@@ -256,12 +256,14 @@ void parse_extent_record(struct apfs_file_extent_key *key,
 {
 	struct dstream *dstream;
 	u64 length, flags;
+	u64 crypid;
 
 	if (len != sizeof(*val))
 		report("Extent record", "wrong size of value.");
 
-	if (val->crypto_id)
-		report_unknown("Extent encryption");
+	crypid = le64_to_cpu(val->crypto_id);
+	if (crypid && crypid != APFS_CRYPTO_SW_ID)
+		++get_crypto_state(crypid)->c_references;
 
 	length = le64_to_cpu(val->len_and_flags) & APFS_FILE_EXTENT_LEN_MASK;
 	if (!length)
@@ -363,4 +365,101 @@ u64 parse_phys_ext_record(struct apfs_phys_ext_key *key,
 	extent->e_update = kind == APFS_KIND_UPDATE;
 
 	return extent->e_bno + length - 1;
+}
+
+/**
+ * free_crypto_state - Free a crypto state after performing some final checks
+ * @entry: the entry to free
+ */
+static void free_crypto_state(struct htable_entry *entry)
+{
+	struct crypto_state *crypto = (struct crypto_state *)entry;
+
+	if (crypto->c_refcnt != crypto->c_references)
+		report("Crypto state record", "bad reference count.");
+	free(crypto);
+}
+
+/**
+ * free_crypto_table - Free the crypto state hash table and all its entries
+ * @table: table to free
+ */
+void free_crypto_table(struct htable_entry **table)
+{
+	free_htable(table, free_crypto_state);
+}
+
+/**
+ * get_crypto_state - Find or create a crypto state struct in their hash table
+ * @id:		id of the crypto state
+ *
+ * Returns the crypto state structure, after creating it if necessary.
+ */
+struct crypto_state *get_crypto_state(u64 id)
+{
+	struct htable_entry *entry;
+
+	entry = get_htable_entry(id, sizeof(struct crypto_state), vsb->v_crypto_table);
+	return (struct crypto_state *)entry;
+}
+
+/**
+ * parse_crypto_state_record - Parse and check a crypto state record value
+ * @key:	pointer to the raw key
+ * @val:	pointer to the raw value
+ * @len:	length of the raw value
+ *
+ * Internal consistency of @key must be checked before calling this function.
+ */
+void parse_crypto_state_record(struct apfs_crypto_state_key *key, struct apfs_crypto_state_val *val, int len)
+{
+	struct apfs_wrapped_crypto_state *wrapped = NULL;
+	struct crypto_state *crypto;
+	u16 key_len;
+
+	if (len < sizeof(*val))
+		report("Crypto state record", "value size too small.");
+	wrapped = &val->state;
+
+	key_len = le16_to_cpu(wrapped->key_len);
+	if (!key_len)
+		report_unknown("Encrypted metadata");
+	if (key_len > APFS_CP_MAX_WRAPPEDKEYSIZE)
+		report("Crypto state record", "wrapped key is too long.");
+	if (len != sizeof(*val) + le16_to_cpu(wrapped->key_len))
+		report("Crypto state record", "wrong size of value.");
+
+	if (le16_to_cpu(wrapped->major_version) != APFS_WMCS_MAJOR_VERSION)
+		report("Crypto state record", "wrong major version.");
+	if (le16_to_cpu(wrapped->minor_version) != APFS_WMCS_MINOR_VERSION)
+		report("Crypto state record", "wrong minor version.");
+	if (wrapped->cpflags)
+		report("Crypto state record", "unknown flag.");
+	/* TODO: deal with the protection class */
+	if (!wrapped->key_revision)
+		report("Crypto state record", "key revision is not set.");
+
+	/*
+	 * I don't know how unofficial implementations are supposed to handle
+	 * this field, but I'm guessing it shouldn't be zero.
+	 */
+	if (!wrapped->key_os_version)
+		report("Crypto state record", "os version is not set.");
+
+	crypto = get_crypto_state(cat_cnid(&key->hdr));
+
+	switch (crypto->c_id) {
+	case 0:
+		report("Crypto state record", "null id.");
+	case APFS_CRYPTO_SW_ID:
+		report("Crypto state record", "id for software encryption.");
+	case APFS_CRYPTO_RESERVED_5:
+		report("Crypto state record", "reserved crypto id.");
+	case APFS_UNASSIGNED_CRYPTO_ID:
+		report("Crypto state record", "unassigned crypto id.");
+	}
+
+	crypto->c_refcnt = le32_to_cpu(val->refcnt);
+	if (!crypto->c_refcnt)
+		report("Crypto state record", "has no references.");
 }

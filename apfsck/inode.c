@@ -373,6 +373,7 @@ static int read_dstream_xfield(char *xval, int len, struct inode *inode)
 	struct apfs_dstream *dstream_raw;
 	struct dstream *dstream;
 	u64 size, alloced_size;
+	u64 crypid;
 
 	if ((inode->i_mode & S_IFMT) != S_IFREG)
 		report("Inode record", "has dstream but isn't a regular file.");
@@ -383,8 +384,19 @@ static int read_dstream_xfield(char *xval, int len, struct inode *inode)
 
 	size = le64_to_cpu(dstream_raw->size);
 	alloced_size = le64_to_cpu(dstream_raw->alloced_size);
-	if (dstream_raw->default_crypto_id)
-		report_unknown("Dstream encryption");
+	crypid = le64_to_cpu(dstream_raw->default_crypto_id);
+	if (crypid && crypid != APFS_CRYPTO_SW_ID) {
+		/*
+		 * I'm not yet sure how this crypto cloning thing is supposed
+		 * to work, but it's very common (TODO).
+		 */
+		if (crypid == APFS_UNASSIGNED_CRYPTO_ID) {
+			if (!(inode->i_flags & APFS_INODE_WAS_CLONED))
+				report("Dstream xfield", "not a clone but has unassigned crypto.");
+		} else {
+			++get_crypto_state(crypid)->c_references;
+		}
+	}
 
 	dstream = get_dstream(inode->i_private_id);
 	if (dstream->d_references) {
