@@ -21,6 +21,7 @@ struct omap_record {
 	struct omap_record *next; /* Next entry in linked list */
 
 	u64	xid;	/* Transaction id */
+	u64	oid;	/* Virtual object id */
 	u64	bno;	/* Block number */
 
 	/* Was this oid-xid pair ever seen in use? */

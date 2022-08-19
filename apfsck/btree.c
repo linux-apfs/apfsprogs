@@ -598,12 +598,29 @@ static void free_omap_record_list(struct htable_entry *entry)
 {
 	struct omap_record_list *list = (struct omap_record_list *)entry;
 	struct omap_record *curr_rec = list->o_records;
+	int unseen = 0;
 
 	while (curr_rec) {
 		struct omap_record *next_rec = NULL;
 
-		if (!curr_rec->seen)
-			report("Omap record", "oid-xid combination is never used.");
+		if (!curr_rec->seen) {
+			/*
+			 * I've encountered a single leaked extended snap meta
+			 * block in some ios images. No idea... (TODO)
+			 */
+			if (unseen == 0 && curr_rec->xid < sb->s_xid) {
+				struct apfs_obj_phys *raw = NULL;
+				struct object obj = {0};
+
+				raw = read_object_nocheck(curr_rec->bno, &obj);
+				if (obj.type != OBJECT_TYPE_SNAP_META_EXT || obj.subtype != APFS_OBJECT_TYPE_INVALID)
+					report("Leaked omap record", "unexpected object type.");
+				munmap(raw, sb->s_blocksize);
+				++unseen;
+			} else {
+				report("Omap record", "oid-xid combination is never used.");
+			}
+		}
 
 		next_rec = curr_rec->next;
 		free(curr_rec);
@@ -675,6 +692,7 @@ static struct omap_record *get_omap_record(u64 oid, u64 xid, struct htable_entry
 	if (!new)
 		system_error();
 	new->xid = xid;
+	new->oid = oid;
 	new->next = omap;
 	*omap_p = new;
 	return new;
