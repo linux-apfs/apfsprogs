@@ -615,6 +615,7 @@ static void free_omap_record_list(struct htable_entry *entry)
 				raw = read_object_nocheck(curr_rec->bno, &obj);
 				if (obj.type != OBJECT_TYPE_SNAP_META_EXT || obj.subtype != APFS_OBJECT_TYPE_INVALID)
 					report("Leaked omap record", "unexpected object type.");
+				container_bmap_mark_as_used(curr_rec->bno, 1);
 				munmap(raw, sb->s_blocksize);
 				++unseen;
 			} else {
