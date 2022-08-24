@@ -117,6 +117,14 @@ static void free_inode_names(struct inode *inode)
 	if (!inode->i_first_name)
 		report("Catalog", "inode with no dentries.");
 
+	if (inode->i_flags & APFS_INODE_ACTIVE_FILE_TRIMMED) {
+		/* No idea if any of this is actually required */
+		if (strcmp(inode->i_name, ".overprovisioning_file"))
+			report("Overprovisioning file", "wrong name.");
+		if (inode->i_link_count != 1)
+			report("Overprovisioning file", "has hard links.");
+	}
+
 	if (inode->i_purg_name) {
 		check_purgeable_name(inode);
 		free(inode->i_purg_name);
@@ -394,7 +402,10 @@ static int read_dstream_xfield(char *xval, int len, struct inode *inode)
 			if (!(inode->i_flags & APFS_INODE_WAS_CLONED))
 				report("Dstream xfield", "not a clone but has unassigned crypto.");
 		} else {
-			++get_crypto_state(crypid)->c_references;
+			struct crypto_state *crypto = get_crypto_state(crypid);
+			++crypto->c_references;
+			if (inode->i_flags & APFS_INODE_ACTIVE_FILE_TRIMMED)
+				crypto->c_overprov = true;
 		}
 	}
 

@@ -87,9 +87,11 @@ struct crypto_state {
 
 	/* Crypto state dtats read from the record */
 	u32		c_refcnt;
+	u16		c_keylen;
 
 	/* Crypto state stats measured by the fsck */
 	u32		c_references;	/* Number of refs to crypto state */
+	bool		c_overprov;	/* Used by an overprovisioning file */
 };
 #define c_id	c_htable.h_id		/* Crypto id */
 

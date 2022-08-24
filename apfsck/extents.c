@@ -375,8 +375,16 @@ static void free_crypto_state(struct htable_entry *entry)
 {
 	struct crypto_state *crypto = (struct crypto_state *)entry;
 
+	/*
+	 * It seems that the overprovisioning file may have no wrapped key,
+	 * even if it does have a state record.
+	 */
+	if (crypto->c_keylen == 0 && !crypto->c_overprov)
+		report_unknown("Encrypted metadata");
+
 	if (crypto->c_refcnt != crypto->c_references)
 		report("Crypto state record", "bad reference count.");
+
 	free(crypto);
 }
 
@@ -425,8 +433,6 @@ void parse_crypto_state_record(struct apfs_crypto_state_key *key, struct apfs_cr
 	wrapped = &val->state;
 
 	key_len = le16_to_cpu(wrapped->key_len);
-	if (!key_len)
-		report_unknown("Encrypted metadata");
 	if (key_len > APFS_CP_MAX_WRAPPEDKEYSIZE)
 		report("Crypto state record", "wrapped key is too long.");
 	if (len != sizeof(*val) + le16_to_cpu(wrapped->key_len))
@@ -465,4 +471,5 @@ void parse_crypto_state_record(struct apfs_crypto_state_key *key, struct apfs_cr
 	crypto->c_refcnt = le32_to_cpu(val->refcnt);
 	if (!crypto->c_refcnt)
 		report("Crypto state record", "has no references.");
+	crypto->c_keylen = key_len;
 }
