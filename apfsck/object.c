@@ -56,11 +56,12 @@ void *read_object_nocheck(u64 bno, struct object *obj)
 
 /**
  * parse_object_flags - Check consistency of object flags
- * @flags: the flags
+ * @flags:	the flags
+ * @encrypted:	is the object encrypted?
  *
  * Returns the storage type flags to be checked by the caller.
  */
-u32 parse_object_flags(u32 flags)
+u32 parse_object_flags(u32 flags, bool encrypted)
 {
 	if ((flags & APFS_OBJECT_TYPE_FLAGS_DEFINED_MASK) != flags)
 		report("Object header", "undefined flag in use.");
@@ -68,8 +69,14 @@ u32 parse_object_flags(u32 flags)
 		report("Object header", "nonpersistent flag is set.");
 	if (flags & APFS_OBJ_NOHEADER)
 		report("Object header", "noheader flag is set.");
-	if (flags & APFS_OBJ_ENCRYPTED)
-		report_unknown("Encrypted object");
+
+	/*
+	 * So-called encrypted objects don't actually appear to be encrypted at
+	 * all, no idea what this is about.
+	 */
+	if ((bool)(flags & APFS_OBJ_ENCRYPTED) != encrypted)
+		report("Object header", "wrong encryption flag.");
+
 	return flags & APFS_OBJ_STORAGETYPE_MASK;
 }
 
@@ -157,8 +164,9 @@ void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
 		       "transaction id in omap key doesn't match block 0x%llx.",
 		       (unsigned long long)bno);
 
+	storage_type = parse_object_flags(obj->flags, vsb && vsb->v_encrypted && obj->subtype == APFS_OBJECT_TYPE_FSTREE);
+
 	/* Ephemeral objects are handled by read_ephemeral_object() */
-	storage_type = parse_object_flags(obj->flags);
 	if (omap_table && storage_type != APFS_OBJ_VIRTUAL)
 		report("Object header", "wrong flag for virtual object.");
 	if (!omap_table && storage_type != APFS_OBJ_PHYSICAL)
@@ -262,7 +270,7 @@ void *read_ephemeral_object(u64 oid, struct object *obj)
 	if (obj->xid != sb->s_xid)
 		report("Ephemeral object", "not part of latest transaction.");
 
-	storage_type = parse_object_flags(obj->flags);
+	storage_type = parse_object_flags(obj->flags, false);
 	if (storage_type != APFS_OBJ_EPHEMERAL)
 		report("Object header", "wrong flag for ephemeral object.");
 

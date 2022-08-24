@@ -209,7 +209,7 @@ static void check_main_flags(u64 flags)
 	if (flags & (APFS_NX_RESERVED_1 | APFS_NX_RESERVED_2))
 		report("Container superblock", "reserved flag in use.");
 	if (flags & APFS_NX_CRYPTO_SW)
-		report_unknown("Encryption");
+		report_unknown("Software encryption");
 }
 
 /**
@@ -415,7 +415,7 @@ static void check_volume_flags(u64 flags)
 		report("Volume superblock", "reserved flag in use.");
 
 	if (!(flags & APFS_FS_UNENCRYPTED))
-		report_unknown("Encryption");
+		vsb->v_encrypted = true;
 	else if (flags & (APFS_FS_EFFACEABLE | APFS_FS_ONEKEY))
 		report("Volume superblock", "inconsistent crypto flags.");
 
@@ -529,9 +529,9 @@ static void check_meta_crypto(struct apfs_wrapped_meta_crypto_state *wmcs)
 		report("Volume meta_crypto", "unknown flag.");
 
 	if (le32_to_cpu(wmcs->persistent_class) != APFS_PROTECTION_CLASS_F)
-		report_unknown("Encryption");
+		report_unknown("Encrypted metadata");
 	if (le16_to_cpu(wmcs->key_revision) != 1) /* Key has been changed */
-		report_unknown("Encryption");
+		report_unknown("Encrypted metadata");
 
 	if (wmcs->unused)
 		report("Volume meta_crypto", "reserved field in use.");
@@ -1091,7 +1091,7 @@ static u32 parse_cpoint_map_blocks(u64 desc_base, u32 desc_blocks, u32 *index)
 		raw = read_object_nocheck(bno, &obj);
 		if (obj.oid != bno)
 			report("Checkpoint map", "wrong object id.");
-		if (parse_object_flags(obj.flags) != APFS_OBJ_PHYSICAL)
+		if (parse_object_flags(obj.flags, false) != APFS_OBJ_PHYSICAL)
 			report("Checkpoint map", "wrong storage type.");
 		if (obj.type != APFS_OBJECT_TYPE_CHECKPOINT_MAP)
 			report("Checkpoint map", "wrong object type.");
@@ -1192,7 +1192,7 @@ void parse_filesystem(void)
 
 		bno = desc_base + index;
 		raw = read_object_nocheck(bno, &obj);
-		if (parse_object_flags(obj.flags) != APFS_OBJ_EPHEMERAL)
+		if (parse_object_flags(obj.flags, false) != APFS_OBJ_EPHEMERAL)
 			report("Checkpoint superblock", "bad storage type.");
 		if (obj.type != APFS_OBJECT_TYPE_NX_SUPERBLOCK)
 			report("Checkpoint superblock", "bad object type.");

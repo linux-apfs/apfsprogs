@@ -26,7 +26,7 @@ struct object {
 
 extern int obj_verify_csum(struct apfs_obj_phys *obj);
 extern void *read_object_nocheck(u64 bno, struct object *obj);
-extern u32 parse_object_flags(u32 flags);
+extern u32 parse_object_flags(u32 flags, bool encrypted);
 extern void *read_object(u64 oid, struct htable_entry **omap_table,
 			 struct object *obj);
 extern void free_cpoint_map_table(struct htable_entry **table);

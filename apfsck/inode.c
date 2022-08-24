@@ -794,10 +794,8 @@ void parse_inode_record(struct apfs_inode_key *key,
 		report("Inode record", "not a clone but changed private id.");
 
 	def_prot_class = le32_to_cpu(val->default_protection_class);
-	/* These protection classes have been seen in unencrypted volumes */
-	if (def_prot_class != APFS_PROTECTION_CLASS_DIR_NONE &&
-	    def_prot_class != APFS_PROTECTION_CLASS_D)
-		report_unknown("Encryption");
+	if (def_prot_class > APFS_PROTECTION_CLASS_F || def_prot_class == 5)
+		report("Inode record", "invalid default protection class");
 
 	mode = le16_to_cpu(val->mode);
 	filetype = mode & S_IFMT;

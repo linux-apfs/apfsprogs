@@ -63,6 +63,7 @@ struct volume_superblock {
 	u64 v_next_obj_id;	/* Next cnid to be assigned */
 	u32 v_next_doc_id;	/* Next document identifier to be assigned */
 	u32 v_index;		/* Index in the container's volume array */
+	bool v_encrypted;	/* Is the volume encrypted? */
 
 	struct object v_obj;		/* Object holding the volume sb */
 };

@@ -417,6 +417,9 @@ void parse_crypto_state_record(struct apfs_crypto_state_key *key, struct apfs_cr
 	struct crypto_state *crypto;
 	u16 key_len;
 
+	if (!vsb->v_encrypted)
+		report("Unencrypted volume", "has crypto state records.");
+
 	if (len < sizeof(*val))
 		report("Crypto state record", "value size too small.");
 	wrapped = &val->state;

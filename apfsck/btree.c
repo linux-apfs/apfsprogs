@@ -766,8 +766,10 @@ static void parse_omap_record(struct apfs_omap_key *key,
 		report("Omap record", "saved flag is set.");
 	if (flags & APFS_OMAP_VAL_NOHEADER)
 		report_unknown("Virtual objects with no header");
-	if (flags & (APFS_OMAP_VAL_ENCRYPTED | APFS_OMAP_VAL_CRYPTO_GENERATION))
-		report_unknown("Encryption");
+	if ((bool)(flags & APFS_OMAP_VAL_ENCRYPTED) != (vsb && vsb->v_encrypted))
+		report("Omap record", "wrong encryption flag.");
+	if (flags & APFS_OMAP_VAL_CRYPTO_GENERATION)
+		report_unknown("Crypto generation flag");
 
 	size = le32_to_cpu(val->ov_size);
 	if (size & (sb->s_blocksize - 1))
@@ -1167,7 +1169,7 @@ static void check_omap_flags(u32 flags)
 
 	if (flags & (APFS_OMAP_ENCRYPTING | APFS_OMAP_DECRYPTING |
 		     APFS_OMAP_KEYROLLING | APFS_OMAP_CRYPTO_GENERATION))
-		report_unknown("Encryption");
+		report_unknown("Omap encryption");
 
 	if (vsb && (flags & APFS_OMAP_MANUALLY_MANAGED))
 		report("Volume object map", "is manually managed.");
