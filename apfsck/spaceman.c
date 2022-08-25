@@ -418,24 +418,58 @@ static void check_spaceman_tier2_device(struct apfs_spaceman_phys *raw)
 		report("Spaceman device", "non-zero padding.");
 }
 
-/**
- * check_allocation_boundaries - Check the boundaries of an allocation zone
- * @azb: pointer to the raw boundaries structure
- * @dev: index for the device
- *
- * Allocation zones are undocumented, so we can't do much more than report them
- * as unsupported if they are in use.
- */
-static void check_allocation_boundaries(
-		struct apfs_spaceman_allocation_zone_boundaries *azb, int dev)
-{
-	if (!azb->saz_zone_start && !azb->saz_zone_end)
-		return;
+struct alloc_zone {
+	struct alloc_zone *next;	/* Next entry in linked list */
+	u16 id;				/* Zone id */
+	u64 start;			/* Start of zone */
+	u64 end;			/* End of zone */
+};
 
-	if (dev == APFS_SD_MAIN)
-		report_unknown("Allocation zones");
-	else
-		report_unknown("Fusion drive");
+static struct alloc_zone *alloc_zone_list = NULL;
+
+/* Puts alloc zones in a list to check for overlap */
+static void check_new_alloc_zone(u16 id, u64 start, u64 end)
+{
+	struct alloc_zone **zone_p = NULL;
+	struct alloc_zone *zone = NULL;
+	struct alloc_zone *new = NULL;
+
+	if (start >= end)
+		report("Allocation zone", "invalid range.");
+
+	zone_p = &alloc_zone_list;
+	zone = *zone_p;
+	while (zone) {
+		if (zone->id == id)
+			report("Allocation zones", "repeated id.");
+		if (start < zone->end && end > zone->start)
+			report("Allocations zones", "overlapping ranges.");
+		zone_p = &zone->next;
+		zone = *zone_p;
+	}
+
+	new = calloc(1, sizeof(*new));
+	if (!new)
+		system_error();
+	new->id = id;
+	new->start = start;
+	new->end = end;
+	*zone_p = new;
+}
+
+static void free_checked_alloc_zones(void)
+{
+	struct alloc_zone *curr = alloc_zone_list;
+
+	alloc_zone_list = NULL;
+	while (curr) {
+		struct alloc_zone *next = NULL;
+
+		next = curr->next;
+		curr->next = NULL;
+		free(curr);
+		curr = next;
+	}
 }
 
 /**
@@ -456,20 +490,30 @@ static void check_spaceman_datazone(struct apfs_spaceman_datazone_info_phys *dz)
 			int j;
 
 			az = &dz->sdz_allocation_zones[dev][i];
-			if (az->saz_zone_id || az->saz_previous_boundary_index)
-				report_unknown("Allocation zones");
+
+			if (az->saz_zone_id) {
+				if (dev != APFS_SD_MAIN)
+					report_unknown("Fusion drive");
+				azb = &az->saz_current_boundaries;
+				check_new_alloc_zone(le16_to_cpu(az->saz_zone_id), le64_to_cpu(azb->saz_zone_start), le64_to_cpu(azb->saz_zone_end));
+			} else if (azb->saz_zone_start || azb->saz_zone_end) {
+				report("Allocation zone", "has no id.");
+			}
+
+			if (az->saz_previous_boundary_index)
+				report_unknown("Modified allocation zones");
 			if (az->saz_reserved)
 				report("Datazone", "reserved field in use.");
 
-			azb = &az->saz_current_boundaries;
-			check_allocation_boundaries(azb, dev);
 			for (j = 0;
 			     j < APFS_SM_ALLOCZONE_NUM_PREVIOUS_BOUNDARIES;
 			     ++j) {
 				azb = &az->saz_previous_boundaries[j];
-				check_allocation_boundaries(azb, dev);
+				if (azb->saz_zone_start || azb->saz_zone_end)
+					report_unknown("Modified allocation zones");
 			}
 		}
+		free_checked_alloc_zones();
 	}
 }
 
