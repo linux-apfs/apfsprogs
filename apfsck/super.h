@@ -141,16 +141,21 @@ static inline bool apfs_volume_is_in_group(void)
 	return features & APFS_FEATURE_VOLGRP_SYSTEM_INO_SPACE;
 }
 
+static inline u16 apfs_volume_role(void)
+{
+	return le16_to_cpu(vsb->v_raw->apfs_role);
+}
+
 static inline bool apfs_is_data_volume_in_group(void)
 {
-	u16 role = le16_to_cpu(vsb->v_raw->apfs_role);
+	u16 role = apfs_volume_role();
 
 	return apfs_volume_is_in_group() && role == APFS_VOL_ROLE_DATA;
 }
 
 static inline bool apfs_is_system_volume_in_group(void)
 {
-	u16 role = le16_to_cpu(vsb->v_raw->apfs_role);
+	u16 role = apfs_volume_role();
 
 	return apfs_volume_is_in_group() && role == APFS_VOL_ROLE_SYSTEM;
 }

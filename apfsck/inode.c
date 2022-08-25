@@ -676,10 +676,19 @@ static void check_inode_internal_flags(u64 flags)
 	if (flags & APFS_INODE_BEING_TRUNCATED)
 		report_crash("Inode internal flags");
 
-	if (flags & APFS_INODE_PINNED_TO_MAIN ||
-	    flags & APFS_INODE_PINNED_TO_TIER2 ||
-	    flags & APFS_INODE_ALLOCATION_SPILLEDOVER)
+	if (flags & APFS_INODE_PINNED_MASK) {
+		/*
+		 * Preboot volume seems to be mostly pinned to main, even in
+		 * non-fusion drives.
+		 */
+		if ((flags & APFS_INODE_PINNED_TO_TIER2) || apfs_volume_role() != APFS_VOL_ROLE_PREBOOT)
+			report_unknown("Fusion drive");
+		if ((flags & APFS_INODE_PINNED_TO_TIER2) && (flags & APFS_INODE_PINNED_TO_MAIN))
+			report("Inode record", "pinned to both tiers.");
+	}
+	if (flags & APFS_INODE_ALLOCATION_SPILLEDOVER)
 		report_unknown("Fusion drive");
+
 	if (flags & APFS_INODE_IS_APFS_PRIVATE)
 		report_unknown("Private implementation inode");
 }
