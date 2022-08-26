@@ -1038,6 +1038,8 @@ static void parse_main_super(struct super_block *sb)
 	if (keybag_bno || keybag_blocks)
 		report_weird("Container keybag");
 	container_bmap_mark_as_used(keybag_bno, keybag_blocks);
+	/* TODO: actually check all this stuff */
+	container_bmap_mark_as_used(le64_to_cpu(sb->s_raw->nx_mkb_locker.pr_start_paddr), le64_to_cpu(sb->s_raw->nx_mkb_locker.pr_block_count));
 
 	if (sb->s_raw->nx_fusion_mt_oid || sb->s_raw->nx_fusion_wbc_oid ||
 	    sb->s_raw->nx_fusion_wbc.pr_start_paddr ||

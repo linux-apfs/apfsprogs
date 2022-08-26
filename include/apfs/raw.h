@@ -973,6 +973,10 @@ struct apfs_nx_superblock {
 	__le64 nx_fusion_mt_oid;
 /*550*/	__le64 nx_fusion_wbc_oid;
 	struct apfs_prange nx_fusion_wbc;
+
+	__le64 nx_newest_mounted_version;
+
+/*570*/	struct apfs_prange nx_mkb_locker;
 } __packed;
 
 /*
