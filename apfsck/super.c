@@ -917,6 +917,7 @@ void check_volume_super(void)
 static void check_container(struct super_block *sb)
 {
 	int vol;
+	bool reaper_vol_seen = false;
 
 	sb->s_omap_table = alloc_htable();
 
@@ -935,10 +936,16 @@ static void check_container(struct super_block *sb)
 			free(vsb);
 			break;
 		}
+		if (vsb->v_obj.oid == sb->s_reaper_fs_id)
+			reaper_vol_seen = true;
 		check_volume_super();
 		sb->s_volumes[vol] = vsb;
 		vsb = NULL;
 	}
+
+	/* For now we just check that the reaper's volume exists */
+	if (sb->s_reaper_fs_id && !reaper_vol_seen)
+		report("Reaper", "volume id is invalid.");
 
 	free_omap_table(sb->s_omap_table);
 	sb->s_omap_table = NULL;
@@ -1275,18 +1282,24 @@ static struct object *parse_reaper(u64 oid)
 	if (reaper->subtype != APFS_OBJECT_TYPE_INVALID)
 		report("Reaper", "wrong object subtype.");
 
-	/* Docs on the reaper are very incomplete, so let's hope it's empty */
-	if (raw->nr_completed_id || raw->nr_head || raw->nr_tail ||
-	    raw->nr_rlcount || raw->nr_type || raw->nr_size ||
-	    raw->nr_oid || raw->nr_xid || raw->nr_nrle_flags)
-		report_unknown("Nonempty reaper");
-	if (le64_to_cpu(raw->nr_next_reap_id) != 1)
-		report_unknown("Nonempty reaper");
+	buffer_size = le32_to_cpu(raw->nr_state_buffer_size);
+	if (buffer_size != sb->s_blocksize - sizeof(*raw))
+		report("Reaper", "wrong state buffer size.");
 
-	/* For now this only silences complaints about unused mappings */
+	/* Docs on the reaper are very incomplete, so let's hope it's empty */
 	if (raw->nr_head) {
 		struct apfs_nx_reap_list_phys *list_raw = NULL;
 		struct object list = {0};
+
+		sb->s_reaper_fs_id = le64_to_cpu(raw->nr_fs_oid);
+
+		if (le64_to_cpu(raw->nr_next_reap_id) <= le64_to_cpu(raw->nr_completed_id))
+			report("Reaper", "next read id before completed.");
+
+		if (raw->nr_tail != raw->nr_head)
+			report_unknown("Nonempty reaper");
+		if (le64_to_cpu(raw->nr_head) - le64_to_cpu(raw->nr_tail) + 1 != le32_to_cpu(raw->nr_rlcount))
+			report("Reaper", "wrong reap list count.");
 
 		list_raw = read_ephemeral_object(le64_to_cpu(raw->nr_head), &list);
 		if (list.type != APFS_OBJECT_TYPE_NX_REAP_LIST)
@@ -1294,7 +1307,29 @@ static struct object *parse_reaper(u64 oid)
 		if (list.subtype != APFS_OBJECT_TYPE_INVALID)
 			report("Reaper list", "wrong object subtype.");
 
+		if (list_raw->nrl_max != cpu_to_le32((sb->s_blocksize - sizeof(*list_raw)) / sizeof(struct apfs_nx_reap_list_entry)))
+			report("Reaper list", "wrong maximum entry count.");
+
+		if (list_raw->nrl_next || list_raw->nrl_flags || list_raw->nrl_count)
+			report_unknown("Nonempty reaper list");
+		if (list_raw->nrl_first != cpu_to_le32(-1) || list_raw->nrl_last != cpu_to_le32(-1))
+			report_unknown("Nonempty reaper list");
+		/* TODO: nrl_free? */
+
 		munmap(list_raw, sb->s_blocksize);
+	} else {
+		if (raw->nr_completed_id || raw->nr_head || raw->nr_rlcount || raw->nr_type)
+			report("Reaper", "should be empty.");
+		if (raw->nr_size || raw->nr_oid || raw->nr_xid || raw->nr_nrle_flags)
+			report("Reaper", "should be empty.");
+		if (le64_to_cpu(raw->nr_next_reap_id) != 1)
+			report("Reaper", "should be empty.");
+		for (i = 0; i < buffer_size; ++i) {
+			if (raw->nr_state_buffer[i])
+				report("Reaper", "should be empty.");
+		}
+		if (raw->nr_fs_oid)
+			report("Reaper", "is empty but belongs to a volume.");
 	}
 
 	flags = le32_to_cpu(raw->nr_flags);
@@ -1303,18 +1338,7 @@ static struct object *parse_reaper(u64 oid)
 	if (!(flags & APFS_NR_BHM_FLAG))
 		report("Reaper", "reserved flag must always be set.");
 	if (flags & APFS_NR_CONTINUE)
-		report_unknown("Nonempty reaper");
-
-	if (raw->nr_fs_oid)
-		report_unknown("Reaper belonging to a volume");
-
-	buffer_size = le32_to_cpu(raw->nr_state_buffer_size);
-	if (buffer_size != sb->s_blocksize - sizeof(*raw))
-		report("Reaper", "wrong state buffer size.");
-	for (i = 0; i < buffer_size; ++i) {
-		if (raw->nr_state_buffer[i])
-			report_unknown("Nonempty reaper");
-	}
+		report_unknown("Object being reaped");
 
 	munmap(raw, sb->s_blocksize);
 	return reaper;

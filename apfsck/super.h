@@ -85,6 +85,7 @@ struct super_block {
 	u32 s_data_blocks; /* Number of blocks in the checkpoint data area */
 	u32 s_data_index; /* Index of first valid block in checkpoint data */
 	u32 s_data_len; /* Number of valid blocks in checkpoint data area */
+	u64 s_reaper_fs_id; /* Volume id reported by the reaper */
 
 	/* Hash table of ephemeral object mappings for the checkpoint */
 	struct htable_entry **s_cpoint_map_table;
