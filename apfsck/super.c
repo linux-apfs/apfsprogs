@@ -617,6 +617,8 @@ static void parse_volume_group_info(void)
 void read_volume_super(int vol, struct volume_superblock *vsb, struct object *obj)
 {
 	char *vol_name = NULL;
+	struct spaceman *sm = &sb->s_spaceman;
+	u64 alloc_count, reserve_blkcnt, quota_blkcnt;
 
 	if (vsb->v_obj.type != APFS_OBJECT_TYPE_FS)
 		report("Volume superblock", "wrong object type.");
@@ -635,10 +637,27 @@ void read_volume_super(int vol, struct volume_superblock *vsb, struct object *ob
 	check_incompat_vol_features(le64_to_cpu(
 				vsb->v_raw->apfs_incompatible_features));
 
-	if (vsb->v_raw->apfs_fs_reserve_block_count)
-		report_unknown("Volume block reservation");
-	if (vsb->v_raw->apfs_fs_quota_block_count)
-		report_unknown("Volume block quota");
+	alloc_count = le64_to_cpu(vsb->v_raw->apfs_fs_alloc_count);
+	reserve_blkcnt = le64_to_cpu(vsb->v_raw->apfs_fs_reserve_block_count);
+	quota_blkcnt = le64_to_cpu(vsb->v_raw->apfs_fs_quota_block_count);
+	if (reserve_blkcnt) {
+		sm->sm_reserve_block_num += reserve_blkcnt;
+		if (alloc_count > reserve_blkcnt)
+			sm->sm_reserve_alloc_num += reserve_blkcnt;
+		else
+			sm->sm_reserve_alloc_num += alloc_count;
+	}
+	if (quota_blkcnt) {
+		if (alloc_count > quota_blkcnt)
+			report("Volume superblock", "exceeded allocation quota.");
+		/*
+		 * These are actually equal in the few cases I've observed, but
+		 * I highly doubt that's a general rule.
+		 */
+		if (reserve_blkcnt > quota_blkcnt)
+			report("Volume superblock", "block reserves exceed quota.");
+	}
+
 	check_meta_crypto(&vsb->v_raw->apfs_meta_crypto);
 
 	vsb->v_next_obj_id = le64_to_cpu(vsb->v_raw->apfs_next_obj_id);

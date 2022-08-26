@@ -810,8 +810,12 @@ void check_spaceman(u64 oid)
 	check_internal_pool(raw);
 	free(sb->s_ip_bitmap);
 
-	if (raw->sm_fs_reserve_block_count || raw->sm_fs_reserve_alloc_count)
-		report_unknown("Reserved allocation blocks");
+	if (le64_to_cpu(raw->sm_fs_reserve_block_count) != sm->sm_reserve_block_num)
+		report("Space manager", "wrong block reservation total.");
+	if (le64_to_cpu(raw->sm_fs_reserve_alloc_count) != sm->sm_reserve_alloc_num)
+		report("Space manager", "wrong reserve block allocation total.");
+	if (sm->sm_reserve_block_num - sm->sm_reserve_alloc_num > sm->sm_free)
+		report("Space manager", "block reservation not respected.");
 
 	compare_container_bitmaps(sm->sm_bitmap, sb->s_bitmap,
 				  sm->sm_chunk_count);
