@@ -575,22 +575,9 @@ static void check_spaceman_free_queues(struct apfs_spaceman_free_queue *sfq)
 static void compare_container_bitmaps(u64 *sm_bmap, u64 *real_bmap, u64 chunks)
 {
 	unsigned long long bmap_size = sb->s_blocksize * chunks;
-	unsigned long long count64;
-	u64 i;
 
-	/*
-	 * TODO: sometimes the bitmaps don't match; maybe this has something to
-	 * do with the file count issue mentioned at check_container()?
-	 */
-	if (!memcmp(sm_bmap, real_bmap, bmap_size))
-		return;
-	report_weird("Container allocation bitmap");
-
-	/* At least verify that all used blocks are marked as such */
-	count64 = bmap_size / sizeof(count64);
-	for (i = 0; i < count64; ++i)
-		if ((sm_bmap[i] | real_bmap[i]) != sm_bmap[i])
-			report("Space manager", "bad allocation bitmap.");
+	if (memcmp(sm_bmap, real_bmap, bmap_size) != 0)
+		report("Space manager", "bad allocation bitmap.");
 }
 
 /**
