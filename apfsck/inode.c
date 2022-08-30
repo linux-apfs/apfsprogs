@@ -465,6 +465,22 @@ static int read_dir_stats_xfield(char *xval, int len, struct inode *inode)
 	return sizeof(*oid);
 }
 
+static int read_purgeable_flags_xfield(char *xval, int len, struct inode *inode)
+{
+	__le64 *flags;
+
+	if (len < sizeof(*flags))
+		report("Purgeable flags xfield", "doesn't fit in inode record.");
+	flags = (__le64 *)xval;
+	/*
+	 * TODO: Figure out these flags. So far I have only seen them set to
+	 * 0x10005, in a directory that was not purgeable itself, but had mostly
+	 * purgeable entries.
+	 */
+	inode->i_purg_flags = le64_to_cpu(*flags);
+	return sizeof(*flags);
+}
+
 /**
  * check_xfield_flags - Run common flag checks for all xfield types
  * @flags: flags to check
@@ -619,6 +635,13 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 			xlen = read_dir_stats_xfield(xval, len, inode);
 			if (xflags != (APFS_XF_SYSTEM_FIELD | APFS_XF_DO_NOT_COPY))
 				report("Dir stats xfield", "wrong flags.");
+			break;
+		case APFS_INO_EXT_TYPE_PURGEABLE_FLAGS:
+			xlen = read_purgeable_flags_xfield(xval, len, inode);
+			break;
+		case APFS_INO_EXT_TYPE_ORIG_SYNC_ROOT_ID:
+			xlen = 8;
+			report_unknown("Sync root id xfield");
 			break;
 		case APFS_INO_EXT_TYPE_RESERVED_6:
 		case APFS_INO_EXT_TYPE_RESERVED_9:

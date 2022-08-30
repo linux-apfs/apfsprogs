@@ -39,6 +39,7 @@ struct inode {
 	char		*i_name;	/* Name of primary link */
 	u64		i_parent_id;	/* Parent id for the primary link */
 	struct dstream	*i_dstream;	/* The inode's dstream (can be NULL) */
+	u64		i_purg_flags;	/* Inode purgeable flags */
 	char		*i_purg_name;	/* Purgeable dentry name (can be NULL) */
 	u32		i_owner;	/* Id of the owner user */
 	struct dirstat	*i_dirstat;	/* Directory statistics (can be NULL) */
