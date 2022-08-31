@@ -526,15 +526,15 @@ static void check_spaceman_datazone(struct apfs_spaceman_datazone_info_phys *dz)
 
 	for (dev = 0; dev < APFS_SD_COUNT; ++dev) {
 		for (i = 0; i < APFS_SM_DATAZONE_ALLOCZONE_COUNT; ++i) {
-			struct apfs_spaceman_allocation_zone_info_phys *az;
-			struct apfs_spaceman_allocation_zone_boundaries *azb;
+			struct apfs_spaceman_allocation_zone_info_phys *az = NULL;
+			struct apfs_spaceman_allocation_zone_boundaries *azb = NULL;
 
 			az = &dz->sdz_allocation_zones[dev][i];
+			azb = &az->saz_current_boundaries;
 
 			if (az->saz_zone_id) {
 				if (dev != APFS_SD_MAIN)
 					report_unknown("Fusion drive");
-				azb = &az->saz_current_boundaries;
 				check_new_alloc_zone(le16_to_cpu(az->saz_zone_id), le64_to_cpu(azb->saz_zone_start), le64_to_cpu(azb->saz_zone_end));
 			} else if (azb->saz_zone_start || azb->saz_zone_end) {
 				report("Allocation zone", "has no id.");
