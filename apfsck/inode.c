@@ -536,6 +536,9 @@ static void check_xfield_inode_flags(u16 bmap, u64 flags)
 	if (!xbmap_test(bmap, APFS_INO_EXT_TYPE_FINDER_INFO) &&
 	    (flags & APFS_INODE_HAS_FINDER_INFO))
 		report_weird("Finder info flag in inode record");
+
+	if (xbmap_test(bmap, APFS_INO_EXT_TYPE_PURGEABLE_FLAGS) != (bool)(flags & APFS_INODE_HAS_PURGEABLE_FLAGS))
+		report("Inode record", "wrong setting for purgeable flags option.");
 }
 
 /**
