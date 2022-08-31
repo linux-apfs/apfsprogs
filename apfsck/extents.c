@@ -109,9 +109,11 @@ static void check_dstream_stats(struct dstream *dstream)
 	if (dstream->d_orphan) {
 		if (dstream->d_size > dstream->d_alloced_size)
 			report("Orphan dstream", "reported sizes make no sense.");
-		if (dstream->d_bytes != 0 && dstream->d_bytes != dstream->d_alloced_size)
+		if (dstream->d_bytes != 0 && dstream->d_logic_start + dstream->d_bytes != dstream->d_alloced_size)
 			report_weird("Orphan dstream");
 	} else {
+		if (dstream->d_logic_start != 0)
+			report("Data stream", "missing leading extents.");
 		if (dstream->d_bytes < dstream->d_size)
 			report("Data stream", "some extents are missing.");
 		if (dstream->d_bytes != dstream->d_alloced_size)
@@ -276,7 +278,11 @@ void parse_extent_record(struct apfs_file_extent_key *key,
 		report("Extent record", "no flags should be set.");
 
 	dstream = get_dstream(cat_cnid(&key->hdr));
-	if (dstream->d_bytes != le64_to_cpu(key->logical_addr))
+	if (dstream->d_bytes == 0 && key->logical_addr != 0) {
+		/* An orphan may have already lost its leading extents */
+		dstream->d_logic_start = le64_to_cpu(key->logical_addr);
+	}
+	if (dstream->d_logic_start + dstream->d_bytes != le64_to_cpu(key->logical_addr))
 		report("Data stream", "extents are not consecutive.");
 	dstream->d_bytes += length;
 

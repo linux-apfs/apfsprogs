@@ -73,6 +73,7 @@ struct dstream {
 	u32		d_refcnt;	/* Reference count */
 
 	/* Dstream stats measured by the fsck */
+	u64		d_logic_start;	/* Logical address of first extent */
 	u64		d_bytes;	/* Size of the extents read so far */
 	u64		d_sparse_bytes;	/* Size of the holes read so far */
 	u32		d_references;	/* Number of references to dstream */
