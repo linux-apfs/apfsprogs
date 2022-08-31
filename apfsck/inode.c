@@ -450,7 +450,7 @@ static int read_dir_stats_xfield(char *xval, int len, struct inode *inode)
 	if (filetype != S_IFDIR)
 		report("Dir stats xfield", "inode is not a directory.");
 
-	if (len != sizeof(*oid))
+	if (len < sizeof(*oid))
 		report("Dir stats xfield", "doesn't fit in inode record.");
 	oid = (__le64 *)xval;
 
