@@ -589,9 +589,12 @@ enum {
 	APFS_DREC_TYPE_MASK	= 0x000f,
 	APFS_DREC_RESERVED_10	= 0x0010,
 
-	/* This flag is not documented */
-	APFS_DREC_PURGEABLE	= 0x0800,
+	/* These flags are not documented */
+	APFS_DREC_PURGEABLE_2	= 0x0200,
+	APFS_DREC_PURGEABLE_8	= 0x0800,
 };
+
+#define APFS_DREC_PURGEABLE	(APFS_DREC_PURGEABLE_2 | APFS_DREC_PURGEABLE_8)
 
 /*
  * Structure of the key for a directory entry - no hash, used on normalization

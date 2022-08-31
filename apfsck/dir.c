@@ -195,7 +195,9 @@ void parse_dentry_record(void *key, struct apfs_drec_val *val, int len)
 
 	if (flags & APFS_DREC_PURGEABLE) {
 		/* No idea. The inode and other hardlinks have normal modes */
-		if (dtype != (S_IFDIR >> 12))
+		if (flags & APFS_DREC_PURGEABLE_2 && dtype != 5)
+			report("Dentry record", "wrong type for purgeable dentry.");
+		if (flags & APFS_DREC_PURGEABLE_8 && dtype != 4)
 			report("Dentry record", "wrong type for purgeable dentry.");
 	} else {
 		/* The mode may have already been set by the inode or another dentry */
