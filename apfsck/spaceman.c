@@ -427,6 +427,16 @@ struct alloc_zone {
 
 static struct alloc_zone *alloc_zone_list = NULL;
 
+static void check_alloc_zone_sanity(u64 start, u64 end)
+{
+	if (start & (sb->s_blocksize - 1))
+		report("Allocation zone", "start isn't multiple of block size.");
+	if (end & (sb->s_blocksize - 1))
+		report("Allocation zone", "end isn't multiple of block size.");
+	if (start >= end)
+		report("Allocation zone", "invalid range.");
+}
+
 /* Puts alloc zones in a list to check for overlap */
 static void check_new_alloc_zone(u16 id, u64 start, u64 end)
 {
@@ -434,8 +444,7 @@ static void check_new_alloc_zone(u16 id, u64 start, u64 end)
 	struct alloc_zone *zone = NULL;
 	struct alloc_zone *new = NULL;
 
-	if (start >= end)
-		report("Allocation zone", "invalid range.");
+	check_alloc_zone_sanity(start, end);
 
 	zone_p = &alloc_zone_list;
 	zone = *zone_p;
@@ -472,6 +481,38 @@ static void free_checked_alloc_zones(void)
 	}
 }
 
+/* If old zones are reported, just check that the index is valid */
+static void check_prev_alloc_zones(struct apfs_spaceman_allocation_zone_info_phys *az)
+{
+	struct apfs_spaceman_allocation_zone_boundaries *azb = NULL;
+	u16 prev_index;
+	int j;
+
+	prev_index = le16_to_cpu(az->saz_previous_boundary_index);
+	if (prev_index > APFS_SM_ALLOCZONE_NUM_PREVIOUS_BOUNDARIES)
+		report("Allocation zones", "out-of-range previous index.");
+
+	for (j = 0; j < APFS_SM_ALLOCZONE_NUM_PREVIOUS_BOUNDARIES; ++j) {
+		azb = &az->saz_previous_boundaries[j];
+
+		if (prev_index == 0) {
+			/* No previous zones should be reported */
+			if (azb->saz_zone_start || azb->saz_zone_end)
+				report("Previous allocation zones", "missing index.");
+			continue;
+		}
+
+		if (!azb->saz_zone_start && !azb->saz_zone_end) {
+			/* No zone reported in this slot */
+			if (j == prev_index - 1 && !azb->saz_zone_start)
+				report("Allocation zones", "latest is missing.");
+			continue;
+		}
+
+		check_alloc_zone_sanity(le64_to_cpu(azb->saz_zone_start), le64_to_cpu(azb->saz_zone_end));
+	}
+}
+
 /**
  * check_spaceman_datazone - Check the spaceman allocation zones
  * @dz: pointer to the raw datazone structure
@@ -487,7 +528,6 @@ static void check_spaceman_datazone(struct apfs_spaceman_datazone_info_phys *dz)
 		for (i = 0; i < APFS_SM_DATAZONE_ALLOCZONE_COUNT; ++i) {
 			struct apfs_spaceman_allocation_zone_info_phys *az;
 			struct apfs_spaceman_allocation_zone_boundaries *azb;
-			int j;
 
 			az = &dz->sdz_allocation_zones[dev][i];
 
@@ -500,18 +540,10 @@ static void check_spaceman_datazone(struct apfs_spaceman_datazone_info_phys *dz)
 				report("Allocation zone", "has no id.");
 			}
 
-			if (az->saz_previous_boundary_index)
-				report_unknown("Modified allocation zones");
 			if (az->saz_reserved)
 				report("Datazone", "reserved field in use.");
 
-			for (j = 0;
-			     j < APFS_SM_ALLOCZONE_NUM_PREVIOUS_BOUNDARIES;
-			     ++j) {
-				azb = &az->saz_previous_boundaries[j];
-				if (azb->saz_zone_start || azb->saz_zone_end)
-					report_unknown("Modified allocation zones");
-			}
+			check_prev_alloc_zones(az);
 		}
 		free_checked_alloc_zones();
 	}
