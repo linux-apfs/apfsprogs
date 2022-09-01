@@ -703,6 +703,20 @@ void read_volume_super(int vol, struct volume_superblock *vsb, struct object *ob
 	if (le64_to_cpu(vsb->v_raw->apfs_revert_to_sblock_oid) != 0)
 		report_unknown("Revert to a volume superblock");
 
+	if (vsb->v_raw->apfs_cloneinfo_id_epoch)
+		report_unknown("Clone info id epoch");
+	if (vsb->v_raw->apfs_cloneinfo_xid)
+		report_unknown("Clone info id epoch");
+	else if (vsb->v_raw->apfs_cloneinfo_id_epoch)
+		report("Volume superblock", "cloneinfo xid is missing.");
+
+	if (vsb->v_raw->apfs_integrity_meta_oid || vsb->v_raw->apfs_fext_tree_oid || vsb->v_raw->apfs_fext_tree_type)
+		report_unknown("Sealed volume");
+	if (vsb->v_raw->reserved_type)
+		report("Volume superblock", "reserved type is set.");
+	if (vsb->v_raw->reserved_oid)
+		report("Volume superblock", "reserved oid is set.");
+
 	parse_volume_group_info();
 
 	vsb->v_extref_oid = le64_to_cpu(vsb->v_raw->apfs_extentref_tree_oid);
