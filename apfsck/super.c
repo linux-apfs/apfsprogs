@@ -370,6 +370,9 @@ static void check_software_information(struct apfs_modified_by *formatted_by,
 	end_mod_by = modified_by + APFS_MAX_HIST;
 	xid = sb->s_xid + 1; /* Last possible xid */
 
+	vsb->v_first_xid = le64_to_cpu(formatted_by->last_xid);
+	vsb->v_last_xid = vsb->v_first_xid;
+
 	for (; modified_by != end_mod_by; ++modified_by) {
 		length = software_strlen(modified_by->id);
 		if (!length &&
@@ -392,13 +395,15 @@ static void check_software_information(struct apfs_modified_by *formatted_by,
 			report("Volume modification info",
 			       "entries are not in order.");
 		xid = le64_to_cpu(modified_by->last_xid);
+
+		if (xid > vsb->v_last_xid)
+			vsb->v_last_xid = xid;
 	}
 
 	length = software_strlen(formatted_by->id);
 	if (!length)
 		report("Volume superblock", "creation information is missing.");
 
-	vsb->v_first_xid = le64_to_cpu(formatted_by->last_xid);
 	if (xid <= vsb->v_first_xid)
 		report("Volume creation info", "transaction is too recent.");
 }
@@ -608,6 +613,47 @@ static void parse_volume_group_info(void)
 	}
 }
 
+static void parse_cloneinfo_epoch(struct volume_superblock *vsb)
+{
+	struct apfs_superblock *raw = vsb->v_raw;
+	u64 id_epoch, xid;
+
+	/*
+	 * These "cloneinfo" fields are a way to determine if this volume was
+	 * modified by an older, buggy implementation that may have corrupted
+	 * the INODE_WAS_EVER_CLONED flags. I will report that as corruption
+	 * either way, so these checks will also assume that it never happens.
+	 */
+	id_epoch = le64_to_cpu(raw->apfs_cloneinfo_id_epoch);
+	xid = le64_to_cpu(raw->apfs_cloneinfo_xid);
+
+	if (id_epoch) {
+		/*
+		 * This is the only epoch I have encountered so far. It would
+		 * appear to imply that the first inode created may have a
+		 * corrupted flag, but that was probably not the intention. In
+		 * fact, I've even seen a volume with this epoch that never had
+		 * any user inodes at all.
+		 */
+		if (id_epoch != APFS_MIN_USER_INO_NUM)
+			report_unknown("Cloneinfo id epoch");
+	}
+
+	if (xid) {
+		if (xid != vsb->v_last_xid)
+			report("Volume superblock", "out of date cloneinfo xid");
+	}
+
+	/*
+	 * The reference says that no xid implies no epoch, but that doesn't
+	 * seem to be true for unmodified volumes.
+	 */
+	if (id_epoch && !xid) {
+		if (vsb->v_first_xid != vsb->v_last_xid)
+			report("Volume superblock", "cloneinfo epoch with no xid.");
+	}
+}
+
 /**
  * read_volume_super - Read the volume superblock and run some checks
  * @vol:	volume number
@@ -703,12 +749,7 @@ void read_volume_super(int vol, struct volume_superblock *vsb, struct object *ob
 	if (le64_to_cpu(vsb->v_raw->apfs_revert_to_sblock_oid) != 0)
 		report_unknown("Revert to a volume superblock");
 
-	if (vsb->v_raw->apfs_cloneinfo_id_epoch)
-		report_unknown("Clone info id epoch");
-	if (vsb->v_raw->apfs_cloneinfo_xid)
-		report_unknown("Clone info id epoch");
-	else if (vsb->v_raw->apfs_cloneinfo_id_epoch)
-		report("Volume superblock", "cloneinfo xid is missing.");
+	parse_cloneinfo_epoch(vsb);
 
 	if (vsb->v_raw->apfs_integrity_meta_oid || vsb->v_raw->apfs_fext_tree_oid || vsb->v_raw->apfs_fext_tree_type)
 		report_unknown("Sealed volume");

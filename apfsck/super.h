@@ -60,6 +60,7 @@ struct volume_superblock {
 	u64 v_omap_oid;		/* Object id for object map tree */
 	u64 v_snap_meta_oid;	/* Object id for the snapshot metadata tree */
 	u64 v_first_xid;	/* Transaction that created the volume */
+	u64 v_last_xid;		/* Transaction that last modified the volume */
 	u64 v_next_obj_id;	/* Next cnid to be assigned */
 	u32 v_next_doc_id;	/* Next document identifier to be assigned */
 	u32 v_index;		/* Index in the container's volume array */
