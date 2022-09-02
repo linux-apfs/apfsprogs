@@ -1237,6 +1237,7 @@ struct apfs_superblock {
 #define APFS_XATTR_NAME_COMPRESSED	"com.apple.decmpfs"
 #define APFS_XATTR_NAME_RSRC_FORK	"com.apple.ResourceFork"
 #define APFS_XATTR_NAME_SECURITY	"com.apple.system.Security"
+#define APFS_XATTR_NAME_FINDER_INFO	"com.apple.FinderInfo"
 
 /* Extended attributes flags */
 enum {

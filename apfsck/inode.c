@@ -17,6 +17,46 @@
 #include "super.h"
 
 /**
+ * xbmap_set - Set an xfield type in the xfield bitmap
+ * @bmap: the xfield bitmap
+ * @type: the extended field type
+ */
+static inline void xbmap_set(u16 *bmap, u8 type)
+{
+	*bmap |= 1 << type;
+}
+
+/**
+ * xbmap_test - Test if an xfield type is present in the xfield bitmap
+ * @bmap: the xfield bitmap
+ * @type: the extended field type
+ */
+static inline bool xbmap_test(u16 bmap, u8 type)
+{
+	return bmap & (1 << type);
+}
+
+/**
+ * check_finder_info - Check the inode flag that reports finder info
+ * @inode: the inode to check
+ *
+ * I've encountered some old images that put the finder info in a xattr instead
+ * of an xfield, but they still set the inode flag, so this check has to be done
+ * after all xattrs have been parsed.
+ */
+static void check_finder_info(struct inode *inode)
+{
+	bool xfield = xbmap_test(inode->i_xfield_bmap, APFS_INO_EXT_TYPE_FINDER_INFO);
+	bool xattr = inode->i_xattr_bmap & XATTR_BMAP_FINDER_INFO;
+	bool flag = inode->i_flags & APFS_INODE_HAS_FINDER_INFO;
+
+	if (xfield && xattr)
+		report("Inode record", "duplicated finder info.");
+	if (flag != (xfield || xattr))
+		report("Inode record", "wrong setting for finder info flag.");
+}
+
+/**
  * check_inode_stats - Verify the stats gathered by the fsck vs the metadata
  * @inode: inode structure to check
  */
@@ -70,6 +110,8 @@ static void check_inode_stats(struct inode *inode)
 
 	if ((bool)(inode->i_purg_name) != (bool)(inode->i_flags & APFS_INODE_IS_PURGEABLE))
 		report("Inode record", "wrong purgeability flag.");
+
+	check_finder_info(inode);
 }
 
 static void check_purgeable_name(struct inode *inode)
@@ -496,29 +538,11 @@ void check_xfield_flags(u8 flags)
 }
 
 /**
- * xbmap_set - Set an xfield type in the xfield bitmap
- * @bmap: the xfield bitmap
- * @type: the extended field type
- */
-static inline void xbmap_set(u16 *bmap, u8 type)
-{
-	*bmap |= 1 << type;
-}
-
-/**
- * xbmap_test - Test if an xfield type is present in the xfield bitmap
- * @bmap: the xfield bitmap
- * @type: the extended field type
- */
-static inline bool xbmap_test(u16 bmap, u8 type)
-{
-	return bmap & (1 << type);
-}
-
-/**
  * check_xfield_inode_flags - Check that xfields are consistent with inode flags
  * @bmap:	bitmap of xfield types seen in the inode
  * @flags:	inode flags
+ *
+ * This doesn't check the finder info flag, that happens when we free the inode.
  */
 static void check_xfield_inode_flags(u16 bmap, u64 flags)
 {
@@ -528,14 +552,6 @@ static void check_xfield_inode_flags(u16 bmap, u64 flags)
 	if (xbmap_test(bmap, APFS_INO_EXT_TYPE_SPARSE_BYTES) !=
 	    (bool)(flags & APFS_INODE_IS_SPARSE))
 		report("Inode record", "wrong setting for sparse flag.");
-
-	/* Some inodes don't have finder info but still have the flag... */
-	if (xbmap_test(bmap, APFS_INO_EXT_TYPE_FINDER_INFO) &&
-	    !(flags & APFS_INODE_HAS_FINDER_INFO))
-		report("Inode record", "wrong setting for finder info flag.");
-	if (!xbmap_test(bmap, APFS_INO_EXT_TYPE_FINDER_INFO) &&
-	    (flags & APFS_INODE_HAS_FINDER_INFO))
-		report_weird("Finder info flag in inode record");
 
 	if (xbmap_test(bmap, APFS_INO_EXT_TYPE_PURGEABLE_FLAGS) != (bool)(flags & APFS_INODE_HAS_PURGEABLE_FLAGS))
 		report("Inode record", "wrong setting for purgeable flags option.");
@@ -679,6 +695,7 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 		report("Inode record", "length of xfields does not add up.");
 
 	check_xfield_inode_flags(type_bitmap, inode->i_flags);
+	inode->i_xfield_bmap = type_bitmap;
 
 	if ((filetype == S_IFCHR || filetype == S_IFBLK) && !xbmap_test(type_bitmap, APFS_INO_EXT_TYPE_RDEV))
 		report("Inode record", "device file with no device ID.");

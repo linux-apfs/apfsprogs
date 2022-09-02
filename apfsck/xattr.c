@@ -81,6 +81,7 @@ void parse_xattr_record(struct apfs_xattr_key *key,
 {
 	struct inode *inode;
 	u16 flags;
+	u64 content_len;
 
 	if (len < sizeof(*val))
 		report("Xattr record", "value is too small.");
@@ -107,11 +108,15 @@ void parse_xattr_record(struct apfs_xattr_key *key,
 		dstream_raw = (struct apfs_xattr_dstream *)val->xdata;
 		dstream = parse_xattr_dstream(dstream_raw);
 		dstream->d_owner = inode->i_ino;
+
+		content_len = dstream->d_size;
 	} else {
 		if (len != le16_to_cpu(val->xdata_len))
 			report("Xattr record", "bad length for embedded data.");
 		if (len > APFS_XATTR_MAX_EMBEDDED_SIZE)
 			report("Xattr record", "embedded data is too long.");
+
+		content_len = len;
 	}
 
 	if (!strcmp((char *)key->name, APFS_XATTR_NAME_SYMLINK)) {
@@ -132,5 +137,13 @@ void parse_xattr_record(struct apfs_xattr_key *key,
 		if (inode->i_xattr_bmap & XATTR_BMAP_SECURITY)
 			report("Catalog", "two security xattrs for one inode.");
 		inode->i_xattr_bmap |= XATTR_BMAP_SECURITY;
+	} else if (!strcmp((char *)key->name, APFS_XATTR_NAME_FINDER_INFO)) {
+		if (flags & APFS_XATTR_FILE_SYSTEM_OWNED)
+			report("Finder info xattr", "owned by system.");
+		if (inode->i_xattr_bmap & XATTR_BMAP_FINDER_INFO)
+			report("Catalog", "two finder info xattrs for one inode.");
+		inode->i_xattr_bmap |= XATTR_BMAP_FINDER_INFO;
+		if (content_len != 32)
+			report("Finder info xattr", "wrong size");
 	}
 }
