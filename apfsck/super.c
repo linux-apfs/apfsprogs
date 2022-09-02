@@ -712,8 +712,9 @@ void read_volume_super(int vol, struct volume_superblock *vsb, struct object *ob
 
 	if (vsb->v_raw->apfs_integrity_meta_oid || vsb->v_raw->apfs_fext_tree_oid || vsb->v_raw->apfs_fext_tree_type)
 		report_unknown("Sealed volume");
-	if (vsb->v_raw->reserved_type)
-		report("Volume superblock", "reserved type is set.");
+
+	if (vsb->v_raw->reserved_type && le32_to_cpu(vsb->v_raw->reserved_type) != (APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_BTREE))
+		report("Volume superblock", "invalid value of reserved type.");
 	if (vsb->v_raw->reserved_oid)
 		report("Volume superblock", "reserved oid is set.");
 
