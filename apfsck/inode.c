@@ -618,7 +618,7 @@ static void parse_inode_xfields(struct apfs_xf_blob *xblob, int len,
 			report_unknown("Document id xfield");
 			break;
 		case APFS_INO_EXT_TYPE_FINDER_INFO:
-			xlen = 4;
+			xlen = 32;
 			report_unknown("Finder info xfield");
 			break;
 		case APFS_INO_EXT_TYPE_RDEV:
