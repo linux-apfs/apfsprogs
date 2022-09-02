@@ -751,7 +751,9 @@ void read_volume_super(int vol, struct volume_superblock *vsb, struct object *ob
 
 	parse_cloneinfo_epoch(vsb);
 
-	if (vsb->v_raw->apfs_integrity_meta_oid || vsb->v_raw->apfs_fext_tree_oid || vsb->v_raw->apfs_fext_tree_type)
+	if (vsb->v_raw->apfs_fext_tree_type && le32_to_cpu(vsb->v_raw->apfs_fext_tree_type) != (APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_BTREE))
+		report("Volume superblock", "invalid value of fext tree type.");
+	if (vsb->v_raw->apfs_integrity_meta_oid || vsb->v_raw->apfs_fext_tree_oid)
 		report_unknown("Sealed volume");
 
 	if (vsb->v_raw->reserved_type && le32_to_cpu(vsb->v_raw->reserved_type) != (APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_BTREE))
