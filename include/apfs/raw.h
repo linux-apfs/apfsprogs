@@ -1301,4 +1301,48 @@ struct apfs_snap_meta_ext {
 	__le64	sme_token;
 } __packed;
 
+#define APFS_OBJECT_TYPE_KEYBAG	0x6b657973 /* Spells 'syek' */
+
+#define	APFS_VOL_KEYBAG_ENTRY_MAX_SIZE		512
+#define APFS_FV_PERSONAL_RECOVERY_KEY_UUID	"EBC6C064-0000-11AA-AA11-00306543ECAC"
+
+/* Keybag entry types */
+enum {
+	KB_TAG_UNKNOWN			= 0,
+	KB_TAG_RESERVED_1		= 1,
+
+	KB_TAG_VOLUME_KEY		= 2,
+	KB_TAG_VOLUME_UNLOCK_RECORDS	= 3,
+	KB_TAG_VOLUME_PASSPHRASE_HINT	= 4,
+
+	KB_TAG_WRAPPING_M_KEY		= 5,
+	KB_TAG_VOLUME_M_KEY		= 6,
+
+	KB_TAG_RESERVED_F8		= 0xF8
+};
+
+/*
+ * Structure of a single entry in the keybag
+ */
+struct apfs_keybag_entry {
+	char 	ke_uuid[16];
+	__le16	ke_tag;
+	__le16	ke_keylen;
+	__le32	padding;
+	u8	ke_keydata[0];
+} __packed;
+
+#define APFS_KEYBAG_VERSION	2
+
+/*
+ * Structure of the locker in the keybag
+ */
+struct apfs_kb_locker {
+	__le16				kl_version;
+	__le16				kl_nkeys;
+	__le32				kl_nbytes;
+	__le64				padding;
+	struct apfs_keybag_entry	kl_entries[0];
+} __packed;
+
 #endif	/* _RAW_H */

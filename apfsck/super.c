@@ -16,6 +16,7 @@
 #include <apfs/types.h>
 #include "apfsck.h"
 #include "btree.h"
+#include "crypto.h"
 #include "dir.h"
 #include "extents.h"
 #include "htable.h"
@@ -543,23 +544,6 @@ static void check_meta_crypto(struct apfs_wrapped_meta_crypto_state *wmcs)
 }
 
 /**
- * uuid_is_null - Check if all bytes of a uuid are zero
- * @uuid: the uuid to check
- *
- * TODO: reuse this for other uuid checks
- */
-static bool uuid_is_null(char uuid[16])
-{
-	int i;
-
-	for (i = 0; i < 16; ++i) {
-		if (uuid[i])
-			return false;
-	}
-	return true;
-}
-
-/**
  * get_volume_group - Find or create the volume group struct with the given uuid
  */
 static struct volume_group *get_volume_group(char uuid[16])
@@ -1022,7 +1006,6 @@ static void check_container(struct super_block *sb)
 static void parse_main_super(struct super_block *sb)
 {
 	u64 chunk_count;
-	u64 keybag_bno, keybag_blocks;
 	int i;
 
 	assert(sb->s_raw);
@@ -1098,11 +1081,7 @@ static void parse_main_super(struct super_block *sb)
 	}
 
 	/* Containers with no encryption may still have a value here, why? */
-	keybag_bno = le64_to_cpu(sb->s_raw->nx_keylocker.pr_start_paddr);
-	keybag_blocks = le64_to_cpu(sb->s_raw->nx_keylocker.pr_block_count);
-	if (keybag_bno || keybag_blocks)
-		report_weird("Container keybag");
-	container_bmap_mark_as_used(keybag_bno, keybag_blocks);
+	check_keybag(le64_to_cpu(sb->s_raw->nx_keylocker.pr_start_paddr), le64_to_cpu(sb->s_raw->nx_keylocker.pr_block_count));
 	/* TODO: actually check all this stuff */
 	container_bmap_mark_as_used(le64_to_cpu(sb->s_raw->nx_mkb_locker.pr_start_paddr), le64_to_cpu(sb->s_raw->nx_mkb_locker.pr_block_count));
 

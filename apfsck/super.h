@@ -162,6 +162,23 @@ static inline bool apfs_is_system_volume_in_group(void)
 	return apfs_volume_is_in_group() && role == APFS_VOL_ROLE_SYSTEM;
 }
 
+/**
+ * uuid_is_null - Check if all bytes of a uuid are zero
+ * @uuid: the uuid to check
+ *
+ * TODO: reuse this for other uuid checks
+ */
+static inline bool uuid_is_null(char uuid[16])
+{
+	int i;
+
+	for (i = 0; i < 16; ++i) {
+		if (uuid[i])
+			return false;
+	}
+	return true;
+}
+
 extern void parse_filesystem(void);
 extern struct volume_superblock *alloc_volume_super(bool snap);
 extern void read_volume_super(int vol, struct volume_superblock *vsb, struct object *obj);
