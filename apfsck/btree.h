@@ -23,6 +23,7 @@ struct omap_record {
 	u64	xid;	/* Transaction id */
 	u64	oid;	/* Virtual object id */
 	u64	bno;	/* Block number */
+	u32	flags;	/* Omap record flags */
 
 	/* Was this oid-xid pair ever seen in use? */
 	bool	seen;

@@ -603,7 +603,10 @@ static void free_omap_record_list(struct htable_entry *entry)
 	while (curr_rec) {
 		struct omap_record *next_rec = NULL;
 
-		if (!curr_rec->seen) {
+		if (curr_rec->flags & APFS_OMAP_VAL_DELETED) {
+			if (curr_rec->seen)
+				report("Omap record", "deleted but still in use.");
+		} else if (!curr_rec->seen) {
 			/*
 			 * I've encountered a single leaked extended snap meta
 			 * block in some ios images. No idea... (TODO)
@@ -757,11 +760,9 @@ static void parse_omap_record(struct apfs_omap_key *key,
 		report("Object map", "two entries with the same oid-xid.");
 	omap_rec->bno = le64_to_cpu(val->ov_paddr);
 
-	flags = le32_to_cpu(val->ov_flags);
+	omap_rec->flags = flags = le32_to_cpu(val->ov_flags);
 	if ((flags & APFS_OMAP_VAL_FLAGS_VALID_MASK) != flags)
 		report("Omap record", "invalid flag in use.");
-	if (flags & APFS_OMAP_VAL_DELETED)
-		report_unknown("Deleted omap records");
 	if (flags & APFS_OMAP_VAL_SAVED)
 		report("Omap record", "saved flag is set.");
 	if (flags & APFS_OMAP_VAL_NOHEADER)
