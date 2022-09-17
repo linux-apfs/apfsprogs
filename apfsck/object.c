@@ -124,13 +124,15 @@ void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
 			/* Virtual objects may be shared between snapshots */
 			if (!omap_rec->seen) {
 				container_bmap_mark_as_used(bno, 1 /* length */);
-				if (vsb)
+				/* The volume super itself doesn't count here */
+				if (vsb && obj->type != APFS_OBJECT_TYPE_FS)
 					++vsb->v_block_count;
 			}
 			omap_rec->seen = true;
 		} else {
 			container_bmap_mark_as_used(bno, 1 /* length */);
-			if (vsb)
+			/* Volume superblocks in snapshots don't count either */
+			if (vsb && obj->type != APFS_OBJECT_TYPE_FS)
 				++vsb->v_block_count;
 		}
 	}

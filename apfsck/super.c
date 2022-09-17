@@ -945,10 +945,8 @@ void check_volume_super(void)
 	 * to know the real value of v_block_count back then.
 	 */
 	if (!vsb->v_in_snapshot) {
-		if (le64_to_cpu(vsb_raw->apfs_fs_alloc_count) != vsb->v_block_count - 1) {
-			/* The volume superblock itself does not count */
+		if (le64_to_cpu(vsb_raw->apfs_fs_alloc_count) != vsb->v_block_count)
 			report("Volume superblock", "bad block count.");
-		}
 	}
 }
 
