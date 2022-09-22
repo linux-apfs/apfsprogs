@@ -60,7 +60,7 @@ __attribute__((noreturn)) void fatal(const char *message)
 }
 
 /**
- * get_device_size - Get the block count of the device or image being checked
+ * get_device_size - Get the block count of the device or image being formatted
  * @blocksize: the filesystem blocksize
  */
 static u64 get_device_size(unsigned int blocksize)
