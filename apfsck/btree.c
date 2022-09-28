@@ -598,7 +598,6 @@ static void free_omap_record_list(struct htable_entry *entry)
 {
 	struct omap_record_list *list = (struct omap_record_list *)entry;
 	struct omap_record *curr_rec = list->o_records;
-	int unseen = 0;
 
 	while (curr_rec) {
 		struct omap_record *next_rec = NULL;
@@ -608,10 +607,11 @@ static void free_omap_record_list(struct htable_entry *entry)
 				report("Omap record", "deleted but still in use.");
 		} else if (!curr_rec->seen) {
 			/*
-			 * I've encountered a single leaked extended snap meta
-			 * block in some ios images. No idea... (TODO)
+			 * Old implementations that are unaware of extended
+			 * snapshot metadata are allowed to leak those blocks
+			 * when a snapshot gets deleted.
 			 */
-			if (vsb && unseen == 0 && curr_rec->xid < sb->s_xid) {
+			if (vsb && curr_rec->xid < sb->s_xid) {
 				struct apfs_obj_phys *raw = NULL;
 				struct object obj = {0};
 
@@ -621,7 +621,6 @@ static void free_omap_record_list(struct htable_entry *entry)
 				container_bmap_mark_as_used(curr_rec->bno, 1);
 				++vsb->v_block_count;
 				munmap(raw, sb->s_blocksize);
-				++unseen;
 			} else {
 				report("Omap record", "oid-xid combination is never used.");
 			}
