@@ -1048,7 +1048,7 @@ static void check_btree_footer(struct btree *btree)
 		return;
 	}
 
-	/* For now, only the omap and free queue report fixed key/value sizes */
+	/* The remaining trees don't report fixed key/value sizes */
 	if (le32_to_cpu(info->bt_fixed.bt_key_size) != 0)
 		report(ctx, "key size should not be set.");
 	if (le32_to_cpu(info->bt_fixed.bt_val_size) != 0)
