@@ -8,11 +8,11 @@ override CFLAGS += -Wall -fno-strict-aliasing -I$(CURDIR)/../include
 
 libapfs.a: $(OBJS)
 	@echo '  Assembling library archive...'
-	@ar rcs $@ $^
+	@$(AR) rcs $@ $^
 
 %.o: %.c
 	@echo '  Compiling $<...'
-	@gcc $(CFLAGS) -o $@ -MMD -MP -c $<
+	@$(CC) $(CFLAGS) -o $@ -MMD -MP -c $<
 ifdef SPARSE_VERSION
 	@sparse $(CFLAGS) $<
 endif
