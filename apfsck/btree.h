@@ -93,14 +93,15 @@ static inline bool node_has_fixed_kv_size(struct node *node)
 }
 
 /* Flags for the query structure */
-#define QUERY_TREE_MASK		0007	/* Which b-tree we query */
+#define QUERY_TREE_MASK		0017	/* Which b-tree we query */
 #define QUERY_OMAP		0001	/* This is a b-tree object map query */
 #define QUERY_CAT		0002	/* This is a catalog tree query */
 #define QUERY_EXTENTREF		0004	/* This is an extentref tree query */
-#define QUERY_MULTIPLE		0010	/* Search for multiple matches */
-#define QUERY_NEXT		0020	/* Find next of multiple matches */
-#define QUERY_EXACT		0040	/* Search for an exact match */
-#define QUERY_DONE		0100	/* The search at this level is over */
+#define QUERY_FEXT		0010	/* This is an extentref tree query */
+#define QUERY_MULTIPLE		0020	/* Search for multiple matches */
+#define QUERY_NEXT		0040	/* Find next of multiple matches */
+#define QUERY_EXACT		0100	/* Search for an exact match */
+#define QUERY_DONE		0200	/* The search at this level is over */
 
 /*
  * Structure used to retrieve data from an APFS B-Tree. For now only used
@@ -130,6 +131,7 @@ struct query {
 #define BTREE_TYPE_SNAP_META	4 /* The tree is for snapshot metadata */
 #define BTREE_TYPE_FREE_QUEUE	5 /* The tree is for a free-space queue */
 #define BTREE_TYPE_SNAPSHOTS	6 /* The tree is for omap snapshots */
+#define BTREE_TYPE_FEXT		7 /* The tree is for file extents */
 
 /* In-memory structure representing a b-tree */
 struct btree {
@@ -196,11 +198,21 @@ static inline bool btree_is_extentref(struct btree *btree)
 	return btree->type == BTREE_TYPE_EXTENTREF;
 }
 
+/**
+ * btree_is_fext - Check if a b-tree is for file extents
+ * @btree: the b-tree to check
+ */
+static inline bool btree_is_fext(struct btree *btree)
+{
+	return btree->type == BTREE_TYPE_FEXT;
+}
+
 extern struct free_queue *parse_free_queue_btree(u64 oid, int index);
 extern struct btree *parse_snap_meta_btree(u64 oid);
 extern struct btree *parse_extentref_btree(u64 oid);
 extern struct btree *parse_omap_btree(u64 oid);
 extern struct btree *parse_cat_btree(u64 oid, struct htable_entry **omap_table);
+extern struct btree *parse_fext_btree(u64 oid);
 extern struct query *alloc_query(struct node *node, struct query *parent);
 extern void free_query(struct query *query);
 extern int btree_query(struct query **query);
@@ -208,6 +220,7 @@ extern struct node *omap_read_node(u64 id);
 extern void free_omap_table(struct htable_entry **table);
 extern struct omap_record *get_latest_omap_record(u64 oid, u64 xid, struct htable_entry **table);
 extern void extentref_lookup(u64 bno, struct extref_record *extref);
+extern int fext_tree_lookup(u64 oid, u64 logaddr, u64 *bno);
 extern void omap_htable_clear_seen_for_snap(struct htable_entry **table);
 
 #endif	/* _BTREE_H */

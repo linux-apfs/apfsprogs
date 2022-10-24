@@ -33,6 +33,7 @@ struct volume_superblock {
 	struct listed_btree *v_snap_extrefs;	/* Snapshots have their own */
 	struct btree *v_snap_meta;
 	struct btree *v_snapshots;
+	struct btree *v_fext;
 	struct htable_entry **v_omap_table;	/* Hash table of omap records */
 	struct htable_entry **v_inode_table;	/* Hash table of all inodes */
 	struct htable_entry **v_dstream_table;	/* Hash table of all dstreams */
@@ -59,12 +60,15 @@ struct volume_superblock {
 	u64 v_extref_oid;	/* Object id for the extent reference tree */
 	u64 v_omap_oid;		/* Object id for object map tree */
 	u64 v_snap_meta_oid;	/* Object id for the snapshot metadata tree */
+	u64 v_fext_tree_oid;	/* Object id for the fext tree */
+	u64 v_integrity_oid;	/* Object id for the integrity metadata */
 	u64 v_first_xid;	/* Transaction that created the volume */
 	u64 v_last_xid;		/* Transaction that last modified the volume */
 	u64 v_next_obj_id;	/* Next cnid to be assigned */
 	u32 v_next_doc_id;	/* Next document identifier to be assigned */
 	u32 v_index;		/* Index in the container's volume array */
 	bool v_encrypted;	/* Is the volume encrypted? */
+	u8 v_hash[32];		/* For a sealed volume, the root SHA-256 */
 
 	struct object v_obj;		/* Object holding the volume sb */
 };
@@ -134,6 +138,13 @@ static inline bool apfs_is_normalization_insensitive(void)
 	if (flags & APFS_INCOMPAT_NORMALIZATION_INSENSITIVE)
 		return true;
 	return false;
+}
+
+static inline bool apfs_volume_is_sealed(void)
+{
+	u64 flags = le64_to_cpu(vsb->v_raw->apfs_incompatible_features);
+
+	return flags & APFS_INCOMPAT_SEALED_VOLUME;
 }
 
 static inline bool apfs_volume_is_in_group(void)

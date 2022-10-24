@@ -639,6 +639,70 @@ static void parse_cloneinfo_epoch(struct volume_superblock *vsb)
 }
 
 /**
+ * integrity_meta_256_from_off - Get a pointer to the 256 bits on an im offset
+ * @raw:	pointer to the raw integrity metadata
+ * @offset:	offset of the 256-bit value in @raw
+ */
+static char *integrity_meta_256_from_off(struct apfs_integrity_meta_phys *raw, u32 offset)
+{
+	char *value_p = (char *)raw + offset;
+	int sz_256 = 256 / 8;
+
+	if (offset & 0x7)
+		report("Integrity metadata", "offset is not aligned to 8 bytes.");
+	if (offset < sizeof(*raw))
+		report("Integrity metadata", "offset overlaps with structure.");
+	if (offset >= sb->s_blocksize || offset + sz_256 > sb->s_blocksize)
+		report("Integrity metadata", "offset is out of bounds.");
+	return value_p;
+}
+
+static void parse_integrity_meta(u64 oid)
+{
+	struct apfs_integrity_meta_phys *meta = NULL;
+	struct object obj;
+	u32 flags, hash_type;
+	char *hash = NULL;
+	int i;
+
+	assert(vsb->v_omap_table);
+
+	meta = read_object(oid, vsb->v_omap_table, &obj);
+	if (obj.type != OBJECT_TYPE_INTEGRITY_META)
+		report("Integrity metadata", "wrong object type.");
+	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
+		report("Integrity metadata", "wrong object subtype.");
+
+	if (le32_to_cpu(meta->im_version) == APFS_INTEGRITY_META_VERSION_INVALID)
+		report("Integrity metadata", "invalid version.");
+	if (le32_to_cpu(meta->im_version) > APFS_INTEGRITY_META_VERSION_HIGHEST)
+		report("Integrity metadata", "undocumented new version.");
+
+	flags = le32_to_cpu(meta->im_flags);
+	if (flags & (~((u32)APFS_SEAL_BROKEN)))
+		report("Integrity metadata", "undocumented flags.");
+	if (flags & APFS_SEAL_BROKEN || meta->im_broken_xid)
+		report_unknown("Broken seal volume");
+
+	hash_type = le32_to_cpu(meta->im_hash_type);
+	if (hash_type < APFS_HASH_MIN || hash_type > APFS_HASH_MAX)
+		report("Integrity metadata", "undocumented hash type.");
+	if (hash_type != APFS_HASH_SHA256)
+		report_unknown("Unusual hash for sealed volume");
+
+	hash = integrity_meta_256_from_off(meta, le32_to_cpu(meta->im_root_hash_offset));
+	memcpy(vsb->v_hash, hash, 256 / 8);
+	hash = NULL;
+
+	for (i = 0; i < 9; ++i) {
+		if (meta->im_reserved[i])
+			report("Integrity metadata", "reserved field is in use.");
+	}
+
+	munmap(meta, sb->s_blocksize);
+}
+
+/**
  * read_volume_super - Read the volume superblock and run some checks
  * @vol:	volume number
  * @vsb:	volume superblock struct to receive the results
@@ -735,10 +799,20 @@ void read_volume_super(int vol, struct volume_superblock *vsb, struct object *ob
 
 	parse_cloneinfo_epoch(vsb);
 
-	if (vsb->v_raw->apfs_fext_tree_type && le32_to_cpu(vsb->v_raw->apfs_fext_tree_type) != (APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_BTREE))
-		report("Volume superblock", "invalid value of fext tree type.");
-	if (vsb->v_raw->apfs_integrity_meta_oid || vsb->v_raw->apfs_fext_tree_oid)
-		report_unknown("Sealed volume");
+	if (apfs_volume_is_sealed()) {
+		/* The reference seems to be wrong about the role */
+		if (apfs_volume_role() && apfs_volume_role() != APFS_VOL_ROLE_SYSTEM)
+			report("Sealed volume", "wrong role.");
+		if (le32_to_cpu(vsb->v_raw->apfs_fext_tree_type) != (APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_BTREE))
+			report("Sealed volume", "invalid value of fext tree type.");
+		if (!vsb->v_raw->apfs_fext_tree_oid)
+			report("Sealed volume", "missing fext tree.");
+		if (!vsb->v_raw->apfs_integrity_meta_oid)
+			report("Sealed volume", "missing integrity metadata.");
+	} else {
+		if (vsb->v_raw->apfs_fext_tree_type || vsb->v_raw->apfs_integrity_meta_oid || vsb->v_raw->apfs_fext_tree_oid)
+			report("Volume superblock", "no sealed feature flag.");
+	}
 
 	if (vsb->v_raw->reserved_type && le32_to_cpu(vsb->v_raw->reserved_type) != (APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_BTREE))
 		report("Volume superblock", "invalid value of reserved type.");
@@ -750,6 +824,8 @@ void read_volume_super(int vol, struct volume_superblock *vsb, struct object *ob
 	vsb->v_extref_oid = le64_to_cpu(vsb->v_raw->apfs_extentref_tree_oid);
 	vsb->v_omap_oid = le64_to_cpu(vsb->v_raw->apfs_omap_oid);
 	vsb->v_snap_meta_oid = le64_to_cpu(vsb->v_raw->apfs_snap_meta_tree_oid);
+	vsb->v_fext_tree_oid = le64_to_cpu(vsb->v_raw->apfs_fext_tree_oid);
+	vsb->v_integrity_oid = le64_to_cpu(vsb->v_raw->apfs_integrity_meta_oid);
 }
 
 /**
@@ -872,6 +948,10 @@ void check_volume_super(void)
 		vsb->v_snap_meta = parse_snap_meta_btree(vsb->v_snap_meta_oid);
 	}
 
+	/* A virtual object, so it must be parsed after the omap */
+	if (apfs_volume_is_sealed())
+		parse_integrity_meta(vsb->v_integrity_oid);
+
 	/* The first tree is for the latest xid, the others are for snapshots */
 	if (!vsb->v_in_snapshot) {
 		vsb->v_extent_ref = parse_extentref_btree(vsb->v_extref_oid);
@@ -887,6 +967,8 @@ void check_volume_super(void)
 		vsb->v_snap_extrefs = new;
 	}
 
+	if (apfs_volume_is_sealed())
+		vsb->v_fext = parse_fext_btree(vsb->v_fext_tree_oid);
 	vsb->v_cat = parse_cat_btree(le64_to_cpu(vsb_raw->apfs_root_tree_oid), vsb->v_omap_table);
 
 	check_snap_meta_ext(le64_to_cpu(vsb_raw->apfs_snap_meta_ext_oid));

@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <apfs/checksum.h>
 #include <apfs/raw.h>
@@ -22,14 +23,15 @@ int obj_verify_csum(struct apfs_obj_phys *obj)
 }
 
 /**
- * read_object_nocheck - Read an object header from disk
- * @bno: block number for the object
- * @obj: object struct to receive the results
+ * read_object_nocheck_internal - Read an object header from disk
+ * @bno:	block number for the object
+ * @obj:	object struct to receive the results
+ * @noheader:	does this object have no header?
  *
  * Returns a pointer to the raw data of the object in memory, without running
  * any checks other than the Fletcher verification.
  */
-void *read_object_nocheck(u64 bno, struct object *obj)
+static void *read_object_nocheck_internal(u64 bno, struct object *obj, bool noheader)
 {
 	struct apfs_obj_phys *raw;
 
@@ -37,6 +39,13 @@ void *read_object_nocheck(u64 bno, struct object *obj)
 		   fd, bno * sb->s_blocksize);
 	if (raw == MAP_FAILED)
 		system_error();
+
+	if (noheader) {
+		struct apfs_obj_phys zeroes = {0};
+		if (memcmp(raw, &zeroes, sizeof(*raw)) != 0)
+			report("No-header object", "has a header.");
+		return raw;
+	}
 
 	/* This one check is always needed */
 	if (!obj_verify_csum(raw)) {
@@ -52,6 +61,11 @@ void *read_object_nocheck(u64 bno, struct object *obj)
 	obj->subtype = le32_to_cpu(raw->o_subtype);
 
 	return raw;
+}
+
+void *read_object_nocheck(u64 bno, struct object *obj)
+{
+	return read_object_nocheck_internal(bno, obj, false /* noheader */);
 }
 
 /**
@@ -81,15 +95,16 @@ u32 parse_object_flags(u32 flags, bool encrypted)
 }
 
 /**
- * read_object - Read an object header from disk and run some checks
+ * read_object_internal - Read an object header from disk and run some checks
  * @oid:	object id
  * @omap_table:	hash table for the object map (NULL if no translation is needed)
  * @obj:	object struct to receive the results
+ * @noheader:	does this object lack a header?
  *
  * Returns a pointer to the raw data of the object in memory, after checking
  * the consistency of some of its fields.
  */
-void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
+static void *read_object_internal(u64 oid, struct htable_entry **omap_table, struct object *obj, bool noheader)
 {
 	struct apfs_obj_phys *raw;
 	struct omap_record *omap_rec = NULL;
@@ -97,10 +112,14 @@ void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
 	u64 xid;
 	u32 storage_type;
 
+	assert(omap_table || !noheader);
+
 	if (omap_table) {
 		omap_rec = get_latest_omap_record(oid, sb->s_xid, omap_table);
 		if (!omap_rec || !omap_rec->bno)
 			report("Object map", "record missing for id 0x%llx.", (unsigned long long)oid);
+		if ((bool)(omap_rec->flags & APFS_OMAP_VAL_NOHEADER) != noheader)
+			report("Object map", "wrong setting for noheader flag.");
 		if (vsb && vsb->v_in_snapshot) {
 			if (omap_rec->seen_for_snap)
 				report("Object map record", "oid used twice for same snapshot.");
@@ -115,7 +134,15 @@ void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
 		bno = oid;
 	}
 
-	raw = read_object_nocheck(bno, obj);
+	if (noheader) {
+		raw = read_object_nocheck_internal(bno, obj, noheader);
+		obj->oid = oid;
+		obj->block_nr = bno;
+		obj->xid = omap_rec->xid;
+	} else {
+		raw = read_object_nocheck(bno, obj);
+	}
+
 	if (!ongoing_query) { /* Query code will revisit already parsed nodes */
 		if ((obj->type == APFS_OBJECT_TYPE_SPACEMAN_CIB) ||
 		     (obj->type == APFS_OBJECT_TYPE_SPACEMAN_CAB)) {
@@ -175,6 +202,16 @@ void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
 		report("Object header", "wrong flag for physical object.");
 
 	return raw;
+}
+
+void *read_object(u64 oid, struct htable_entry **omap_table, struct object *obj)
+{
+	return read_object_internal(oid, omap_table, obj, false /* noheader */);
+}
+
+void *read_object_noheader(u64 oid, struct htable_entry **omap_table, struct object *obj)
+{
+	return read_object_internal(oid, omap_table, obj, true /* noheader */);
 }
 
 /**

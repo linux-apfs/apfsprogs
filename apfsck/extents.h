@@ -54,6 +54,18 @@ struct listed_extent {
 };
 
 /*
+ * Structure used to register each hash for a dstream in a sealed volume, so
+ * that they can later be checked.
+ */
+struct listed_hash {
+	u64			addr;	/* Dstream offset of the hashed area */
+	u64			blkcnt;	/* Block count of the hashed area */
+
+	u8			hash[APFS_HASH_CCSHA256_SIZE];
+	struct listed_hash	*prev;	/* Previous entry in linked list */
+};
+
+/*
  * Dstream data in memory
  */
 struct dstream {
@@ -62,10 +74,14 @@ struct dstream {
 	/* Linked list of physical extents for dstream */
 	struct listed_extent *d_extents;
 
+	/* Linked list of hashes for the dstream */
+	struct listed_hash *d_hashes;
+
 	u8		d_obj_type;	/* Type of the owner objects */
 	u64		d_owner;	/* Owner id for the extentref tree */
 	bool		d_seen;		/* Has the dstream record been seen? */
 	bool		d_orphan;	/* Is this an orphan file? */
+	bool		d_xattr;	/* Is this a xattr dstream? */
 
 	/* Dstream stats read from the dstream structures */
 	u64		d_size;		/* Dstream size */
@@ -108,5 +124,7 @@ extern u64 parse_phys_ext_record(struct apfs_phys_ext_key *key,
 extern void free_crypto_table(struct htable_entry **table);
 extern struct crypto_state *get_crypto_state(u64 id);
 extern void parse_crypto_state_record(struct apfs_crypto_state_key *key, struct apfs_crypto_state_val *val, int len);
+extern void parse_file_info_record(struct apfs_file_info_key *key, struct apfs_file_info_val *val, int len);
+extern void parse_fext_record(struct apfs_fext_tree_key *key, struct apfs_fext_tree_val *val, int len);
 
 #endif	/* _EXTENTS_H */

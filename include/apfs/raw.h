@@ -138,8 +138,10 @@ struct apfs_omap_snapshot {
 #define APFS_BTNODE_ROOT		0x0001
 #define APFS_BTNODE_LEAF		0x0002
 #define APFS_BTNODE_FIXED_KV_SIZE	0x0004
+#define APFS_BTNODE_HASHED		0x0008
+#define APFS_BTNODE_NOHEADER		0x0010
 #define APFS_BTNODE_CHECK_KOFF_INVAL	0x8000
-#define APFS_BTNODE_MASK		0x0007	/* Valid on-disk flags */
+#define APFS_BTNODE_MASK		0x001f	/* Valid on-disk flags */
 
 /* B-tree location constants */
 #define APFS_BTOFF_INVALID		0xffff
@@ -192,13 +194,17 @@ struct apfs_btree_node_phys {
 #define APFS_BTREE_PHYSICAL		0x00000010
 #define APFS_BTREE_NONPERSISTENT	0x00000020
 #define APFS_BTREE_KV_NONALIGNED	0x00000040
+#define APFS_BTREE_HASHED		0x00000080
+#define APFS_BTREE_NOHEADER		0x00000100
 #define APFS_BTREE_FLAGS_VALID_MASK	(APFS_BTREE_UINT64_KEYS \
 					| APFS_BTREE_SEQUENTIAL_INSERT \
 					| APFS_BTREE_ALLOW_GHOSTS \
 					| APFS_BTREE_EPHEMERAL \
 					| APFS_BTREE_PHYSICAL \
 					| APFS_BTREE_NONPERSISTENT \
-					| APFS_BTREE_KV_NONALIGNED)
+					| APFS_BTREE_KV_NONALIGNED \
+					| APFS_BTREE_HASHED \
+					| APFS_BTREE_NOHEADER)
 
 /*
  * Structure used to store information about a B-tree that won't change
@@ -528,7 +534,8 @@ enum {
 	APFS_TYPE_DIR_STATS		= 10,
 	APFS_TYPE_SNAP_NAME		= 11,
 	APFS_TYPE_SIBLING_MAP		= 12,
-	APFS_TYPE_MAX_VALID		= 12,
+	APFS_TYPE_FILE_INFO		= 13,
+	APFS_TYPE_MAX_VALID		= 13,
 	APFS_TYPE_MAX			= 15,
 	APFS_TYPE_INVALID		= 15,
 };
@@ -1343,6 +1350,117 @@ struct apfs_kb_locker {
 	__le32				kl_nbytes;
 	__le64				padding;
 	struct apfs_keybag_entry	kl_entries[0];
+} __packed;
+
+/*
+ * Integrity metadata for a sealed volume
+ */
+struct apfs_integrity_meta_phys {
+	struct apfs_obj_phys im_o;
+
+	__le32	im_version;
+	__le32	im_flags;
+	__le32	im_hash_type;
+	__le32	im_root_hash_offset;
+	__le64	im_broken_xid;
+	__le64	im_reserved[9];
+} __packed;
+
+/*
+ * Version numbers for the integrity metadata structure
+ */
+enum {
+	APFS_INTEGRITY_META_VERSION_INVALID	= 0,
+	APFS_INTEGRITY_META_VERSION_1		= 1,
+	APFS_INTEGRITY_META_VERSION_2		= 2,
+	APFS_INTEGRITY_META_VERSION_HIGHEST	= APFS_INTEGRITY_META_VERSION_2
+};
+
+/* Flags used by integrity metadata */
+#define APFS_SEAL_BROKEN (1U << 0)
+
+/*
+ * Constants used to identify hash algorithms
+ */
+enum {
+	APFS_HASH_INVALID	= 0,
+	APFS_HASH_SHA256	= 0x1,
+	APFS_HASH_SHA512_256	= 0x2,
+	APFS_HASH_SHA384	= 0x3,
+	APFS_HASH_SHA512	= 0x4,
+
+	APFS_HASH_MIN		= APFS_HASH_SHA256,
+	APFS_HASH_MAX		= APFS_HASH_SHA512,
+	APFS_HASH_DEFAULT	= APFS_HASH_SHA256,
+};
+
+#define APFS_HASH_CCSHA256_SIZE		32
+#define APFS_HASH_CCSHA512_256_SIZE	32
+#define APFS_HASH_CCSHA384_SIZE		48
+#define APFS_HASH_CCSHA512_SIZE		64
+
+#define APFS_HASH_MAX_SIZE		64
+
+/*
+ * Structure of a key in a fext tree
+ */
+struct apfs_fext_tree_key {
+	__le64 private_id;
+	__le64 logical_addr;
+} __packed;
+
+/*
+ * Structure of a value in a fext tree
+ */
+struct apfs_fext_tree_val {
+	__le64 len_and_flags;
+	__le64 phys_block_num;
+} __packed;
+
+/*
+ * Structure of the key for a file info record
+ */
+struct apfs_file_info_key {
+	struct apfs_key_header hdr;
+	__le64 info_and_lba;
+} __packed;
+
+#define APFS_FILE_INFO_LBA_MASK		0x00ffffffffffffffULL
+#define APFS_FILE_INFO_TYPE_MASK	0xff00000000000000ULL
+#define APFS_FILE_INFO_TYPE_SHIFT	56
+
+/*
+ * A hash of file data
+ */
+struct apfs_file_data_hash_val {
+	__le16	hashed_len;
+	u8	hash_size;
+	u8	hash[0];
+} __packed;
+
+#define APFS_FILE_INFO_DATA_HASH	1
+
+/*
+ * Structure of the value for a file info record
+ */
+struct apfs_file_info_val {
+	union {
+		struct apfs_file_data_hash_val dhash;
+	};
+} __packed;
+
+#define APFS_BTREE_NODE_HASH_SIZE_MAX	64
+
+/*
+ * Structure of the value of an index record for a hashed catalog tree
+ */
+struct apfs_btn_index_node_val {
+	__le64	binv_child_oid;
+	/*
+	 * The reference seems to be wrong about the hash size, at least for
+	 * SHA-256. TODO: check what happens with other hash functions.
+	 */
+	u8	binv_child_hash[APFS_HASH_CCSHA256_SIZE];
 } __packed;
 
 #endif	/* _RAW_H */

@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <apfs/raw.h>
+#include <apfs/sha256.h>
 #include <apfs/types.h>
 #include "apfsck.h"
 #include "btree.h"
@@ -254,29 +255,59 @@ static void node_prepare_bitmaps(struct node *node)
 }
 
 /**
+ * verify_block_hash - Verify that a block has the given hash
+ * @raw:	pointer to the block contents
+ * @hash:	pointer to the SHA-256 hash
+ */
+static void verify_block_hash(u8 *raw, u8 *hash)
+{
+	SHA256_CTX ctx = {0};
+	u8 true_hash[APFS_HASH_CCSHA256_SIZE] = {0};
+
+	if (!hash)
+		return;
+
+	sha256_init(&ctx);
+	sha256_update(&ctx, raw, sb->s_blocksize);
+	sha256_final(&ctx, true_hash);
+
+	if (memcmp(hash, true_hash, APFS_HASH_CCSHA256_SIZE) != 0)
+		report("Sealed volume", "incorrect hash for node.");
+}
+
+/**
  * read_node - Read a node header from disk
  * @oid:	object id for the node
  * @btree:	tree structure, with the omap_table already set
+ * @hash:	SHA-256 hash to check against (NULL if none)
  *
  * Returns a pointer to the resulting node structure.
  */
-static struct node *read_node(u64 oid, struct btree *btree)
+static struct node *read_node(u64 oid, struct btree *btree, u8 *hash)
 {
 	struct apfs_btree_node_phys *raw;
 	struct node *node;
 	u32 obj_type, obj_subtype;
+	bool noheader;
 
 	node = calloc(1, sizeof(*node));
 	if (!node)
 		system_error();
 	node->btree = btree;
 
+	noheader = btree_is_catalog(btree) && apfs_volume_is_sealed();
+
 	/* The free-space queue is the only tree with ephemeral nodes so far */
 	if (btree_is_free_queue(btree))
 		raw = read_ephemeral_object(oid, &node->object);
+	else if (noheader)
+		raw = read_object_noheader(oid, btree->omap_table, &node->object);
 	else
 		raw = read_object(oid, btree->omap_table, &node->object);
 	node->raw = raw;
+
+	if (hash)
+		verify_block_hash((u8 *)raw, hash);
 
 	node->level = le16_to_cpu(raw->btn_level);
 	node->flags = le16_to_cpu(raw->btn_flags);
@@ -291,16 +322,21 @@ static struct node *read_node(u64 oid, struct btree *btree)
 		       (unsigned long long)node->object.block_nr);
 	}
 
+	if ((bool)(node->flags & APFS_BTNODE_NOHEADER) != noheader)
+		report("B-tree node", "wrong setting of hashed flag.");
+	if ((bool)(node->flags & APFS_BTNODE_HASHED) != noheader)
+		report("B-tree node", "wrong setting of hashed flag.");
+
 	obj_type = node->object.type;
-	if (node_is_root(node) && obj_type != APFS_OBJECT_TYPE_BTREE)
+	if (!noheader && node_is_root(node) && obj_type != APFS_OBJECT_TYPE_BTREE)
 		report("B-tree node", "wrong object type for root.");
-	if (!node_is_root(node) && obj_type != APFS_OBJECT_TYPE_BTREE_NODE)
+	if (!noheader && !node_is_root(node) && obj_type != APFS_OBJECT_TYPE_BTREE_NODE)
 		report("B-tree node", "wrong object type for nonroot.");
 
 	obj_subtype = node->object.subtype;
 	if (btree_is_omap(btree) && obj_subtype != APFS_OBJECT_TYPE_OMAP)
 		report("Object map node", "wrong object subtype.");
-	if (btree_is_catalog(btree) && obj_subtype != APFS_OBJECT_TYPE_FSTREE)
+	if (!noheader && btree_is_catalog(btree) && obj_subtype != APFS_OBJECT_TYPE_FSTREE)
 		report("Catalog node", "wrong object subtype.");
 	if (btree_is_extentref(btree) && obj_subtype !=
 						APFS_OBJECT_TYPE_BLOCKREFTREE)
@@ -313,6 +349,8 @@ static struct node *read_node(u64 oid, struct btree *btree)
 		report("Free queue node", "wrong object subtype.");
 	if (btree_is_snapshots(btree) && obj_subtype != APFS_OBJECT_TYPE_OMAP_SNAPSHOT)
 		report("Omap snapshot tree node", "wrong object subtype.");
+	if (btree_is_fext(btree) && obj_subtype != OBJECT_TYPE_FEXT_TREE)
+		report("File extents tree node", "wrong object subtype.");
 
 	node_prepare_bitmaps(node);
 
@@ -420,6 +458,8 @@ static int node_locate_data(struct node *node, int index, int *off)
 			len = node_is_leaf(node) ? 16 : 8;
 		if (btree_is_snapshots(btree))
 			len = node_is_leaf(node) ? sizeof(struct apfs_omap_snapshot) : 8;
+		if (btree_is_fext(btree))
+			len = node_is_leaf(node) ? sizeof(struct apfs_fext_tree_val) : 8;
 
 		/* Value offsets are backwards from the end of the value area */
 		off_in_area = area_len - le16_to_cpu(entry->v);
@@ -584,6 +624,9 @@ static void parse_cat_record(void *key, void *val, int len)
 		break;
 	case APFS_TYPE_CRYPTO_STATE:
 		parse_crypto_state_record(key, val, len);
+		break;
+	case APFS_TYPE_FILE_INFO:
+		parse_file_info_record(key, val, len);
 		break;
 	default:
 		report(NULL, "Bug!");
@@ -765,8 +808,6 @@ static void parse_omap_record(struct apfs_omap_key *key,
 		report("Omap record", "invalid flag in use.");
 	if (flags & APFS_OMAP_VAL_SAVED)
 		report("Omap record", "saved flag is set.");
-	if (flags & APFS_OMAP_VAL_NOHEADER)
-		report_unknown("Virtual objects with no header");
 	if ((bool)(flags & APFS_OMAP_VAL_ENCRYPTED) != (vsb && vsb->v_encrypted))
 		report("Omap record", "wrong encryption flag.");
 	if (flags & APFS_OMAP_VAL_CRYPTO_GENERATION)
@@ -793,6 +834,7 @@ static void parse_subtree(struct node *root,
 {
 	struct btree *btree = root->btree;
 	struct key curr_key;
+	bool is_sealed_cat;
 	int i;
 
 	if (node_is_leaf(root)) {
@@ -812,10 +854,14 @@ static void parse_subtree(struct node *root,
 		report("Snap meta tree", "key size shouldn't be fixed.");
 	if (btree_is_snapshots(btree) && !node_has_fixed_kv_size(root))
 		report("Omap snapshot tree", "key size should be fixed.");
+	if (btree_is_fext(btree) && !node_has_fixed_kv_size(root))
+		report("File extents tree", "key size should be fixed.");
 
 	/* This makes little sense, but it appears to be true */
 	if (btree_is_extentref(btree) && node_has_fixed_kv_size(root))
 		report("Extent reference tree", "key size shouldn't be fixed.");
+
+	is_sealed_cat = btree_is_catalog(btree) && apfs_volume_is_sealed();
 
 	for (i = 0; i < root->records; ++i) {
 		struct node *child;
@@ -823,6 +869,7 @@ static void parse_subtree(struct node *root,
 		void *raw_key, *raw_val;
 		int off, len;
 		u64 child_id;
+		u8 *child_hash = NULL;
 
 		len = node_locate_key(root, i, &off);
 		if (len > btree->longest_key)
@@ -848,6 +895,8 @@ static void parse_subtree(struct node *root,
 			read_snap_key(raw_key, len, &curr_key);
 		if (btree_is_snapshots(btree))
 			read_omap_snap_key(raw_key, len, &curr_key);
+		if (btree_is_fext(btree))
+			read_fext_key(raw_key, len, &curr_key);
 
 		if (keycmp(last_key, &curr_key) > 0)
 			report("B-tree", "keys are out of order.");
@@ -881,13 +930,32 @@ static void parse_subtree(struct node *root,
 				parse_snap_record(raw_key, raw_val, len);
 			if (btree_is_snapshots(btree))
 				parse_omap_snap_record(raw_key, raw_val, len);
+			if (btree_is_fext(btree))
+				parse_fext_record(raw_key, raw_val, len);
 			continue;
 		}
 
-		if (len != 8)
-			report("B-tree", "wrong size of nonleaf record value.");
-		child_id = le64_to_cpu(*(__le64 *)(raw_val));
-		child = read_node(child_id, btree);
+		if (is_sealed_cat) {
+			struct apfs_btn_index_node_val *index_val = NULL;
+			u64 base_oid = btree->root->object.oid;
+
+			if (len != sizeof(*index_val))
+				report("B-tree", "wrong size of hashed nonleaf record value.");
+			index_val = (struct apfs_btn_index_node_val *)raw_val;
+			/*
+			 * The reference is wrong here, binv_child_oid is not
+			 * the id for the child node, it's an offset from the
+			 * id of the root node. As usual, I have no idea what
+			 * this is about.
+			 */
+			child_id = le64_to_cpu(index_val->binv_child_oid) + base_oid;
+			child_hash = index_val->binv_child_hash;
+		} else {
+			if (len != 8)
+				report("B-tree", "wrong size of nonleaf record value.");
+			child_id = le64_to_cpu(*(__le64 *)(raw_val));
+		}
+		child = read_node(child_id, btree, child_hash);
 
 		if (child->level != root->level - 1)
 			report("B-tree", "node levels are corrupted.");
@@ -895,7 +963,7 @@ static void parse_subtree(struct node *root,
 			report("B-tree", "nonroot node is flagged as root.");
 
 		/* If a physical node changes, the parent must update the bno */
-		if ((btree_is_omap(btree) || btree_is_extentref(btree) || btree_is_snap_meta(btree) || btree_is_snapshots(btree)) && root->object.xid < child->object.xid)
+		if ((btree_is_omap(btree) || btree_is_extentref(btree) || btree_is_snap_meta(btree) || btree_is_snapshots(btree) || btree_is_fext(btree)) && root->object.xid < child->object.xid)
 			report("Physical tree",
 			       "xid of node is older than xid of its child.");
 
@@ -925,7 +993,7 @@ static void parse_subtree(struct node *root,
  */
 static void check_btree_footer_flags(u32 flags, struct btree *btree, char *ctx)
 {
-	bool aligned, is_free_queue, is_physical;
+	bool aligned, is_free_queue, is_physical, is_sealed_cat;
 
 	if ((flags & APFS_BTREE_FLAGS_VALID_MASK) != flags)
 		report(ctx, "invalid flag in use.");
@@ -933,7 +1001,7 @@ static void check_btree_footer_flags(u32 flags, struct btree *btree, char *ctx)
 		report(ctx, "nonpersistent flag is set.");
 
 	/* TODO: are these really the only allowed settings for the flag? */
-	aligned = btree_is_omap(btree) || btree_is_free_queue(btree) || btree_is_snapshots(btree);
+	aligned = btree_is_omap(btree) || btree_is_free_queue(btree) || btree_is_snapshots(btree) || btree_is_fext(btree);
 	if (aligned != !(flags & APFS_BTREE_KV_NONALIGNED))
 		report(ctx, "wrong alignment flag.");
 
@@ -946,6 +1014,12 @@ static void check_btree_footer_flags(u32 flags, struct btree *btree, char *ctx)
 	is_physical = !(btree_is_catalog(btree) || btree_is_free_queue(btree));
 	if (is_physical != (bool)(flags & APFS_BTREE_PHYSICAL))
 		report(ctx, "wrong setting of physical flag.");
+
+	is_sealed_cat = btree_is_catalog(btree) && apfs_volume_is_sealed();
+	if (is_sealed_cat != (bool)(flags & APFS_BTREE_HASHED))
+		report(ctx, "wrong setting of hashed flag.");
+	if (is_sealed_cat != (bool)(flags & APFS_BTREE_NOHEADER))
+		report(ctx, "wrong setting of no-header flag.");
 }
 
 /**
@@ -976,6 +1050,9 @@ static void check_btree_footer(struct btree *btree)
 		break;
 	case BTREE_TYPE_SNAPSHOTS:
 		ctx = "Omap snapshot tree";
+		break;
+	case BTREE_TYPE_FEXT:
+		ctx = "File extents tree";
 		break;
 	default:
 		report(NULL, "Bug!");
@@ -1048,6 +1125,18 @@ static void check_btree_footer(struct btree *btree)
 		return;
 	}
 
+	if (btree_is_fext(btree)) {
+		if (le32_to_cpu(info->bt_fixed.bt_key_size) != sizeof(struct apfs_fext_tree_key))
+			report(ctx, "wrong key size in info footer.");
+		if (le32_to_cpu(info->bt_fixed.bt_val_size) != sizeof(struct apfs_fext_tree_val))
+			report(ctx, "wrong value size in info footer.");
+		if (le32_to_cpu(info->bt_longest_key) != sizeof(struct apfs_fext_tree_key))
+			report(ctx, "wrong maximum key size in info footer.");
+		if (le32_to_cpu(info->bt_longest_val) != sizeof(struct apfs_fext_tree_val))
+			report(ctx, "wrong maximum value size in info footer.");
+		return;
+	}
+
 	/* The remaining trees don't report fixed key/value sizes */
 	if (le32_to_cpu(info->bt_fixed.bt_key_size) != 0)
 		report(ctx, "key size should not be set.");
@@ -1100,7 +1189,7 @@ struct free_queue *parse_free_queue_btree(u64 oid, int index)
 
 	btree->type = BTREE_TYPE_FREE_QUEUE;
 	btree->omap_table = NULL; /* These are ephemeral objects */
-	btree->root = read_node(oid, btree);
+	btree->root = read_node(oid, btree, NULL /* hash */);
 	parse_subtree(btree->root, &last_key, NULL /* name_buf */);
 
 	check_btree_footer(btree);
@@ -1124,7 +1213,7 @@ struct btree *parse_snap_meta_btree(u64 oid)
 		system_error();
 	snap->type = BTREE_TYPE_SNAP_META;
 	snap->omap_table = NULL; /* These are physical objects */
-	snap->root = read_node(oid, snap);
+	snap->root = read_node(oid, snap, NULL /* hash */);
 
 	parse_subtree(snap->root, &last_key, name_buf);
 
@@ -1151,12 +1240,37 @@ struct btree *parse_cat_btree(u64 oid, struct htable_entry **omap_table)
 
 	cat->type = BTREE_TYPE_CATALOG;
 	cat->omap_table = omap_table;
-	cat->root = read_node(oid, cat);
+	cat->root = read_node(oid, cat, apfs_volume_is_sealed() ? vsb->v_hash : NULL);
 
 	parse_subtree(cat->root, &last_key, name_buf);
 
 	check_btree_footer(cat);
 	return cat;
+}
+
+/**
+ * parse_fext_btree - Parse a fext tree and check for corruption
+ * @oid:	object id for the fext root
+ *
+ * Returns a pointer to the btree struct for the catalog.
+ */
+struct btree *parse_fext_btree(u64 oid)
+{
+	struct btree *fext = NULL;
+	struct key last_key = {0};
+
+	fext = calloc(1, sizeof(*fext));
+	if (!fext)
+		system_error();
+
+	fext->type = BTREE_TYPE_FEXT;
+	fext->omap_table = NULL;
+	fext->root = read_node(oid, fext, NULL /* hash */);
+
+	parse_subtree(fext->root, &last_key, NULL);
+
+	check_btree_footer(fext);
+	return fext;
 }
 
 /**
@@ -1189,7 +1303,7 @@ static struct btree *parse_snapshot_tree(u64 oid)
 
 	snaps->type = BTREE_TYPE_SNAPSHOTS;
 	snaps->omap_table = NULL;
-	snaps->root = read_node(oid, snaps);
+	snaps->root = read_node(oid, snaps, NULL /* hash */);
 
 	parse_subtree(snaps->root, &last_key, NULL);
 
@@ -1244,7 +1358,7 @@ struct btree *parse_omap_btree(u64 oid)
 		system_error();
 	omap->type = BTREE_TYPE_OMAP;
 	omap->omap_table = NULL; /* The omap doesn't have an omap of its own */
-	omap->root = read_node(le64_to_cpu(raw->om_tree_oid), omap);
+	omap->root = read_node(le64_to_cpu(raw->om_tree_oid), omap, NULL /* hash */);
 
 	/* The tree type reported by the omap must match the root node */
 	if (raw->om_tree_type != omap->root->raw->btn_o.o_type)
@@ -1273,7 +1387,7 @@ struct btree *parse_extentref_btree(u64 oid)
 		system_error();
 	extref->type = BTREE_TYPE_EXTENTREF;
 	extref->omap_table = NULL; /* These are physical objects */
-	extref->root = read_node(oid, extref);
+	extref->root = read_node(oid, extref, NULL /* hash */);
 
 	parse_subtree(extref->root, &last_key, NULL /* name_buf */);
 
@@ -1326,6 +1440,83 @@ static void extref_rec_from_query(struct query *query,
 
 	kind = le64_to_cpu(extref_val->len_and_kind) >> APFS_PEXT_KIND_SHIFT;
 	extref->update = kind == APFS_KIND_UPDATE;
+}
+
+/*
+ * In-memory fext record
+ */
+struct fext_record {
+	u64 log_addr;	/* Logical address */
+	u64 phys_bno;	/* Physical block number */
+	u64 length;	/* Length (in bytes) */
+};
+
+/**
+ * fext_rec_from_query - Read the info found by a successful fext query
+ * @query:	the query for the fext record
+ * @fext:	fext record struct to receive the result
+ */
+static void fext_rec_from_query(struct query *query, struct fext_record *fext)
+{
+	struct apfs_fext_tree_val *fext_val = NULL;
+	struct apfs_fext_tree_key *fext_key = NULL;
+	void *raw = query->node->raw;
+
+	if (query->len != sizeof(*fext_val))
+		report("Fext record", "wrong size of value.");
+
+	fext_val = (struct apfs_fext_tree_val *)(raw + query->off);
+	fext_key = (struct apfs_fext_tree_key *)(raw + query->key_off);
+
+	fext->log_addr = le64_to_cpu(fext_key->logical_addr);
+	fext->phys_bno = le64_to_cpu(fext_val->phys_block_num);
+	fext->length = le64_to_cpu(fext_val->len_and_flags) & APFS_FILE_EXTENT_LEN_MASK;
+}
+
+/**
+ * fext_tree_lookup - Map a logical address to a physical one in a sealed volume
+ * @oid:	dstream id
+ * @logaddr:	logical address inside the dstream
+ * @bno:	on return, the physical block number
+ *
+ * Returns 0 on success, or -1 if nothing was found.
+ */
+int fext_tree_lookup(u64 oid, u64 logaddr, u64 *bno)
+{
+	struct query *query = NULL;
+	struct key key = {0};
+	struct fext_record fext = {0};
+	u64 off;
+	int ret = -1;
+
+	query = alloc_query(vsb->v_fext->root, NULL /* parent */);
+
+	init_fext_key(oid, logaddr, &key);
+	query->key = &key;
+	query->flags |= QUERY_FEXT;
+
+	/*
+	 * The fext nodes have already been parsed, and the allocation
+	 * bitmap has been updated accordingly.  This global variable tells
+	 * read_object() to ignore the bitmap this time.
+	 */
+	ongoing_query = true;
+	if (btree_query(&query))
+		goto fail;
+	ongoing_query = false;
+
+	fext_rec_from_query(query, &fext);
+	if (fext.phys_bno == 0) {
+		*bno = 0;
+	} else {
+		off = (logaddr - fext.log_addr) >> sb->s_blocksize_bits;
+		*bno = fext.phys_bno + off;
+	}
+
+	ret = 0;
+fail:
+	free_query(query);
+	return ret;
 }
 
 /**
@@ -1471,6 +1662,9 @@ static void key_from_query(struct query *query, struct key *key)
 		break;
 	case QUERY_EXTENTREF:
 		read_extentref_key(raw_key, query->key_len, key);
+		break;
+	case QUERY_FEXT:
+		read_fext_key(raw_key, query->key_len, key);
 		break;
 	default:
 		report(NULL, "Bug!");
@@ -1656,7 +1850,7 @@ next_node:
 
 	/* Now go a level deeper and search the child */
 	child_id = child_from_query(*query);
-	node = read_node(child_id, btree);
+	node = read_node(child_id, btree, NULL /* hash */);
 
 	if ((*query)->flags & QUERY_MULTIPLE) {
 		/*

@@ -5,7 +5,10 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
+#include <sys/mman.h>
 #include <apfs/raw.h>
+#include <apfs/sha256.h>
 #include "apfsck.h"
 #include "btree.h"
 #include "extents.h"
@@ -122,6 +125,44 @@ static void check_dstream_stats(struct dstream *dstream)
 }
 
 /**
+ * verify_info_hash - Verify that a a file info hash is correct
+ * @info:	information about the hash to check
+ * @dstream:	dstream for the file to check
+ */
+static void verify_info_hash(struct listed_hash *info, struct dstream *dstream)
+{
+	SHA256_CTX ctx = {0};
+	u8 true_hash[APFS_HASH_CCSHA256_SIZE] = {0};
+	u64 bno;
+	u8 *block = NULL;
+	u16 i;
+
+	sha256_init(&ctx);
+
+	for (i = 0; i < info->blkcnt; ++i) {
+		if (fext_tree_lookup(dstream->d_id, info->addr + i * sb->s_blocksize, &bno))
+			report("Fext tree", "query failed.");
+
+		if (bno == 0) /* A hole */
+			block = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+		else
+			block = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, fd, bno * sb->s_blocksize);
+		if (block == MAP_FAILED)
+			system_error();
+
+		sha256_update(&ctx, block, sb->s_blocksize);
+
+		munmap(block, sb->s_blocksize);
+		block = NULL;
+	}
+
+	sha256_final(&ctx, true_hash);
+
+	if (memcmp(info->hash, true_hash, APFS_HASH_CCSHA256_SIZE) != 0)
+		report("File info record", "incorrect hash of file data.");
+}
+
+/**
  * free_dstream - Free a dstream structure after performing some final checks
  * @entry: the entry to free
  */
@@ -160,6 +201,18 @@ static void free_dstream(struct htable_entry *entry)
 		next_extent = curr_extent->next;
 		free(curr_extent);
 		curr_extent = next_extent;
+	}
+
+	/* TODO: support resource forks for compressed files too */
+	if (!dstream->d_xattr) {
+		struct listed_hash *hash = dstream->d_hashes;
+
+		while (hash) {
+			verify_info_hash(hash, dstream);
+			dstream->d_hashes = hash->prev;
+			free(hash);
+			hash = dstream->d_hashes;
+		}
 	}
 
 	check_dstream_stats(dstream);
@@ -259,6 +312,9 @@ void parse_extent_record(struct apfs_file_extent_key *key,
 	struct dstream *dstream;
 	u64 length, flags;
 	u64 crypid;
+
+	if (apfs_volume_is_sealed())
+		report("Extent record", "shouldn't exist in a sealed volume.");
 
 	if (len != sizeof(*val))
 		report("Extent record", "wrong size of value.");
@@ -478,4 +534,101 @@ void parse_crypto_state_record(struct apfs_crypto_state_key *key, struct apfs_cr
 	if (!crypto->c_refcnt)
 		report("Crypto state record", "has no references.");
 	crypto->c_keylen = key_len;
+}
+
+static void attach_hash_to_dstream(u64 addr, u64 blkcnt, u8 *hash, struct dstream *dstream)
+{
+	struct listed_hash *new = NULL;
+
+	new = calloc(1, sizeof(*new));
+	if (!new)
+		system_error();
+
+	new->addr = addr;
+	new->blkcnt = blkcnt;
+	memcpy(new->hash, hash, APFS_HASH_CCSHA256_SIZE);
+
+	new->prev = dstream->d_hashes;
+	dstream->d_hashes = new;
+}
+
+/**
+ * parse_file_info_record - Parse an info record value and check for corruption
+ * @key:	pointer to the raw key
+ * @val:	pointer to the raw value
+ * @len:	length of the raw value
+ *
+ * Internal consistency of @key must be checked before calling this function.
+ */
+void parse_file_info_record(struct apfs_file_info_key *key, struct apfs_file_info_val *val, int len)
+{
+	struct apfs_file_data_hash_val *dhash = NULL;
+	struct dstream *dstream = NULL;
+	u64 paddr;
+	u16 blkcnt;
+
+	if (!apfs_volume_is_sealed())
+		report("File info record", "volume is unsealed.");
+
+	dhash = &val->dhash;
+	if (len < sizeof(*dhash))
+		report("File info record", "value is too small.");
+
+	if (dhash->hash_size != APFS_HASH_CCSHA256_SIZE)
+		report("File info record", "unusual hash length.");
+	if (len != sizeof(*dhash) + dhash->hash_size)
+		report("File info record", "wrong size of value.");
+
+	blkcnt = le16_to_cpu(dhash->hashed_len);
+	if (!blkcnt)
+		report("File info record", "length is zero.");
+	paddr = le64_to_cpu(key->info_and_lba) & APFS_FILE_INFO_LBA_MASK;
+
+	dstream = get_dstream(cat_cnid(&key->hdr));
+	attach_hash_to_dstream(paddr, blkcnt, dhash->hash, dstream);
+}
+
+/**
+ * parse_fext_record - Parse a fext record value and check for corruption
+ * @key:	pointer to the raw key
+ * @val:	pointer to the raw value
+ * @len:	length of the raw value
+ *
+ * Internal consistency of @key must be checked before calling this function.
+ */
+void parse_fext_record(struct apfs_fext_tree_key *key, struct apfs_fext_tree_val *val, int len)
+{
+	struct dstream *dstream = NULL;
+	u64 length, flags;
+
+	/*
+	 * Keys and values must be aligned to eight bytes. TODO: add this
+	 * check to aligned trees of all types.
+	 */
+	if ((u64)key & 7 || (u64)val & 7)
+		report("Omap record", "bad alignment for key or value.");
+
+	if (len != sizeof(*val))
+		report("Fext record", "wrong size of value.");
+
+	length = le64_to_cpu(val->len_and_flags) & APFS_FILE_EXTENT_LEN_MASK;
+	if (!length)
+		report("Fext record", "length is zero.");
+	if (length & (sb->s_blocksize - 1))
+		report("Fext record", "length isn't multiple of block size.");
+
+	flags = le64_to_cpu(val->len_and_flags) & APFS_FILE_EXTENT_FLAG_MASK;
+	if (flags)
+		report("Fext record", "no flags should be set.");
+
+	dstream = get_dstream(le64_to_cpu(key->private_id));
+	if (dstream->d_bytes != le64_to_cpu(key->logical_addr))
+		report("Data stream", "fexts are not consecutive.");
+	dstream->d_bytes += length;
+
+	if (!le64_to_cpu(val->phys_block_num)) { /* This is a hole */
+		dstream->d_sparse_bytes += length;
+		return;
+	}
+	attach_extent_to_dstream(le64_to_cpu(val->phys_block_num), length >> sb->s_blocksize_bits, dstream);
 }

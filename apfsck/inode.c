@@ -467,6 +467,7 @@ static int read_dstream_xfield(char *xval, int len, struct inode *inode)
 		dstream->d_size = size;
 		dstream->d_alloced_size = alloced_size;
 	}
+	dstream->d_xattr = false;
 
 	dstream->d_references++;
 	dstream->d_owner = dstream->d_id;

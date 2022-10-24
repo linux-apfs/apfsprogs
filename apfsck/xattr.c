@@ -108,6 +108,7 @@ void parse_xattr_record(struct apfs_xattr_key *key,
 		dstream_raw = (struct apfs_xattr_dstream *)val->xdata;
 		dstream = parse_xattr_dstream(dstream_raw);
 		dstream->d_owner = inode->i_ino;
+		dstream->d_xattr = true;
 
 		content_len = dstream->d_size;
 	} else {
