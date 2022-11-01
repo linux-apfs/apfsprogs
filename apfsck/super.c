@@ -668,7 +668,7 @@ static void parse_integrity_meta(u64 oid)
 	assert(vsb->v_omap_table);
 
 	meta = read_object(oid, vsb->v_omap_table, &obj);
-	if (obj.type != OBJECT_TYPE_INTEGRITY_META)
+	if (obj.type != APFS_OBJECT_TYPE_INTEGRITY_META)
 		report("Integrity metadata", "wrong object type.");
 	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
 		report("Integrity metadata", "wrong object subtype.");
@@ -914,7 +914,7 @@ static void check_snap_meta_ext(u64 oid)
 		report("Volume superblock", "has extended snap meta but no snapshots.");
 
 	sme = read_object(oid, vsb->v_omap_table, &obj);
-	if (obj.type != OBJECT_TYPE_SNAP_META_EXT)
+	if (obj.type != APFS_OBJECT_TYPE_SNAP_META_EXT)
 		report("Extended snapshot metadata", "wrong object type.");
 	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
 		report("Extended snapshot metadata", "wrong object subtype.");
