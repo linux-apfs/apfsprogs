@@ -245,7 +245,7 @@ static ssize_t apfs_compress_read_block(struct compress *compress, char *buf, si
             }
             break;
         case APFS_COMPRESS_LZBITMAP_RSRC:
-            if(cdata[0] == 0x5a && csize >= 2) {
+            if(cdata[0] == 0x5a) {
                 res = zbm_decompress(tmp, bsize, cdata, csize, &bsize);
                 if(res < 0)
                     report("LZBITMAP compressed file", "invalid compression.");
