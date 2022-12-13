@@ -54,6 +54,12 @@ static void read_whole_dstream(u64 oid, void *buf, loff_t size)
     }
 }
 
+static inline bool apfs_compressed_in_dstream(struct compress *compress)
+{
+    /* For sealed volumes we may use a fake dstream that only holds the hash */
+    return compress->rsrc_dstream && !compress->rsrc_dstream->d_inline;
+}
+
 void apfs_compress_open(struct compress *compress)
 {
     struct dstream *rsrc = compress->rsrc_dstream;
@@ -70,10 +76,7 @@ void apfs_compress_open(struct compress *compress)
         report("Compressed file", "missing decmpfs xattr.");
     memcpy(&fd->hdr, compress->decmpfs, sizeof(fd->hdr));
 
-    if(!rsrc)
-        report(NULL, "Bug!");
-
-    if(!rsrc->d_inline && le32_to_cpu(fd->hdr.algo) != APFS_COMPRESS_LZBITMAP_RSRC) {
+    if(apfs_compressed_in_dstream(compress) && le32_to_cpu(fd->hdr.algo) != APFS_COMPRESS_LZBITMAP_RSRC) {
         struct apfs_compress_rsrc_hdr *rsrc_hdr = NULL;
         struct apfs_compress_rsrc_data *rsrc_data = NULL;
     	u32 data_end;
@@ -113,7 +116,7 @@ void apfs_compress_open(struct compress *compress)
         if(compress->data_size < compress->block_num * sizeof(rsrc_data->block[0]) + sizeof(*rsrc_data))
             report("Resource compressed file", "block metadata won't fit.");
         /* TODO: figure out the 'unknown' field */
-    } else if(!rsrc->d_inline) {
+    } else if(apfs_compressed_in_dstream(compress)) {
         __le32 *block_offs;
         int i;
 
@@ -287,10 +290,7 @@ ssize_t apfs_compress_read(struct compress *compress, char *buf, size_t size, lo
     loff_t step;
     ssize_t block, res;
 
-    if(!compress->rsrc_dstream)
-        report(NULL, "Bug!");
-
-    if(!compress->rsrc_dstream->d_inline) {
+    if(apfs_compressed_in_dstream(compress)) {
         step = 0;
         while(!buf || step < (int64_t)size) {
             block = APFS_COMPRESS_BLOCK - ((*off + step) & (APFS_COMPRESS_BLOCK - 1));
