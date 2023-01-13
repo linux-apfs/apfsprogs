@@ -471,6 +471,8 @@ static void check_incompat_vol_features(u64 flags)
 		report_unknown("Dataless snapshots");
 	if (flags & APFS_INCOMPAT_ENC_ROLLED)
 		report_unknown("Change of encryption keys");
+	if (flags & APFS_INCOMPAT_INCOMPLETE_RESTORE)
+		report_unknown("Incomplete restore");
 
 	if ((bool)(flags & APFS_INCOMPAT_CASE_INSENSITIVE) &&
 	    (bool)(flags & APFS_INCOMPAT_NORMALIZATION_INSENSITIVE))
