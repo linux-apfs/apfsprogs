@@ -1238,6 +1238,13 @@ struct btree *parse_cat_btree(u64 oid, struct htable_entry **omap_table)
 	if (!cat)
 		system_error();
 
+	/*
+	 * We need to set this here so that parse_xattr_record() can read
+	 * dstream contents. Maybe all parse_*_btree() functions should do
+	 * this, for consistency...
+	 */
+	vsb->v_cat = cat;
+
 	cat->type = BTREE_TYPE_CATALOG;
 	cat->omap_table = omap_table;
 	cat->root = read_node(oid, cat, apfs_volume_is_sealed() ? vsb->v_hash : NULL);

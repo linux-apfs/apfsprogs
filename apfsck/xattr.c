@@ -136,6 +136,7 @@ void parse_xattr_record(struct apfs_xattr_key *key,
 	struct inode *inode;
 	u16 flags;
 	u64 content_len;
+	u64 dstream_id = 0;
 
 	if (len < sizeof(*val))
 		report("Xattr record", "value is too small.");
@@ -168,6 +169,7 @@ void parse_xattr_record(struct apfs_xattr_key *key,
 			inode->i_compress->rsrc_dstream = dstream;
 
 		content_len = dstream->d_size;
+		dstream_id = dstream->d_id;
 	} else {
 		if (len != le16_to_cpu(val->xdata_len))
 			report("Xattr record", "bad length for embedded data.");
@@ -209,6 +211,17 @@ void parse_xattr_record(struct apfs_xattr_key *key,
 		if (inode->i_xattr_bmap & XATTR_BMAP_COMPRESSED)
 			report("Catalog", "inode has two compressed headers.");
 		inode->i_xattr_bmap |= XATTR_BMAP_COMPRESSED;
-		parse_decmpfs(inode, val->xdata, len);
+		if (flags & APFS_XATTR_DATA_STREAM) {
+			u8 *decmpfs = NULL;
+
+			decmpfs = malloc(content_len);
+			if (!decmpfs)
+				system_error();
+			read_whole_dstream(dstream_id, decmpfs, content_len);
+			parse_decmpfs(inode, decmpfs, content_len);
+			free(decmpfs);
+		} else {
+			parse_decmpfs(inode, val->xdata, len);
+		}
 	}
 }

@@ -20,7 +20,7 @@
 
 #define MIN(X, Y)	((X) <= (Y) ? (X) : (Y))
 
-static void read_whole_dstream(u64 oid, void *buf, loff_t size)
+void read_whole_dstream(u64 oid, void *buf, loff_t size)
 {
     void *block = NULL;
     u64 curr_copylen;

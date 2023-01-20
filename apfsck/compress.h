@@ -32,5 +32,6 @@ extern void apfs_compress_open(struct compress *compress);
 extern void apfs_compress_check(struct compress *compress);
 extern ssize_t apfs_compress_read(struct compress *compress, char *buf, size_t size, loff_t *off);
 extern void apfs_compress_close(struct compress *compress);
+extern void read_whole_dstream(u64 oid, void *buf, loff_t size);
 
 #endif	/* _COMPRESS_H */
