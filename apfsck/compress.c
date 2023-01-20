@@ -47,6 +47,8 @@ void read_whole_dstream(u64 oid, void *buf, loff_t size)
         if(block == MAP_FAILED)
             system_error();
         memcpy(buf, block, curr_copylen);
+        munmap(block, sb->s_blocksize);
+        block = NULL;
 
         size -= curr_copylen;
         buf += curr_copylen;
