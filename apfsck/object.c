@@ -120,14 +120,17 @@ static void *read_object_internal(u64 oid, struct htable_entry **omap_table, str
 			report("Object map", "record missing for id 0x%llx.", (unsigned long long)oid);
 		if ((bool)(omap_rec->flags & APFS_OMAP_VAL_NOHEADER) != noheader)
 			report("Object map", "wrong setting for noheader flag.");
-		if (vsb && vsb->v_in_snapshot) {
-			if (omap_rec->seen_for_snap)
-				report("Object map record", "oid used twice for same snapshot.");
-			omap_rec->seen_for_snap = true;
-		} else {
-			if (omap_rec->seen_for_latest)
-				report("Object map record", "oid used twice in latest checkpoint.");
-			omap_rec->seen_for_latest = true;
+		if (!ongoing_query) {
+			/* Query code will revisit already parsed nodes */
+			if (vsb && vsb->v_in_snapshot) {
+				if (omap_rec->seen_for_snap)
+					report("Object map record", "oid used twice for same snapshot.");
+				omap_rec->seen_for_snap = true;
+			} else {
+				if (omap_rec->seen_for_latest)
+					report("Object map record", "oid used twice in latest checkpoint.");
+				omap_rec->seen_for_latest = true;
+			}
 		}
 		bno = omap_rec->bno;
 	} else {
