@@ -82,11 +82,13 @@ static void parse_snap_name_record(struct apfs_snap_name_key *key, struct apfs_s
  * @xid:		transaction for the snapshot
  * @vol_bno:		block number for the snapshot volume superblock
  * @extentref_bno:	block number for the snapshot's extentref tree
+ * @inum:		inode number for the snapshot
  */
-static void check_snapshot(u64 xid, u64 vol_bno, u64 extentref_bno)
+static void check_snapshot(u64 xid, u64 vol_bno, u64 extentref_bno, u64 inum)
 {
 	struct volume_superblock *latest_vsb = vsb;
 	u64 latest_xid = sb->s_xid;
+	struct listed_cnid *cnid = NULL;
 
 	vsb = NULL;
 
@@ -97,6 +99,14 @@ static void check_snapshot(u64 xid, u64 vol_bno, u64 extentref_bno)
 	vsb->v_snap_count = latest_vsb->v_snap_count;
 	vsb->v_raw = read_object(vol_bno, NULL, &vsb->v_obj);
 	read_volume_super(latest_vsb->v_index, vsb, &vsb->v_obj);
+
+	/*
+	 * Each snapshot is given an "inode number" and, unlike dstream ids,
+	 * they don't seem to overlap with real inode numbers. This lines are
+	 * to check that the number is not reused inside the snapshot.
+	 */
+	cnid = get_listed_cnid(inum);
+	cnid_set_state_flag(cnid, CNID_IN_INODE);
 
 	if (vsb->v_extref_oid != 0)
 		report("Snapshot volume superblock", "has extentref tree.");
@@ -119,6 +129,13 @@ static void check_snapshot(u64 xid, u64 vol_bno, u64 extentref_bno)
 	latest_vsb->v_snap_extrefs = vsb->v_snap_extrefs;
 	latest_vsb->v_block_count += vsb->v_block_count;
 	vsb = latest_vsb; /* TODO: don't leak */
+
+	/*
+	 * Repeat this now to check that the number is not reused inside the
+	 * next snapshot either, or for the current transaction.
+	 */
+	cnid = get_listed_cnid(inum);
+	cnid_set_state_flag(cnid, CNID_IN_INODE);
 }
 
 /**
@@ -161,8 +178,10 @@ static void parse_snap_metadata_record(struct apfs_snap_metadata_key *key, struc
 		report("Snapshot metadata", "wrong type for extentref tree.");
 	if (val->flags)
 		report_unknown("Snapshot flags");
+	if (!val->inum)
+		report("Snapshot metadata", "no inode number.");
 
-	check_snapshot(snap_xid, le64_to_cpu(val->sblock_oid), le64_to_cpu(val->extentref_tree_oid));
+	check_snapshot(snap_xid, le64_to_cpu(val->sblock_oid), le64_to_cpu(val->extentref_tree_oid), le64_to_cpu(val->inum));
 	++vsb->v_snap_count;
 }
 
