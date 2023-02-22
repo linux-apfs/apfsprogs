@@ -99,8 +99,14 @@ static bool node_is_valid(struct node *node)
 	min_index_size = node_min_table_size(node);
 	if (index_size < min_index_size)
 		return false;
-	if (node_has_fixed_kv_size(node) && index_size != min_index_size)
-		return false;
+	if (node_has_fixed_kv_size(node) && index_size != min_index_size) {
+		/*
+		 * Free queue nodes have ghost records, which makes no sense if
+		 * their index is not allowed to grow bigger.
+		 */
+		if (node->object.subtype != APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE)
+			return false;
+	}
 
 	/* All records must have an entry in the table of contents */
 	return records * entry_size <= index_size;
