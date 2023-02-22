@@ -48,6 +48,16 @@ static int node_min_table_size(struct node *node)
 		val_size = sizeof(__le64); /* We assume no ghosts here */
 		toc_size = sizeof(struct apfs_kvoff);
 		break;
+	case APFS_OBJECT_TYPE_OMAP_SNAPSHOT:
+		key_size = sizeof(__le64);
+		val_size = sizeof(struct apfs_omap_snapshot);
+		toc_size = sizeof(struct apfs_kvoff);
+		break;
+	case APFS_OBJECT_TYPE_FEXT_TREE:
+		key_size = sizeof(struct apfs_fext_tree_key);
+		val_size = sizeof(struct apfs_fext_tree_val);
+		toc_size = sizeof(struct apfs_kvoff);
+		break;
 	default:
 		/* It should at least have room for one record */
 		return sizeof(struct apfs_kvloc);
@@ -68,7 +78,7 @@ static bool node_is_valid(struct node *node)
 	u16 flags = node->flags;
 	int records = node->records;
 	int index_size = node->key - node->toc;
-	int entry_size;
+	int entry_size, min_index_size;
 
 	if ((flags & APFS_BTNODE_MASK) != flags)
 		return false;
@@ -86,7 +96,10 @@ static bool node_is_valid(struct node *node)
 	entry_size = (node_has_fixed_kv_size(node)) ?
 		sizeof(struct apfs_kvoff) : sizeof(struct apfs_kvloc);
 
-	if (index_size < node_min_table_size(node))
+	min_index_size = node_min_table_size(node);
+	if (index_size < min_index_size)
+		return false;
+	if (node_has_fixed_kv_size(node) && index_size != min_index_size)
 		return false;
 
 	/* All records must have an entry in the table of contents */
