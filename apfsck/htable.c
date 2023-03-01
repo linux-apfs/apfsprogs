@@ -103,6 +103,27 @@ struct htable_entry *get_htable_entry(u64 id, int size,
 	return new;
 }
 
+/**
+ * htable_entry_exists - Check if an entry exists in a hash table
+ * @id:		id of the entry
+ * @table:	the hash table
+ */
+bool htable_entry_exists(u64 id, struct htable_entry **table)
+{
+	int index = id % HTABLE_BUCKETS; /* Trivial hash function */
+	struct htable_entry *entry = *(table + index);
+
+	/* In each linked list, entries are ordered by id */
+	while (entry) {
+		if (id == entry->h_id)
+			return true;
+		if (id < entry->h_id)
+			return false;
+		entry = entry->h_next;
+	}
+	return false;
+}
+
 static void free_cnid(struct htable_entry *entry)
 {
 	struct listed_cnid *cnid = (struct listed_cnid *)entry;

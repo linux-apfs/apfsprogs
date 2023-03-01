@@ -19,20 +19,18 @@
 #include "super.h"
 
 /**
- * calculate_total_refcnt - Fill in the e_total_refcnt field of an extent
- * @extent: the physical extent
+ * check_extent - Perform a final check on an extent structure
+ * @extent: the extent to check
  */
-static void calculate_total_refcnt(struct extent *extent)
+static void check_extent(struct htable_entry *entry)
 {
-	struct extref_record extref;
-	u64 paddr_end;
+	struct extent *extent = (struct extent *)entry;
 
-	paddr_end = extent->e_bno + extent->e_blocks;
-	if (paddr_end < extent->e_bno) /* Overflow */
-		report("Extent record", "physical address is too big.");
+	if (extent->e_refcnt != extent->e_references)
+		report("Physical extent record", "bad reference count.");
 
-	extentref_lookup(extent->e_bno, &extref);
-	extent->e_total_refcnt = extref.refcnt;
+	/* Reset the real reference count, for the next snapshot */
+	extent->e_references = 0;
 }
 
 /**
@@ -41,17 +39,7 @@ static void calculate_total_refcnt(struct extent *extent)
  */
 static void free_extent(struct htable_entry *entry)
 {
-	struct extent *extent = (struct extent *)entry;
-
-	if (!extent->e_update) {
-		vsb->v_block_count += extent->e_blocks;
-		container_bmap_mark_as_used(extent->e_bno, extent->e_blocks);
-	}
-
-	calculate_total_refcnt(extent);
-	if (extent->e_total_refcnt != extent->e_references)
-		report("Physical extent record", "bad reference count.");
-
+	check_extent(entry);
 	free(entry);
 }
 
@@ -61,7 +49,20 @@ static void free_extent(struct htable_entry *entry)
  */
 void free_extent_table(struct htable_entry **table)
 {
+	if (vsb->v_in_snapshot)
+		report("Physical extent record", "BUG!");
 	free_htable(table, free_extent);
+}
+
+/**
+ * check_and_reset_extent_table - Checks the extents and resets their references
+ * @table: table to check
+ */
+void check_and_reset_extent_table(struct htable_entry **table)
+{
+	if (!vsb->v_in_snapshot)
+		report("Physical extent record", "BUG!");
+	apply_on_htable(table, check_extent);
 }
 
 /**
@@ -72,11 +73,127 @@ void free_extent_table(struct htable_entry **table)
  */
 static struct extent *get_extent(u64 bno)
 {
-	struct htable_entry *entry;
+	struct htable_entry *entry = NULL;
 
 	entry = get_htable_entry(bno, sizeof(struct extent),
 				 vsb->v_extent_table);
 	return (struct extent *)entry;
+}
+
+/**
+ * extent_exists - Check if an extent exists in the extent hash table
+ * @bno: first physical block of the extent
+ */
+static bool extent_exists(u64 bno)
+{
+	return htable_entry_exists(bno, vsb->v_extent_table);
+}
+
+/**
+ * get_subextent - Break up an extent in the hash table, and return a part
+ * @whole_bno:	base of the whole extent (only a lower bound, really)
+ * @part_bno:	base of the extent to extract
+ * @part_bkcnt:	maximum block count for the extent to extract
+ */
+static struct extent *get_subextent(u64 whole_bno, u64 part_bno, u64 part_blkcnt)
+{
+	struct extent *whole_extent = NULL, *part_extent = NULL, *tail_extent = NULL, *head_extent = NULL;
+	u64 whole_blkcnt;
+	u32 whole_refcnt;
+
+	if (whole_bno > part_bno)
+		report("Physical extent record", "BUG!");
+
+	/*
+	 * The whole extent base was probably found from the physical extent
+	 * b-trees, but our in-memory extent may have been split by previous
+	 * reference updates.
+	 */
+	while (whole_bno <= part_bno) {
+		if (!extent_exists(whole_bno)) {
+			++whole_bno;
+			continue;
+		}
+		whole_extent = get_extent(whole_bno);
+		whole_blkcnt = whole_extent->e_blocks;
+		if (whole_blkcnt == 0)
+			report("Physical extent record", "has no blocks?");
+		if (whole_bno + whole_blkcnt < whole_bno)
+			report("Physical extent record", "overflow?");
+		if (whole_bno + whole_blkcnt > part_bno)
+			break;
+		whole_bno += whole_blkcnt;
+	}
+	if (whole_bno > part_bno)
+		report("Physical extent record", "update for nonexisting extent.");
+	whole_refcnt = whole_extent->e_refcnt;
+
+	/*
+	 * We make the subextent as big as possible, but the caller may have
+	 * to continue breaking up the next extent.
+	 */
+	part_blkcnt = MIN(part_blkcnt, whole_blkcnt - (part_bno - whole_bno));
+
+	if (whole_bno == part_bno) {
+		if (whole_extent->e_blocks == part_blkcnt)
+			return whole_extent;
+
+		part_extent = whole_extent;
+		whole_extent = NULL;
+		part_extent->e_blocks = part_blkcnt;
+
+		tail_extent = get_extent(whole_bno + part_blkcnt);
+		if (tail_extent->e_old_entry)
+			report("Physical extent record", "weird overlapping extents.");
+		tail_extent->e_old_entry = true;
+		tail_extent->e_blocks = whole_blkcnt - part_blkcnt;
+		tail_extent->e_refcnt = whole_refcnt;
+
+		return part_extent;
+	}
+
+	head_extent = whole_extent;
+	whole_extent = NULL;
+	head_extent->e_blocks = part_bno - whole_bno;
+
+	part_extent = get_extent(part_bno);
+	if (part_extent->e_old_entry)
+		report("Physical extent record", "weird overlapping extents.");
+	part_extent->e_old_entry = true;
+	part_extent->e_blocks = part_blkcnt;
+	part_extent->e_refcnt = whole_refcnt;
+
+	if (head_extent->e_blocks + part_extent->e_blocks < whole_blkcnt) {
+		tail_extent = get_extent(part_bno + part_blkcnt);
+		if (tail_extent->e_old_entry)
+			report("Physical extent record", "weird overlapping extents.");
+		tail_extent->e_old_entry = true;
+		tail_extent->e_blocks = whole_blkcnt - (head_extent->e_blocks + part_extent->e_blocks);
+		tail_extent->e_refcnt = whole_refcnt;
+	}
+
+	return part_extent;
+}
+
+/**
+ * change_extent_refcnts - Change the refcnts for all known extents in a range
+ * @bno:	base of the range
+ * @bkcnt:	block count for the range
+ * @refdiff:	refcnt change to apply
+ */
+static void change_extent_refcnts(u64 bno, u64 blkcnt, int32_t refdiff)
+{
+	while (blkcnt > 0) {
+		struct extref_record rec = {0};
+		struct extent *extent = NULL;
+
+		extentref_update_lookup(bno, &rec);
+		extent = get_subextent(rec.phys_addr, bno, blkcnt);
+		extent->e_refcnt += refdiff;
+
+		blkcnt -= extent->e_blocks;
+		bno += extent->e_blocks;
+	}
 }
 
 /**
@@ -219,6 +336,43 @@ void verify_dstream_hashes(struct dstream *dstream, struct compress *compress)
 	}
 }
 
+static void increase_extent_references(u64 bno, u64 blkcnt, u64 owner, u8 owner_type)
+{
+	while (blkcnt > 0) {
+		u64 base_bno = bno;
+		struct extent *extent = NULL;
+		int limit = 5000;
+
+		/*
+		 * Sometimes there is more than one consecutive logical extents
+		 * sharing a single physical extent, and sometimes they don't
+		 * even belong to the same dstream. No idea why.
+		 */
+		while (!extent_exists(base_bno)) {
+			if (--limit == 0)
+				report("Logical extent record", "doesn't seem covered by any physical extent.");
+			--base_bno;
+		}
+		extent = get_subextent(base_bno, bno, blkcnt);
+
+		if (extent->e_references) {
+			if (extent->e_obj_type != owner_type)
+				report("Physical extent record", "owners have inconsistent types.");
+			/* Only count the extent once for each owner */
+			if (extent->e_latest_owner != owner)
+				extent->e_references++;
+		} else {
+			extent->e_references++;
+		}
+		extent->e_obj_type = owner_type;
+		extent->e_latest_owner = owner;
+
+		/* An extent may have an unused tail */
+		blkcnt -= extent->e_blocks;
+		bno += extent->e_blocks;
+	}
+}
+
 /**
  * free_dstream - Free a dstream structure after performing some final checks
  * @entry: the entry to free
@@ -246,21 +400,8 @@ static void free_dstream(struct htable_entry *entry)
 	/* Increase the refcount of each physical extent used by the dstream */
 	while (curr_extent) {
 		struct listed_extent *next_extent;
-		struct extent *extent;
 
-		extent = get_extent(curr_extent->paddr);
-		if (extent->e_references) {
-			if (extent->e_obj_type != dstream->d_obj_type)
-				report("Physical extent record",
-				       "owners have inconsistent types.");
-			/* Only count the extent once for each owner */
-			if (extent->e_latest_owner != dstream->d_owner)
-				extent->e_references++;
-		} else {
-			extent->e_references++;
-		}
-		extent->e_obj_type = dstream->d_obj_type;
-		extent->e_latest_owner = dstream->d_owner;
+		increase_extent_references(curr_extent->paddr, curr_extent->blkcnt, dstream->d_owner, dstream->d_obj_type);
 
 		next_extent = curr_extent->next;
 		free(curr_extent);
@@ -310,48 +451,36 @@ static void attach_extent_to_dstream(u64 paddr, u64 blk_count,
 {
 	struct listed_extent **ext_p = NULL;
 	struct listed_extent *ext = NULL;
-	struct listed_extent *new;
-	struct extref_record extref;
+	struct listed_extent *new = NULL;
 	u64 paddr_end;
 
 	paddr_end = paddr + blk_count;
 	if (paddr_end < paddr) /* Overflow */
 		report("Extent record", "physical address is too big.");
 
-	/* Find out which physical extents overlap this address range */
-	while (paddr < paddr_end) {
-		extentref_lookup(paddr, &extref);
-		paddr = extref.phys_addr;
+	ext_p = &dstream->d_extents;
+	ext = *ext_p;
 
-		/*
-		 * Each iteration will go through the whole extent list, but
-		 * looping more than once seems too rare to optimize it.
-		 */
-		ext_p = &dstream->d_extents;
+	/* Entries are ordered by their physical address */
+	while (ext) {
+		/* Count physical extents only once for each owner */
+		if (paddr == ext->paddr)
+			return;
+
+		if (paddr < ext->paddr)
+			break;
+		ext_p = &ext->next;
 		ext = *ext_p;
-
-		/* Entries are ordered by their physical address */
-		while (ext) {
-			/* Count physical extents only once for each owner */
-			if (paddr == ext->paddr)
-				goto next;
-
-			if (paddr < ext->paddr)
-				break;
-			ext_p = &ext->next;
-			ext = *ext_p;
-		}
-
-		new = malloc(sizeof(*new));
-		if (!new)
-			system_error();
-
-		new->paddr = paddr;
-		new->next = ext;
-		*ext_p = new;
-next:
-		paddr += extref.blocks;
 	}
+
+	new = malloc(sizeof(*new));
+	if (!new)
+		system_error();
+
+	new->paddr = paddr;
+	new->blkcnt = blk_count;
+	new->next = ext;
+	*ext_p = new;
 }
 
 /**
@@ -440,10 +569,10 @@ void parse_dstream_id_record(struct apfs_dstream_id_key *key,
 u64 parse_phys_ext_record(struct apfs_phys_ext_key *key,
 			  struct apfs_phys_ext_val *val, int len)
 {
-	struct extent *extent;
+	struct extent *extent = NULL;
 	u8 kind;
 	u32 refcnt;
-	u64 length, owner;
+	u64 length, owner, paddr;
 
 	if (len != sizeof(*val))
 		report("Physical extent record", "wrong size of value.");
@@ -477,12 +606,23 @@ u64 parse_phys_ext_record(struct apfs_phys_ext_key *key,
 	if (!refcnt)
 		report("Physical extent record", "should have been deleted.");
 
-	extent = get_extent(cat_cnid(&key->hdr));
-	extent->e_blocks = length;
-	extent->e_refcnt = refcnt;
-	extent->e_update = kind == APFS_KIND_UPDATE;
+	paddr = cat_cnid(&key->hdr);
+	if (kind == APFS_KIND_NEW) {
+		extent = get_extent(paddr);
+		extent->e_blocks = length;
+		extent->e_refcnt = refcnt;
 
-	return extent->e_bno + length - 1;
+		if (extent->e_old_entry)
+			report("Physical extent record", "BUG!");
+		extent->e_old_entry = true;
+
+		vsb->v_block_count += extent->e_blocks;
+		container_bmap_mark_as_used(extent->e_bno, extent->e_blocks);
+	} else {
+		change_extent_refcnts(paddr, length, refcnt);
+	}
+
+	return paddr + length - 1;
 }
 
 /**

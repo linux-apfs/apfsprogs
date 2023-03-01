@@ -894,8 +894,8 @@ struct volume_superblock *alloc_volume_super(bool snap)
 	if (!snap) {
 		ret->v_omap_table = alloc_htable();
 		ret->v_snap_table = alloc_htable();
+		ret->v_extent_table = alloc_htable();
 	}
-	ret->v_extent_table = alloc_htable();
 	ret->v_cnid_table = alloc_htable();
 	ret->v_dstream_table = alloc_htable();
 	ret->v_inode_table = alloc_htable();
@@ -987,11 +987,13 @@ void check_volume_super(void)
 	vsb->v_dstream_table = NULL;
 	free_cnid_table(vsb->v_cnid_table);
 	vsb->v_cnid_table = NULL;
-	free_extent_table(vsb->v_extent_table);
-	vsb->v_extent_table = NULL;
 	if (!vsb->v_in_snapshot) {
+		free_extent_table(vsb->v_extent_table);
+		vsb->v_extent_table = NULL;
 		free_omap_table(vsb->v_omap_table);
 		vsb->v_omap_table = NULL;
+	} else {
+		check_and_reset_extent_table(vsb->v_extent_table);
 	}
 	free_dirstat_table(vsb->v_dirstat_table);
 	vsb->v_dirstat_table = NULL;

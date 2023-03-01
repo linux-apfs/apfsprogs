@@ -18,8 +18,6 @@
 /* maximum size of compressed data currently supported */
 #define MAX_FBUF_SIZE        (128 * 1024 * 1024)
 
-#define MIN(X, Y)	((X) <= (Y) ? (X) : (Y))
-
 void read_whole_dstream(u64 oid, void *buf, loff_t size)
 {
     void *block = NULL;

@@ -59,6 +59,8 @@ static inline uint32_t be32_to_cpu(__be32 in)
 #define __ROUND_MASK(x, y) ((__typeof__(x))((y)-1))
 #define ROUND_UP(x, y) ((((x)-1) | __ROUND_MASK(x, y))+1)
 
+#define MIN(X, Y)	((X) <= (Y) ? (X) : (Y))
+
 #define NSEC_PER_SEC	1000000000L
 
 typedef u32 unicode_t;

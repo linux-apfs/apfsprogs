@@ -45,6 +45,7 @@ extern void free_htable(struct htable_entry **table,
 extern void apply_on_htable(struct htable_entry **table, void (*fn)(struct htable_entry *));
 extern struct htable_entry *get_htable_entry(u64 id, int size,
 					     struct htable_entry **table);
+extern bool htable_entry_exists(u64 id, struct htable_entry **table);
 extern void free_cnid_table(struct htable_entry **table);
 extern struct listed_cnid *get_listed_cnid(u64 id);
 

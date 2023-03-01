@@ -119,6 +119,8 @@ static void check_snapshot(u64 xid, u64 vol_bno, u64 extentref_bno, u64 inum)
 	omap_htable_clear_seen_for_snap(latest_vsb->v_omap_table);
 	vsb->v_snap_max_xid = latest_vsb->v_snap_max_xid;
 
+	vsb->v_extent_table = latest_vsb->v_extent_table;
+
 	if (vsb->v_snap_meta_oid != 0)
 		report("Snapshot volume superblock", "has snapshot tree.");
 

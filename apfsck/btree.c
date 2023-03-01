@@ -1651,41 +1651,23 @@ fail:
 }
 
 /**
- * extentref_lookup - Find the best match for an extent in the extentref trees
- * @bno:	first block number for the extent
+ * extentref_update_lookup - Find latest snap phys extent for an updated block
+ * @bno:	block number
  * @extref:	extentref record struct to receive the result
  */
-void extentref_lookup(u64 bno, struct extref_record *extref)
+void extentref_update_lookup(u64 bno, struct extref_record *extref)
 {
 	struct listed_btree *ext_tree = NULL;
-	int32_t refcnt_update = 0;
 	int ret;
-
-	if (!vsb->v_in_snapshot) {
-		ret = extentref_tree_lookup(vsb->v_extent_ref->root, bno, extref);
-		if (ret == 0 && extref->phys_addr <= bno && extref->phys_addr + extref->blocks > bno) {
-			if (extref->update) {
-				refcnt_update += (int32_t)extref->refcnt;
-			} else {
-				return;
-			}
-		}
-	}
 
 	/* We look at the most recent snapshots first */
 	for (ext_tree = vsb->v_snap_extrefs; ext_tree; ext_tree = ext_tree->next) {
 		ret = extentref_tree_lookup(ext_tree->btree->root, bno, extref);
-		if (ret == 0 && extref->phys_addr <= bno && extref->phys_addr + extref->blocks > bno) {
-			if (extref->update) {
-				refcnt_update += (int32_t)extref->refcnt;
-			} else {
-				extref->refcnt += refcnt_update;
-				return;
-			}
-		}
+		if (ret == 0 && extref->phys_addr <= bno && extref->phys_addr + extref->blocks > bno)
+			return;
 	}
 
-	report("Extent record", "not covered by physical extents.");
+	report("Physical extent record", "update of nonexistent record.");
 }
 
 /**

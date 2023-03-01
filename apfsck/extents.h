@@ -29,17 +29,12 @@ struct extref_record {
  */
 struct extent {
 	struct htable_entry e_htable; /* Hash table entry header */
+	bool		e_old_entry;  /* Is it an existing hash table entry? */
 
 	u8		e_obj_type;	/* Type of the owner objects */
-
-	/* Extent stats read from the physical extent structure */
-	u32		e_refcnt;	/* Reference count */
+	u32		e_refcnt;	/* Reference count reported on-disk */
+	u32		e_references;	/* Actual reference count to extent */
 	u64		e_blocks;	/* Block count */
-	bool		e_update;	/* Is this an update record? */
-
-	/* Extent stats measured by the fsck */
-	u32		e_references;	/* Number of references to extent */
-	u32		e_total_refcnt; /* Total refcnt, considering updates */
 	u64		e_latest_owner;	/* Last owner counted on e_references */
 };
 #define e_bno	e_htable.h_id		/* First physical block in the extent */
@@ -51,6 +46,7 @@ struct extent {
  */
 struct listed_extent {
 	u64			paddr;	 /* Physical address for the extent */
+	u64			blkcnt;	 /* Block count for the extent */
 	struct listed_extent	*next;	 /* Next entry in linked list */
 };
 
@@ -129,5 +125,6 @@ extern void parse_crypto_state_record(struct apfs_crypto_state_key *key, struct 
 extern void parse_file_info_record(struct apfs_file_info_key *key, struct apfs_file_info_val *val, int len);
 extern void parse_fext_record(struct apfs_fext_tree_key *key, struct apfs_fext_tree_val *val, int len);
 extern void verify_dstream_hashes(struct dstream *dstream, struct compress *compress);
+extern void check_and_reset_extent_table(struct htable_entry **table);
 
 #endif	/* _EXTENTS_H */
