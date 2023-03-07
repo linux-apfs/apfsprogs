@@ -788,6 +788,10 @@ void read_volume_super(int vol, struct volume_superblock *vsb, struct object *ob
 				(APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_BTREE))
 		report("Volume superblock", "wrong type for snapshot tree.");
 
+	/* The official fsck performs this one check on these two fields */
+	if (le64_to_cpu(vsb->v_raw->apfs_total_blocks_freed) > le64_to_cpu(vsb->v_raw->apfs_total_blocks_alloced))
+		report("Volume superblock", "more blocks freed than ever alloced.");
+
 	if (le16_to_cpu(vsb->v_raw->reserved) != 0)
 		report("Volume superblock", "reserved field is in use.");
 	if (le64_to_cpu(vsb->v_raw->apfs_root_to_xid) != 0)
