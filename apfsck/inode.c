@@ -747,6 +747,9 @@ static void check_inode_internal_flags(u64 flags)
 
 	if (flags & APFS_INODE_IS_APFS_PRIVATE)
 		report_unknown("Private implementation inode");
+
+	if (flags & APFS_INODE_WAS_CLONED && !(flags & APFS_INODE_WAS_EVER_CLONED))
+		report("Inode record", "inconsistent clone flags.");
 }
 
 /**
