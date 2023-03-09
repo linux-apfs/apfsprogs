@@ -522,12 +522,27 @@ static void check_volume_role(u16 role)
 		report("Volume superblock", "reserved role in use.");
 }
 
+static bool meta_crypto_is_empty(struct apfs_wrapped_meta_crypto_state *wmcs)
+{
+	if (wmcs->major_version || wmcs->minor_version || wmcs->cpflags)
+		return false;
+	if (wmcs->persistent_class || wmcs->key_os_version)
+		return false;
+	if (wmcs->key_revision || wmcs->unused)
+		return false;
+	return true;
+}
+
 /**
  * check_meta_crypto - Check a volume's meta_crypto field
  * @wmcs: the structure to check
  */
 static void check_meta_crypto(struct apfs_wrapped_meta_crypto_state *wmcs)
 {
+	/* This seems to contradict the reference, but it happens sometimes */
+	if (meta_crypto_is_empty(wmcs))
+		return;
+
 	if (le16_to_cpu(wmcs->major_version) != APFS_WMCS_MAJOR_VERSION)
 		report("Volume meta_crypto", "wrong major version.");
 	if (le16_to_cpu(wmcs->minor_version) != APFS_WMCS_MINOR_VERSION)
