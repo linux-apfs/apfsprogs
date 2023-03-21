@@ -613,7 +613,7 @@ u64 parse_phys_ext_record(struct apfs_phys_ext_key *key,
 		extent->e_refcnt = refcnt;
 
 		if (extent->e_old_entry)
-			report("Physical extent record", "BUG!");
+			report("Physical extent record", "is NEW but has already used blocks.");
 		extent->e_old_entry = true;
 
 		vsb->v_block_count += extent->e_blocks;
