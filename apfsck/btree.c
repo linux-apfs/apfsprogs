@@ -1206,6 +1206,11 @@ struct free_queue *parse_free_queue_btree(u64 oid, int index)
 	btree = &sfq->sfq_btree;
 	sfq->sfq_index = index;
 
+	if (oid == 0) {
+		/* I've seen null fq's in fresh containers with no volumes */
+		return sfq;
+	}
+
 	btree->type = BTREE_TYPE_FREE_QUEUE;
 	btree->omap_table = NULL; /* These are ephemeral objects */
 	btree->root = read_node(oid, btree, NULL /* hash */);
