@@ -1094,6 +1094,9 @@ static void check_btree_footer(struct btree *btree)
 		report(ctx, "wrong node count in info footer.");
 
 	if (btree_is_omap(btree)) {
+		u32 longest_key = le32_to_cpu(info->bt_longest_key);
+		u32 longest_val = le32_to_cpu(info->bt_longest_val);
+
 		if (le32_to_cpu(info->bt_fixed.bt_key_size) !=
 					sizeof(struct apfs_omap_key))
 			report(ctx, "wrong key size in info footer.");
@@ -1102,14 +1105,11 @@ static void check_btree_footer(struct btree *btree)
 					sizeof(struct apfs_omap_val))
 			report(ctx, "wrong value size in info footer.");
 
-		if (le32_to_cpu(info->bt_longest_key) !=
-					sizeof(struct apfs_omap_key))
+		/* Containers with no volumes do exist */
+		if ((longest_key || btree->key_count) && longest_key != sizeof(struct apfs_omap_key))
 			report(ctx, "wrong maximum key size in info footer.");
-
-		if (le32_to_cpu(info->bt_longest_val) !=
-					sizeof(struct apfs_omap_val))
+		if ((longest_val || btree->key_count) && longest_val != sizeof(struct apfs_omap_val))
 			report(ctx, "wrong maximum value size in info footer.");
-
 		return;
 	}
 
