@@ -1,17 +1,17 @@
 
 Apfsprogs is a suite of userland software to work with the Apple File System
-on Linux. For now only mkfs and fsck tools are available, both functional but
-lacking in features. Compatibility with the Apple implementations has barely
-been tested; please exercise caution, and report any issues that you find.
+on Linux. It's intended mainly to help test the Linux kernel module that can
+be retrieved from <git://github.com/eafer/linux-apfs-rw.git>. The following
+are included:
 
-A Linux kernel module for mounting the filesystem can be retrieved from
-<git://github.com/eafer/linux-apfs-rw.git>. The main purpose of apfsprogs
-is to assist in testing the write support.
+  o mkapfs: an experimental filesystem build tool
+  o apfs-snap: a tool to take snapshots of a volume mounted with our module
+  o apfsck: a filesystem integrity checker, for now only useful for testers
 
 Usage
 =====
 
-To build either the mkapfs or apfsck tool, just cd to its directory and run
+To build any of the tools, just cd to its directory and run
 
   make
 
