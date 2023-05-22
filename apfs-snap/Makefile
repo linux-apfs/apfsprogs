@@ -12,12 +12,12 @@ override CFLAGS += -Wall -Wno-address-of-packed-member -fno-strict-aliasing
 
 apfs-snap: $(OBJS)
 	@echo '  Linking...'
-	@gcc $(CFLAGS) $(LDFLAGS) -o apfs-snap $(OBJS)
+	@$(CC) $(CFLAGS) $(LDFLAGS) -o apfs-snap $(OBJS)
 	@echo '  Build complete'
 
 %.o: %.c
 	@echo '  Compiling $<...'
-	@gcc $(CFLAGS) -o $@ -MMD -MP -c $<
+	@$(CC) $(CFLAGS) -o $@ -MMD -MP -c $<
 ifdef SPARSE_VERSION
 	@sparse $(CFLAGS) $<
 endif
