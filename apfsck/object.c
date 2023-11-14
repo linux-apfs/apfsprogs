@@ -170,9 +170,15 @@ static void *read_object_internal(u64 oid, struct htable_entry **omap_table, str
 	if (oid != obj->oid)
 		report("Object header", "wrong object id in block 0x%llx.",
 		       (unsigned long long)bno);
-	if (oid < APFS_OID_RESERVED_COUNT)
-		report("Object header", "reserved object id in block 0x%llx.",
-		       (unsigned long long)bno);
+
+	/*
+	 * The reference claims that these oids are also reserved for physical
+	 * objects, but some official images don't respect this.
+	 */
+	if (!(obj->flags & APFS_OBJ_PHYSICAL) && oid < APFS_OID_RESERVED_COUNT)
+		report("Object header", "reserved object id in block 0x%llx (0x%llx) (type: 0x%x).",
+		       (unsigned long long)bno, (unsigned long long)oid, obj->flags);
+
 	if (omap_table && oid >= sb->s_next_oid)
 		report("Object header", "unassigned object id in block 0x%llx.",
 		       (unsigned long long)bno);
