@@ -17,6 +17,9 @@ static struct spaceman_info {
 	u64 chunk_count;
 	u32 cib_count;
 	u64 ip_blocks;
+	u32 ip_bm_size;
+	u32 ip_bmap_blocks;
+	u64 ip_base;
 
 	u64 used_blocks_end;	/* Block right after the last one we allocate */
 	u64 used_chunks_end;	/* Chunk right after the last one we allocate */
@@ -68,7 +71,7 @@ static u32 count_used_blocks_in_chunk(u64 chunkno)
 		return 0;
 
 	/* The internal pool may not fit whole in the chunk */
-	first_chunk_ip_blocks = MIN(sm_info.ip_blocks, blocks_per_chunk() - IP_BASE);
+	first_chunk_ip_blocks = MIN(sm_info.ip_blocks, blocks_per_chunk() - sm_info.ip_base);
 
 	if (chunkno == 0) {
 		u32 blocks = 0;
@@ -79,7 +82,7 @@ static u32 count_used_blocks_in_chunk(u64 chunkno)
 		blocks += CPOINT_DATA_BLOCKS;	/* Checkpoint data blocks */
 		blocks += 2;			/* Container object map and its root */
 		blocks += 6;			/* Volume superblock and its trees */
-		blocks += IP_BMAP_BLOCKS;	/* Internal pool bitmap blocks */
+		blocks += sm_info.ip_bmap_blocks; /* Internal pool bitmap blocks */
 
 		blocks += first_chunk_ip_blocks;
 		return blocks;
@@ -143,9 +146,9 @@ static void make_alloc_bitmap(void)
 	/* Volume superblock and its trees */
 	bmap_mark_as_used(bmap, FIRST_VOL_BNO, 6);
 	/* Internal pool bitmap blocks */
-	bmap_mark_as_used(bmap, IP_BMAP_BASE, IP_BMAP_BLOCKS);
+	bmap_mark_as_used(bmap, IP_BMAP_BASE, sm_info.ip_bmap_blocks);
 	/* Internal pool blocks */
-	bmap_mark_as_used(bmap, IP_BASE, sm_info.ip_blocks);
+	bmap_mark_as_used(bmap, sm_info.ip_base, sm_info.ip_blocks);
 
 	munmap(bmap, sm_info.used_chunks_end * param->blocksize);
 }
@@ -297,9 +300,9 @@ static void make_ip_bitmap(void)
 	void *bmap = get_zeroed_block(IP_BMAP_BASE);
 
 	/* Chunk-info blocks */
-	bmap_mark_as_used(bmap, sm_info.first_cib - IP_BASE, sm_info.cib_count);
+	bmap_mark_as_used(bmap, sm_info.first_cib - sm_info.ip_base, sm_info.cib_count);
 	/* Allocation bitmap block */
-	bmap_mark_as_used(bmap, sm_info.first_chunk_bmap - IP_BASE, sm_info.used_chunks_end);
+	bmap_mark_as_used(bmap, sm_info.first_chunk_bmap - sm_info.ip_base, sm_info.used_chunks_end);
 
 	munmap(bmap, param->blocksize);
 }
@@ -318,9 +321,9 @@ static void make_ip_bm_free_next(__le16 *addr)
 	 * 0xFFFF.
 	 */
 	addr[0] = cpu_to_le16(0xFFFF);
-	for (i = 1; i < IP_BMAP_BLOCKS - 1; i++)
+	for (i = 1; i < sm_info.ip_bmap_blocks - 1; i++)
 		addr[i] = cpu_to_le16(i + 1);
-	addr[IP_BMAP_BLOCKS - 1] = cpu_to_le16(0xFFFF);
+	addr[sm_info.ip_bmap_blocks - 1] = cpu_to_le16(0xFFFF);
 }
 
 /**
@@ -335,19 +338,19 @@ static void make_internal_pool(struct apfs_spaceman_phys *sm)
 	sm->sm_ip_bm_tx_multiplier =
 				cpu_to_le32(APFS_SPACEMAN_IP_BM_TX_MULTIPLIER);
 	sm->sm_ip_block_count = cpu_to_le64(sm_info.ip_blocks);
-	sm->sm_ip_base = cpu_to_le64(IP_BASE);
+	sm->sm_ip_base = cpu_to_le64(sm_info.ip_base);
 	/* No support for multiblock bitmaps */
-	sm->sm_ip_bm_size_in_blocks = cpu_to_le32(1);
+	sm->sm_ip_bm_size_in_blocks = cpu_to_le32(sm_info.ip_bm_size);
 
-	sm->sm_ip_bm_block_count = cpu_to_le32(IP_BMAP_BLOCKS);
+	sm->sm_ip_bm_block_count = cpu_to_le32(sm_info.ip_bmap_blocks);
 	sm->sm_ip_bm_base = cpu_to_le64(IP_BMAP_BASE);
-	for (i = 0; i < IP_BMAP_BLOCKS; ++i) /* We use no blocks from the ip */
+	for (i = 0; i < sm_info.ip_bmap_blocks; ++i) /* We use no blocks from the ip */
 		munmap(get_zeroed_block(IP_BMAP_BASE + i), param->blocksize);
 
 	/* Current bitmap is the first, so the offset is left at zero */
 	sm->sm_ip_bitmap_offset = cpu_to_le32(BITMAP_OFF);
 	sm->sm_ip_bm_free_head = cpu_to_le16(1);
-	sm->sm_ip_bm_free_tail = cpu_to_le16(IP_BMAP_BLOCKS - 1);
+	sm->sm_ip_bm_free_tail = cpu_to_le16(sm_info.ip_bmap_blocks - 1);
 
 	sm->sm_ip_bm_xid_offset = cpu_to_le32(BITMAP_XID_OFF);
 	addr = (void *)sm + BITMAP_XID_OFF;
@@ -372,15 +375,23 @@ void make_spaceman(u64 bno, u64 oid)
 	sm_info.cib_count = DIV_ROUND_UP(sm_info.chunk_count, chunks_per_cib());
 	sm_info.ip_blocks = (sm_info.chunk_count + sm_info.cib_count) * 3;
 
+	/*
+	 * We have 16 ip bitmaps; each of them maps the whole ip and may span
+	 * multiple blocks.
+	 */
+	sm_info.ip_bm_size = DIV_ROUND_UP(sm_info.ip_blocks, blocks_per_chunk());
+	sm_info.ip_bmap_blocks = 16 * sm_info.ip_bm_size;
+	sm_info.ip_base = IP_BMAP_BASE + sm_info.ip_bmap_blocks;
+
 	/* Only the ip size matters, all other used blocks come before it */
-	sm_info.used_blocks_end = IP_BASE + sm_info.ip_blocks;
+	sm_info.used_blocks_end = sm_info.ip_base + sm_info.ip_blocks;
 	sm_info.used_chunks_end = DIV_ROUND_UP(sm_info.used_blocks_end, blocks_per_chunk());
 
 	/*
 	 * Put the chunk bitmaps at the beginning of the internal pool, and
 	 * the cibs right after them.
 	 */
-	sm_info.first_chunk_bmap = IP_BASE;
+	sm_info.first_chunk_bmap = sm_info.ip_base;
 	sm_info.first_cib = sm_info.first_chunk_bmap + sm_info.used_chunks_end;
 
 	sm->sm_block_size = cpu_to_le32(param->blocksize);

@@ -49,8 +49,6 @@ struct parameters {
  * should actually change with the container size.
  */
 #define IP_BMAP_BASE	21000				/* First ip bitmap */
-#define IP_BMAP_BLOCKS	16				/* Ip bitmap count */
-#define IP_BASE		(IP_BMAP_BASE + IP_BMAP_BLOCKS)	/* Start of pool */
 
 /* Hardcoded block numbers */
 #define CPOINT_MAP_BNO			CPOINT_DESC_BASE
