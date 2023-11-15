@@ -20,6 +20,7 @@ static struct spaceman_info {
 	u32 ip_bm_size;
 	u32 ip_bmap_blocks;
 	u64 ip_base;
+	u32 cib_addr_base_off;	/* Offset of the cib address in the spaceman */
 
 	u64 used_blocks_end;	/* Block right after the last one we allocate */
 	u64 used_chunks_end;	/* Chunk right after the last one we allocate */
@@ -160,7 +161,6 @@ static void make_alloc_bitmap(void)
 #define BITMAP_XID_OFF		0x150	/* Transaction id for the ip bitmap */
 #define BITMAP_OFF		0x158	/* Address of the ip bitmap */
 #define BITMAP_FREE_NEXT_OFF	0x160	/* No idea */
-#define CIB_ADDR_BASE_OFF	0x180	/* First cib address for main device */
 
 /**
  * make_chunk_info - Write a chunk info structure
@@ -240,8 +240,7 @@ static void make_devices(struct apfs_spaceman_phys *sm)
 	 * We must have room for the addresses of all main device cibs, plus
 	 * an extra offset for tier 2.
 	 */
-	if (cib_count + 1 >
-	    (param->blocksize - CIB_ADDR_BASE_OFF) / sizeof(__le64)) {
+	if ((cib_count + 1) * sizeof(__le64) + sm_info.cib_addr_base_off > param->blocksize) {
 		printf("Large containers are not yet supported.\n");
 		exit(1);
 	}
@@ -253,8 +252,8 @@ static void make_devices(struct apfs_spaceman_phys *sm)
 	dev->sm_free_count = cpu_to_le64(param->block_count -
 					 count_used_blocks());
 
-	dev->sm_addr_offset = cpu_to_le32(CIB_ADDR_BASE_OFF);
-	cib_addr = (void *)sm + CIB_ADDR_BASE_OFF;
+	dev->sm_addr_offset = cpu_to_le32(sm_info.cib_addr_base_off);
+	cib_addr = (void *)sm + sm_info.cib_addr_base_off;
 	for (i = 0; i < cib_count; ++i) {
 		cib_addr[i] = cpu_to_le64(sm_info.first_cib + i);
 		start = make_chunk_info_block(sm_info.first_cib + i, i, start);
@@ -262,8 +261,7 @@ static void make_devices(struct apfs_spaceman_phys *sm)
 
 	/* For the tier2 device, just set the offset; the address is null */
 	dev = &sm->sm_dev[APFS_SD_TIER2];
-	dev->sm_addr_offset = cpu_to_le32(CIB_ADDR_BASE_OFF +
-					  cib_count * sizeof(__le64));
+	dev->sm_addr_offset = cpu_to_le32(sm_info.cib_addr_base_off + cib_count * sizeof(__le64));
 }
 
 /**
@@ -382,6 +380,7 @@ void make_spaceman(u64 bno, u64 oid)
 	sm_info.ip_bm_size = DIV_ROUND_UP(sm_info.ip_blocks, blocks_per_chunk());
 	sm_info.ip_bmap_blocks = 16 * sm_info.ip_bm_size;
 	sm_info.ip_base = IP_BMAP_BASE + sm_info.ip_bmap_blocks;
+	sm_info.cib_addr_base_off = BITMAP_FREE_NEXT_OFF + sm_info.ip_bmap_blocks * sizeof(__le16);
 
 	/* Only the ip size matters, all other used blocks come before it */
 	sm_info.used_blocks_end = sm_info.ip_base + sm_info.ip_blocks;
