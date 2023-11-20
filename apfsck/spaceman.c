@@ -617,10 +617,10 @@ static void compare_container_bitmaps(u64 *sm_bmap, u64 *real_bmap, u64 chunks)
  * @free_next:	256-bit field to check
  * @free_head:	first free block in the ip circular buffer
  * @free_len:	number of free blocks in the ip circular buffer
+ * @bmap_count:	total number of ip bitmaps
  */
-static void check_ip_free_next(__le16 *free_next, u16 free_head, u16 free_len)
+static void check_ip_free_next(__le16 *free_next, u16 free_head, u16 free_len, u32 bmap_count)
 {
-	int bmap_count = 16;
 	__le16 *expected;
 	u32 i;
 
@@ -647,36 +647,66 @@ static void check_ip_free_next(__le16 *free_next, u16 free_head, u16 free_len)
 }
 
 /**
- * parse_ip_bitmap_list - Check consistency of the internal pool bitmap list
- * @raw: pointer to the raw space manager
- *
- * Returns the block number for the current bitmap.
+ * read_ip_bitmap - Read the internal pool bitmap into memory
+ * @bmap_base:	first block of the bitmap ring
+ * @bmap_len:	length of the bitmap ring
+ * @bmap_off:	offset of the first block of the current bitmap in the ring
+ * @bmap:	on return, the whole ip bitmap
  */
-static u64 parse_ip_bitmap_list(struct apfs_spaceman_phys *raw)
+static void read_ip_bitmap(u64 bmap_base, u32 bmap_len, u16 bmap_off, char *bmap)
+{
+	u32 curr_bmap_len = bmap_len / 16;
+	u16 blk_off_in_bmap;
+
+	for (blk_off_in_bmap = 0; blk_off_in_bmap < curr_bmap_len; ++blk_off_in_bmap) {
+		char *curr_blk = NULL;
+		u64 bno = bmap_base + (bmap_off + blk_off_in_bmap) % bmap_len;
+
+		curr_blk = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, fd, bno * sb->s_blocksize);
+		if (curr_blk == MAP_FAILED)
+			system_error();
+
+		memcpy(bmap + sb->s_blocksize * blk_off_in_bmap, curr_blk, sb->s_blocksize);
+
+		munmap(curr_blk, sb->s_blocksize);
+		curr_blk = NULL;
+	}
+}
+
+/**
+ * parse_ip_bitmap_list - Check consistency of the internal pool bitmap list
+ * @raw:	pointer to the raw space manager
+ * @bmap:	on return, set the whole ip bitmap here
+ */
+static void parse_ip_bitmap_list(struct apfs_spaceman_phys *raw, char *bmap)
 {
 	u64 bmap_base = le64_to_cpu(raw->sm_ip_bm_base);
-	u64 bmap_off;
+	u16 bmap_off;
 	u32 bmap_length = le32_to_cpu(raw->sm_ip_bm_block_count);
+	u32 bm_size_in_blocks = le32_to_cpu(raw->sm_ip_bm_size_in_blocks);
 	u16 free_head, free_tail, free_length;
 	char *free_next;
 
 	/*
-	 * So far all internal pool bitmaps encountered had only one block; the
-	 * bitmap area is larger than that because it keeps some old versions.
+	 * The bitmap area also keeps older versions of the ip bitmap.
+	 *
+	 * It doesn't look like bmap_off is actually a 64-bit number. I have
+	 * encountered one image where there was a 0x01 in the third byte, which
+	 * would result in an absurdly large offset. Maybe there is something
+	 * else stored there, but I don't know what it could be. Either way,
+	 * bmap_off can be read as 64 bits and cast to 16 here.
 	 */
 	bmap_off = spaceman_val_from_off(raw,
 					 le32_to_cpu(raw->sm_ip_bitmap_offset));
 	if (bmap_off >= bmap_length)
 		report("Internal pool", "bitmap block is out-of-bounds.");
-	if (le32_to_cpu(raw->sm_ip_bm_size_in_blocks) != 1)
-		report_unknown("Multiblock bitmap in internal pool");
 
 	/* The head and tail fit in 16-bit fields, so the length also should */
 	if (bmap_length > (u16)(~0U))
 		report("Internal pool", "bitmap list is too long.");
-	/* This may be wrong for huge containers, I haven't tested those yet */
-	if (bmap_length != 16)
-		report("Space manager", "ip doesn't have 16 bitmaps.");
+
+	if (bmap_length != 16 * bm_size_in_blocks)
+		report("Space manager", "ip doesn't have 16 bitmap copies.");
 
 	free_head = le16_to_cpu(raw->sm_ip_bm_free_head);
 	free_tail = le16_to_cpu(raw->sm_ip_bm_free_tail);
@@ -686,14 +716,14 @@ static u64 parse_ip_bitmap_list(struct apfs_spaceman_phys *raw)
 		report("Internal pool", "free bitmaps are out-of-bounds.");
 	if ((bmap_length + bmap_off - free_head) % bmap_length < free_length)
 		report("Internal pool", "current bitmap listed as free.");
-	if (free_length != bmap_length - 2)
-		report_unknown("Internal pool bitmaps in use are not two");
+	if (free_length != bmap_length - (bm_size_in_blocks + 1))
+		report_unknown("Ip bitmaps in use not one above size");
 
 	free_next = spaceman_256_from_off(raw, le32_to_cpu(raw->sm_ip_bm_free_next_offset));
-	check_ip_free_next((__le16 *)free_next, free_head, free_length);
+	check_ip_free_next((__le16 *)free_next, free_head, free_length, bmap_length);
 
 	container_bmap_mark_as_used(bmap_base, bmap_length);
-	return bmap_base + bmap_off;
+	read_ip_bitmap(bmap_base, bmap_length, bmap_off, bmap);
 }
 
 /**
@@ -745,22 +775,23 @@ static void check_ip_bitmap_blocks(struct apfs_spaceman_phys *raw)
  */
 static void check_internal_pool(struct apfs_spaceman_phys *raw)
 {
-	u64 *pool_bmap;
+	char *pool_bmap;
 	u64 pool_base = le64_to_cpu(raw->sm_ip_base);
 	u64 pool_blocks = le64_to_cpu(raw->sm_ip_block_count);
-	u64 ip_chunk_count = DIV_ROUND_UP(pool_blocks, 8 * sb->s_blocksize);
+	u64 ip_chunk_count = le32_to_cpu(raw->sm_ip_bm_size_in_blocks);
 	u64 xid;
 
-	pool_bmap = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-			 fd, parse_ip_bitmap_list(raw) * sb->s_blocksize);
-	if (pool_bmap == MAP_FAILED)
+	pool_bmap = calloc(ip_chunk_count, sb->s_blocksize);
+	if (!pool_bmap)
 		system_error();
+	parse_ip_bitmap_list(raw, pool_bmap);
 
 	if (memcmp(pool_bmap, sb->s_ip_bitmap, ip_chunk_count * sb->s_blocksize))
 		report("Space manager", "bad ip allocation bitmap.");
 	container_bmap_mark_as_used(pool_base, pool_blocks);
 
-	munmap(pool_bmap, sb->s_blocksize);
+	free(pool_bmap);
+	pool_bmap = NULL;
 
 	if (le32_to_cpu(raw->sm_ip_bm_tx_multiplier) !=
 					APFS_SPACEMAN_IP_BM_TX_MULTIPLIER)
@@ -795,6 +826,8 @@ void check_spaceman(u64 oid)
 	sm->sm_ip_base = le64_to_cpu(raw->sm_ip_base);
 	sm->sm_ip_block_count = le64_to_cpu(raw->sm_ip_block_count);
 	ip_chunk_count = DIV_ROUND_UP(sm->sm_ip_block_count, 8 * sb->s_blocksize);
+	if (ip_chunk_count != le32_to_cpu(raw->sm_ip_bm_size_in_blocks))
+		report("Space manager", "bad ip bm size.");
 	sb->s_ip_bitmap = calloc(ip_chunk_count, sb->s_blocksize);
 	if (!sb->s_ip_bitmap)
 		system_error();
