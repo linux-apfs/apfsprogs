@@ -295,7 +295,7 @@ static void make_main_free_queue(struct apfs_spaceman_free_queue *fq)
  */
 static void make_ip_bitmap(void)
 {
-	void *bmap = get_zeroed_block(IP_BMAP_BASE);
+	void *bmap = get_zeroed_blocks(IP_BMAP_BASE, sm_info.ip_bm_size);
 
 	/* Chunk-info blocks */
 	bmap_mark_as_used(bmap, sm_info.first_cib - sm_info.ip_base, sm_info.cib_count);
@@ -314,12 +314,13 @@ static void make_ip_bm_free_next(__le16 *addr)
 	int i;
 
 	/*
-	 * Ip bitmap blocks are marked with numbers 1,2,3,...,14,15,0 in
-	 * free_next, except when they are in use: those get overwritten with
+	 * Ip bitmap blocks are marked with numbers 1,2,3,...,ip_bmap_blocks,0
+	 * in free_next, except when they are in use: those get overwritten with
 	 * 0xFFFF.
 	 */
-	addr[0] = cpu_to_le16(0xFFFF);
-	for (i = 1; i < sm_info.ip_bmap_blocks - 1; i++)
+	for (i = 0; i < sm_info.ip_bm_size; ++i)
+		addr[i] = cpu_to_le16(0xFFFF);
+	for (i = sm_info.ip_bm_size; i < sm_info.ip_bmap_blocks - 1; i++)
 		addr[i] = cpu_to_le16(i + 1);
 	addr[sm_info.ip_bmap_blocks - 1] = cpu_to_le16(0xFFFF);
 }
@@ -347,7 +348,7 @@ static void make_internal_pool(struct apfs_spaceman_phys *sm)
 
 	/* Current bitmap is the first, so the offset is left at zero */
 	sm->sm_ip_bitmap_offset = cpu_to_le32(BITMAP_OFF);
-	sm->sm_ip_bm_free_head = cpu_to_le16(1);
+	sm->sm_ip_bm_free_head = cpu_to_le16(sm_info.ip_bm_size);
 	sm->sm_ip_bm_free_tail = cpu_to_le16(sm_info.ip_bmap_blocks - 1);
 
 	sm->sm_ip_bm_xid_offset = cpu_to_le32(BITMAP_XID_OFF);
