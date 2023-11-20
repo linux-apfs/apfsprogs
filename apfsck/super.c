@@ -869,10 +869,6 @@ static struct apfs_superblock *map_volume_super(int vol,
 	if (vol_id == 0) {
 		if (vol > sb->s_max_vols)
 			report("Container superblock", "too many volumes.");
-		for (++vol; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol)
-			if (msb_raw->nx_fs_oid[vol])
-				report("Container superblock",
-				       "volume array goes on after NULL.");
 		return NULL;
 	}
 
@@ -1082,8 +1078,14 @@ static void check_container(struct super_block *sb)
 
 		vsb_raw = map_volume_super(vol, vsb);
 		if (!vsb_raw) {
+			/*
+			 * Containers typically have all of their volumes at the
+			 * beginning of the array, but I've encountered images
+			 * where this isn't true. I guess it makes sense if
+			 * volumes can be deleted?
+			 */
 			free(vsb);
-			break;
+			continue;
 		}
 		if (vsb->v_obj.oid == sb->s_reaper_fs_id)
 			reaper_vol_seen = true;
