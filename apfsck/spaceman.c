@@ -329,12 +329,35 @@ static u64 spaceman_val_from_off(struct apfs_spaceman_phys *raw, u32 offset)
 }
 
 /**
+ * spaceman_16_from_off - Get the 16 bits stored on a given spaceman offset
+ * @raw:	pointer to the raw space manager
+ * @offset:	offset of the value in @raw
+ *
+ * TODO: check that no values found by this function overlap with each other.
+ */
+static u16 spaceman_16_from_off(struct apfs_spaceman_phys *raw, u32 offset)
+{
+	struct spaceman *sm = &sb->s_spaceman;
+	char *value_p = (char *)raw + offset;
+
+	assert(sm->sm_struct_size);
+
+	if (offset & 0x1)
+		report("Spaceman", "offset is not aligned to 2 bytes.");
+	if (offset < sm->sm_struct_size)
+		report("Spaceman", "offset overlaps with structure.");
+	if (offset >= sb->s_blocksize || offset + sizeof(u16) > sb->s_blocksize)
+		report("Spaceman", "offset is out of bounds.");
+	return *((u16 *)value_p);
+}
+
+/**
  * spaceman_256_from_off - Get a pointer to the 256 bits on a spaceman offset
  * @raw:	pointer to the raw space manager
  * @offset:	offset of the 256-bit value in @raw
  *
  * TODO: check that no values found by this function overlap with each other,
- * and also with spaceman_val_from_off().
+ * and also with spaceman_val_from_off()/spaceman_16_from_off().
  */
 static char *spaceman_256_from_off(struct apfs_spaceman_phys *raw, u32 offset)
 {
@@ -647,30 +670,25 @@ static void check_ip_free_next(__le16 *free_next, u16 free_head, u16 free_len, u
 }
 
 /**
- * read_ip_bitmap - Read the internal pool bitmap into memory
+ * read_ip_bitmap_block - Read a single internal pool bitmap block into memory
  * @bmap_base:	first block of the bitmap ring
  * @bmap_len:	length of the bitmap ring
- * @bmap_off:	offset of the first block of the current bitmap in the ring
+ * @bmap_off:	offset of the block to read in the ring
  * @bmap:	on return, the whole ip bitmap
  */
-static void read_ip_bitmap(u64 bmap_base, u32 bmap_len, u16 bmap_off, char *bmap)
+static void read_ip_bitmap_block(u64 bmap_base, u32 bmap_len, u16 bmap_off, char *bmap)
 {
-	u32 curr_bmap_len = bmap_len / 16;
-	u16 blk_off_in_bmap;
+	char *curr_blk = NULL;
+	u64 bno = bmap_base + bmap_off % bmap_len;
 
-	for (blk_off_in_bmap = 0; blk_off_in_bmap < curr_bmap_len; ++blk_off_in_bmap) {
-		char *curr_blk = NULL;
-		u64 bno = bmap_base + (bmap_off + blk_off_in_bmap) % bmap_len;
+	curr_blk = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, fd, bno * sb->s_blocksize);
+	if (curr_blk == MAP_FAILED)
+		system_error();
 
-		curr_blk = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, fd, bno * sb->s_blocksize);
-		if (curr_blk == MAP_FAILED)
-			system_error();
+	memcpy(bmap, curr_blk, sb->s_blocksize);
 
-		memcpy(bmap + sb->s_blocksize * blk_off_in_bmap, curr_blk, sb->s_blocksize);
-
-		munmap(curr_blk, sb->s_blocksize);
-		curr_blk = NULL;
-	}
+	munmap(curr_blk, sb->s_blocksize);
+	curr_blk = NULL;
 }
 
 /**
@@ -686,20 +704,13 @@ static void parse_ip_bitmap_list(struct apfs_spaceman_phys *raw, char *bmap)
 	u32 bm_size_in_blocks = le32_to_cpu(raw->sm_ip_bm_size_in_blocks);
 	u16 free_head, free_tail, free_length;
 	char *free_next;
+	u32 i;
 
 	/*
-	 * The bitmap area also keeps older versions of the ip bitmap.
-	 *
-	 * It doesn't look like bmap_off is actually a 64-bit number. I have
-	 * encountered one image where there was a 0x01 in the third byte, which
-	 * would result in an absurdly large offset. Maybe there is something
-	 * else stored there, but I don't know what it could be. Either way,
-	 * bmap_off can be read as 64 bits and cast to 16 here.
+	 * The bitmap area is a ring structure that keeps both the currently
+	 * valid ip bitmaps and some older versions. I don't know the reason
+	 * for this.
 	 */
-	bmap_off = spaceman_val_from_off(raw,
-					 le32_to_cpu(raw->sm_ip_bitmap_offset));
-	if (bmap_off >= bmap_length)
-		report("Internal pool", "bitmap block is out-of-bounds.");
 
 	/* The head and tail fit in 16-bit fields, so the length also should */
 	if (bmap_length > (u16)(~0U))
@@ -714,8 +725,6 @@ static void parse_ip_bitmap_list(struct apfs_spaceman_phys *raw, char *bmap)
 
 	if (free_head >= bmap_length || free_tail >= bmap_length)
 		report("Internal pool", "free bitmaps are out-of-bounds.");
-	if ((bmap_length + bmap_off - free_head) % bmap_length < free_length)
-		report("Internal pool", "current bitmap listed as free.");
 	if (free_length != bmap_length - (bm_size_in_blocks + 1))
 		report_unknown("Ip bitmaps in use not one above size");
 
@@ -723,7 +732,15 @@ static void parse_ip_bitmap_list(struct apfs_spaceman_phys *raw, char *bmap)
 	check_ip_free_next((__le16 *)free_next, free_head, free_length, bmap_length);
 
 	container_bmap_mark_as_used(bmap_base, bmap_length);
-	read_ip_bitmap(bmap_base, bmap_length, bmap_off, bmap);
+
+	for (i = 0; i < bm_size_in_blocks; ++i) {
+		bmap_off = spaceman_16_from_off(raw, le32_to_cpu(raw->sm_ip_bitmap_offset) + i * sizeof(bmap_off));
+		if (bmap_off >= bmap_length)
+			report("Internal pool", "bitmap block is out-of-bounds.");
+		if ((bmap_length + bmap_off - free_head) % bmap_length < free_length)
+			report("Internal pool", "current bitmap listed as free.");
+		read_ip_bitmap_block(bmap_base, bmap_length, bmap_off, bmap + i * sb->s_blocksize);
+	}
 }
 
 /**
