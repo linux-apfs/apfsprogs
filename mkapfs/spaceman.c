@@ -20,6 +20,8 @@ static struct spaceman_info {
 	u32 ip_bm_size;
 	u32 ip_bmap_blocks;
 	u64 ip_base;
+	u32 bm_addr_off;	/* Offset of bitmap address in the spaceman */
+	u32 bm_free_next_off;	/* Offset of free_next in the spaceman */
 	u32 cib_addr_base_off;	/* Offset of the cib address in the spaceman */
 
 	u64 used_blocks_end;	/* Block right after the last one we allocate */
@@ -159,8 +161,6 @@ static void make_alloc_bitmap(void)
  * have been borrowed from a test image.
  */
 #define BITMAP_XID_OFF		0x150	/* Transaction id for the ip bitmap */
-#define BITMAP_OFF		0x158	/* Address of the ip bitmap */
-#define BITMAP_FREE_NEXT_OFF	0x160	/* No idea */
 
 /**
  * make_chunk_info - Write a chunk info structure
@@ -347,16 +347,17 @@ static void make_internal_pool(struct apfs_spaceman_phys *sm)
 		munmap(get_zeroed_block(IP_BMAP_BASE + i), param->blocksize);
 
 	/* Current bitmap is the first, so the offset is left at zero */
-	sm->sm_ip_bitmap_offset = cpu_to_le32(BITMAP_OFF);
+	sm->sm_ip_bitmap_offset = cpu_to_le32(sm_info.bm_addr_off);
 	sm->sm_ip_bm_free_head = cpu_to_le16(sm_info.ip_bm_size);
 	sm->sm_ip_bm_free_tail = cpu_to_le16(sm_info.ip_bmap_blocks - 1);
 
 	sm->sm_ip_bm_xid_offset = cpu_to_le32(BITMAP_XID_OFF);
 	addr = (void *)sm + BITMAP_XID_OFF;
-	*addr = cpu_to_le64(MKFS_XID);
+	for (i = 0; i < sm_info.ip_bm_size; ++i)
+		addr[i] = cpu_to_le64(MKFS_XID);
 
-	sm->sm_ip_bm_free_next_offset = cpu_to_le32(BITMAP_FREE_NEXT_OFF);
-	make_ip_bm_free_next((void *)sm + BITMAP_FREE_NEXT_OFF);
+	sm->sm_ip_bm_free_next_offset = cpu_to_le32(sm_info.bm_free_next_off);
+	make_ip_bm_free_next((void *)sm + sm_info.bm_free_next_off);
 
 	make_ip_bitmap();
 }
@@ -381,7 +382,11 @@ void make_spaceman(u64 bno, u64 oid)
 	sm_info.ip_bm_size = DIV_ROUND_UP(sm_info.ip_blocks, blocks_per_chunk());
 	sm_info.ip_bmap_blocks = 16 * sm_info.ip_bm_size;
 	sm_info.ip_base = IP_BMAP_BASE + sm_info.ip_bmap_blocks;
-	sm_info.cib_addr_base_off = BITMAP_FREE_NEXT_OFF + sm_info.ip_bmap_blocks * sizeof(__le16);
+
+	/* We have one xid for each of the ip bitmaps */
+	sm_info.bm_addr_off = BITMAP_XID_OFF + sizeof(__le64) * sm_info.ip_bm_size;
+	sm_info.bm_free_next_off = sm_info.bm_addr_off + sizeof(__le64);
+	sm_info.cib_addr_base_off = sm_info.bm_free_next_off + sm_info.ip_bmap_blocks * sizeof(__le16);
 
 	/* Only the ip size matters, all other used blocks come before it */
 	sm_info.used_blocks_end = sm_info.ip_base + sm_info.ip_blocks;
