@@ -779,7 +779,7 @@ static void check_internal_pool(struct apfs_spaceman_phys *raw)
 	u64 pool_base = le64_to_cpu(raw->sm_ip_base);
 	u64 pool_blocks = le64_to_cpu(raw->sm_ip_block_count);
 	u64 ip_chunk_count = le32_to_cpu(raw->sm_ip_bm_size_in_blocks);
-	u64 xid;
+	u64 i;
 
 	pool_bmap = calloc(ip_chunk_count, sb->s_blocksize);
 	if (!pool_bmap)
@@ -797,9 +797,13 @@ static void check_internal_pool(struct apfs_spaceman_phys *raw)
 					APFS_SPACEMAN_IP_BM_TX_MULTIPLIER)
 		report("Space manager", "bad tx multiplier for internal pool.");
 
-	xid = spaceman_val_from_off(raw, le32_to_cpu(raw->sm_ip_bm_xid_offset));
-	if (xid > sb->s_xid)
-		report("Internal pool", "bad transaction id.");
+	for (i = 0; i < ip_chunk_count; ++i) {
+		u64 xid;
+
+		xid = spaceman_val_from_off(raw, le32_to_cpu(raw->sm_ip_bm_xid_offset) + 8 * i);
+		if (xid > sb->s_xid)
+			report("Internal pool", "bad transaction id.");
+	}
 
 	check_ip_bitmap_blocks(raw);
 }
