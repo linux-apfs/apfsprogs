@@ -866,11 +866,10 @@ static struct apfs_superblock *map_volume_super(int vol,
 	u64 vol_id;
 
 	vol_id = le64_to_cpu(msb_raw->nx_fs_oid[vol]);
-	if (vol_id == 0) {
-		if (vol > sb->s_max_vols)
-			report("Container superblock", "too many volumes.");
+	if (vol_id == 0)
 		return NULL;
-	}
+	if (vol > sb->s_max_vols)
+		report("Container superblock", "too many volumes.");
 
 	vsb->v_raw = read_object(vol_id, sb->s_omap_table, &vsb->v_obj);
 	read_volume_super(vol, vsb, &vsb->v_obj);
