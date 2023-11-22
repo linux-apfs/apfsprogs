@@ -333,6 +333,7 @@ static void make_internal_pool(struct apfs_spaceman_phys *sm)
 {
 	int i;
 	__le64 *addr;
+	__le16 *bm_off_addr;
 
 	sm->sm_ip_bm_tx_multiplier =
 				cpu_to_le32(APFS_SPACEMAN_IP_BM_TX_MULTIPLIER);
@@ -346,8 +347,11 @@ static void make_internal_pool(struct apfs_spaceman_phys *sm)
 	for (i = 0; i < sm_info.ip_bmap_blocks; ++i) /* We use no blocks from the ip */
 		munmap(get_zeroed_block(IP_BMAP_BASE + i), param->blocksize);
 
-	/* Current bitmap is the first, so the offset is left at zero */
+	/* The current bitmaps are the first in the ring */
 	sm->sm_ip_bitmap_offset = cpu_to_le32(sm_info.bm_addr_off);
+	bm_off_addr = (void *)sm + sm_info.bm_addr_off;
+	for (i = 0; i < sm_info.ip_bm_size; ++i)
+		bm_off_addr[i] = cpu_to_le16(i);
 	sm->sm_ip_bm_free_head = cpu_to_le16(sm_info.ip_bm_size);
 	sm->sm_ip_bm_free_tail = cpu_to_le16(sm_info.ip_bmap_blocks - 1);
 
@@ -385,7 +389,7 @@ void make_spaceman(u64 bno, u64 oid)
 
 	/* We have one xid for each of the ip bitmaps */
 	sm_info.bm_addr_off = BITMAP_XID_OFF + sizeof(__le64) * sm_info.ip_bm_size;
-	sm_info.bm_free_next_off = sm_info.bm_addr_off + sizeof(__le64);
+	sm_info.bm_free_next_off = sm_info.bm_addr_off + ROUND_UP(sizeof(__le16) * sm_info.ip_bm_size, sizeof(__le64));
 	sm_info.cib_addr_base_off = sm_info.bm_free_next_off + sm_info.ip_bmap_blocks * sizeof(__le16);
 
 	/* Only the ip size matters, all other used blocks come before it */
