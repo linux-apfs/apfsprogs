@@ -817,7 +817,7 @@ static void check_internal_pool(struct apfs_spaceman_phys *raw)
 	for (i = 0; i < ip_chunk_count; ++i) {
 		u64 xid;
 
-		xid = spaceman_val_from_off(raw, le32_to_cpu(raw->sm_ip_bm_xid_offset) + 8 * i);
+		xid = spaceman_val_from_off(raw, le32_to_cpu(raw->sm_ip_bm_xid_offset) + i * sizeof(xid));
 		if (xid > sb->s_xid)
 			report("Internal pool", "bad transaction id.");
 	}
