@@ -757,6 +757,14 @@ static void check_ip_bitmap_blocks(struct apfs_spaceman_phys *raw)
 	u64 pool_blocks = le64_to_cpu(raw->sm_ip_block_count);
 	int i;
 
+	/*
+	 * These zeroed-tail checks don't really make sense with multiblock ip
+	 * bitmaps, because we can't know for sure which ones were tails and
+	 * which ones were used in full.
+	 */
+	if (le32_to_cpu(raw->sm_ip_bm_size_in_blocks) != 1)
+		return;
+
 	for (i = 0; i < bmap_length; ++i) {
 		char *bmap;
 		int edge, j;
