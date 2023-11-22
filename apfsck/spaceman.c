@@ -135,8 +135,12 @@ static void parse_spaceman_chunk_counts(struct apfs_spaceman_phys *raw)
 					  sm->sm_blocks_per_chunk);
 	sm->sm_cib_count = DIV_ROUND_UP(sm->sm_chunk_count,
 					sm->sm_chunks_per_cib);
+	sm->sm_cab_count = DIV_ROUND_UP(sm->sm_cib_count, sm->sm_cibs_per_cab);
+	/* CABs are simply skipped if they are not needed */
+	if (sm->sm_cab_count == 1)
+		sm->sm_cab_count = 0;
 
-	if ((sm->sm_chunk_count + sm->sm_cib_count) * 3 != sm->sm_ip_block_count)
+	if ((sm->sm_chunk_count + sm->sm_cib_count + sm->sm_cab_count) * 3 != sm->sm_ip_block_count)
 		report("Space manager", "wrong size of internal pool.");
 }
 
@@ -248,10 +252,11 @@ static u64 parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last,
  * @bno:	block number of the chunk-info block
  * @index:	index of the chunk-info block
  * @start:	expected first block number for the first chunk
+ * @xid_p:	on return, the transaction id of the cib (ignored if NULL)
  *
  * Returns the first block number for the first chunk of the next cib.
  */
-static u64 parse_chunk_info_block(u64 bno, int index, u64 start)
+static u64 parse_chunk_info_block(u64 bno, u32 index, u64 start, u64 *xid_p)
 {
 	struct spaceman *sm = &sb->s_spaceman;
 	struct object obj;
@@ -297,8 +302,65 @@ static u64 parse_chunk_info_block(u64 bno, int index, u64 start)
 	}
 	if (obj.xid != max_chunk_xid) /* Cib only changes if a chunk changes */
 		report("Chunk-info block", "xid is too recent.");
+	if (xid_p)
+		*xid_p = obj.xid;
 
 	munmap(cib, sb->s_blocksize);
+	return start;
+}
+
+/**
+ * parse_cib_addr_block - Parse and check a chunk-info address block
+ * @bno:	block number of the chunk-info address block
+ * @index:	index of the chunk-info address block
+ * @start:	expected first block number for the first chunk
+ *
+ * Returns the first block number for the first chunk of the next cab.
+ */
+static u64 parse_cib_addr_block(u64 bno, u32 index, u64 start)
+{
+	struct spaceman *sm = &sb->s_spaceman;
+	struct object obj;
+	struct apfs_cib_addr_block *cab = NULL;
+	u32 cib_count;
+	bool last_cab = index == sm->sm_cab_count - 1;
+	u64 max_cib_xid = 0;
+	int i;
+
+	cab = read_object(bno, NULL, &obj);
+	if (obj.type != APFS_OBJECT_TYPE_SPACEMAN_CAB)
+		report("Cib address block", "wrong object type.");
+	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
+		report("Cib address block", "wrong object subtype.");
+	if (obj.xid > sm->sm_xid) /* Cab address is stored in the spaceman */
+		report("Cib address block", "xid is more recent than spaceman.");
+
+	if (le32_to_cpu(cab->cab_index) != index)
+		report("Cib address block", "wrong index.");
+
+	cib_count = le32_to_cpu(cab->cab_cib_count);
+	if (!cib_count)
+		report("Cib address block", "has no cibs.");
+	if (cib_count > sm->sm_cibs_per_cab)
+		report("Cib address block", "too many cibs.");
+	if (!last_cab && cib_count != sm->sm_cibs_per_cab)
+		report("Cib address block", "too few cibs.");
+	sm->sm_cibs += cib_count;
+
+	for (i = 0; i < cib_count; ++i) {
+		u64 cib_xid;
+
+		start = parse_chunk_info_block(le64_to_cpu(cab->cab_cib_addr[i]), sm->sm_cibs_per_cab * index + i, start, &cib_xid);
+
+		if (cib_xid > obj.xid)
+			report("Chunk-info block", "xid is too recent.");
+		if (cib_xid > max_cib_xid)
+			max_cib_xid = cib_xid;
+	}
+	if (obj.xid != max_cib_xid) /* Cab only changes if a cib changes */
+		report("Cib address block", "xid is too recent.");
+
+	munmap(cab, sb->s_blocksize);
 	return start;
 }
 
@@ -388,8 +450,8 @@ static void parse_spaceman_main_device(struct apfs_spaceman_phys *raw)
 	u64 start = 0;
 	int i;
 
-	if (dev->sm_cab_count)
-		report_unknown("Chunk-info address block");
+	if (le32_to_cpu(dev->sm_cab_count) != sm->sm_cab_count)
+		report("Spaceman device", "wrong count of chunk-info address blocks.");
 	if (le32_to_cpu(dev->sm_cib_count) != sm->sm_cib_count)
 		report("Spaceman device", "wrong count of chunk-info blocks.");
 	if (le64_to_cpu(dev->sm_chunk_count) != sm->sm_chunk_count)
@@ -398,11 +460,19 @@ static void parse_spaceman_main_device(struct apfs_spaceman_phys *raw)
 		report("Spaceman device", "wrong block count.");
 
 	addr_off = le32_to_cpu(dev->sm_addr_offset);
-	for (i = 0; i < sm->sm_cib_count; ++i) {
-		u64 bno = spaceman_val_from_off(raw,
-						addr_off + i * sizeof(u64));
-
-		start = parse_chunk_info_block(bno, i, start);
+	if (!sm->sm_cab_count) {
+		/* If CABs are not needed, the spaceman just lists the CIBs */
+		for (i = 0; i < sm->sm_cib_count; ++i) {
+			u64 bno = spaceman_val_from_off(raw, addr_off + i * sizeof(u64));
+			start = parse_chunk_info_block(bno, i, start, NULL /* xid_p */);
+		}
+	} else {
+		for (i = 0; i < sm->sm_cab_count; ++i) {
+			u64 bno = spaceman_val_from_off(raw, addr_off + i * sizeof(u64));
+			start = parse_cib_addr_block(bno, i, start);
+		}
+		if (sm->sm_cib_count != sm->sm_cibs)
+			report("Spaceman device", "bad total number of cibs.");
 	}
 
 	if (sm->sm_chunk_count != sm->sm_chunks)
@@ -425,11 +495,15 @@ static void check_spaceman_tier2_device(struct apfs_spaceman_phys *raw)
 	struct spaceman *sm = &sb->s_spaceman;
 	struct apfs_spaceman_device *main_dev = &raw->sm_dev[APFS_SD_MAIN];
 	struct apfs_spaceman_device *dev = &raw->sm_dev[APFS_SD_TIER2];
-	u32 addr_off, main_addr_off;
+	u32 addr_off, main_addr_off, main_addr_end;
 
 	addr_off = le32_to_cpu(dev->sm_addr_offset);
 	main_addr_off = le32_to_cpu(main_dev->sm_addr_offset);
-	if (addr_off != main_addr_off + sm->sm_cib_count * sizeof(u64))
+	if (sm->sm_cab_count)
+		main_addr_end = main_addr_off + sm->sm_cab_count * sizeof(u64);
+	else
+		main_addr_end = main_addr_off + sm->sm_cib_count * sizeof(u64);
+	if (addr_off != main_addr_end)
 		report("Spaceman device", "not consecutive address offsets.");
 	if (spaceman_val_from_off(raw, addr_off)) /* Empty device has no cib */
 		report_unknown("Fusion drive");
