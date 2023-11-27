@@ -306,7 +306,7 @@ static void check_efi_information(u64 oid)
 	if (file_length <= (block_count - 1) * sb->s_blocksize)
 		report("EFI info", "wasted space in driver extents.");
 
-	munmap(efi, sb->s_blocksize);
+	munmap(efi, obj.size);
 }
 
 /**
@@ -716,7 +716,7 @@ static void parse_integrity_meta(u64 oid)
 			report("Integrity metadata", "reserved field is in use.");
 	}
 
-	munmap(meta, sb->s_blocksize);
+	munmap(meta, obj.size);
 }
 
 /**
@@ -951,7 +951,7 @@ static void check_snap_meta_ext(u64 oid)
 	if (vsb->v_in_snapshot && le64_to_cpu(sme->sme_snap_xid) != sb->s_xid)
 		report("Extended snapshot metadata", "wrong transaction id.");
 
-	munmap(sme, sb->s_blocksize);
+	munmap(sme, obj.size);
 }
 
 /**
@@ -1218,12 +1218,16 @@ static void parse_cpoint_map(struct apfs_checkpoint_mapping *raw)
 		report("Checkpoint map", "invalid physical address.");
 	map->m_paddr = le64_to_cpu(raw->cpm_paddr);
 
-	map->m_size = le32_to_cpu(raw->cpm_size);
-	if (map->m_size != sb->s_blocksize)
-		report_unknown("Ephemeral objects with more than one block");
-
 	map->m_type = le32_to_cpu(raw->cpm_type);
 	map->m_subtype = le32_to_cpu(raw->cpm_subtype);
+
+	map->m_size = le32_to_cpu(raw->cpm_size);
+	if (map->m_size & (sb->s_blocksize - 1))
+		report("Checkpoint map", "size isn't multiple of block size.");
+	if ((map->m_type & APFS_OBJECT_TYPE_MASK) != APFS_OBJECT_TYPE_SPACEMAN) {
+		if (map->m_size != sb->s_blocksize)
+			report_unknown("Large non-spaceman ephemeral objects");
+	}
 
 	if (raw->cpm_pad)
 		report("Checkpoint map", "non-zero padding.");
@@ -1261,7 +1265,7 @@ static u32 parse_cpoint_map_blocks(u64 desc_base, u32 desc_blocks, u32 *index)
 		u32 flags;
 		int i;
 
-		raw = read_object_nocheck(bno, &obj);
+		raw = read_object_nocheck(bno, sb->s_blocksize, &obj);
 		if (obj.oid != bno)
 			report("Checkpoint map", "wrong object id.");
 		if (parse_object_flags(obj.flags, false) != APFS_OBJ_PHYSICAL)
@@ -1287,7 +1291,7 @@ static u32 parse_cpoint_map_blocks(u64 desc_base, u32 desc_blocks, u32 *index)
 
 		flags = le32_to_cpu(raw->cpm_flags);
 
-		munmap(raw, sb->s_blocksize);
+		munmap(raw, obj.size);
 		blk_count++;
 		*index = (*index + 1) % desc_blocks;
 
@@ -1364,7 +1368,7 @@ void parse_filesystem(void)
 		valid_blocks -= map_blocks;
 
 		bno = desc_base + index;
-		raw = read_object_nocheck(bno, &obj);
+		raw = read_object_nocheck(bno, sb->s_blocksize, &obj);
 		if (parse_object_flags(obj.flags, false) != APFS_OBJ_EPHEMERAL)
 			report("Checkpoint superblock", "bad storage type.");
 		if (obj.type != APFS_OBJECT_TYPE_NX_SUPERBLOCK)
@@ -1461,7 +1465,7 @@ static struct object *parse_reaper(u64 oid)
 			report_unknown("Nonempty reaper list");
 		/* TODO: nrl_free? */
 
-		munmap(list_raw, sb->s_blocksize);
+		munmap(list_raw, list.size);
 	} else {
 		if (raw->nr_completed_id || raw->nr_head || raw->nr_rlcount || raw->nr_type)
 			report("Reaper", "should be empty.");
@@ -1485,6 +1489,6 @@ static struct object *parse_reaper(u64 oid)
 	if (flags & APFS_NR_CONTINUE)
 		report_unknown("Object being reaped");
 
-	munmap(raw, sb->s_blocksize);
+	munmap(raw, reaper->size);
 	return reaper;
 }

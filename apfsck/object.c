@@ -15,28 +15,30 @@
 #include "object.h"
 #include "super.h"
 
-int obj_verify_csum(struct apfs_obj_phys *obj)
+static int obj_verify_csum_with_size(struct apfs_obj_phys *obj, u32 size)
 {
-	return  (le64_to_cpu(obj->o_cksum) ==
-		 fletcher64((char *) obj + APFS_MAX_CKSUM_SIZE,
-			    sb->s_blocksize - APFS_MAX_CKSUM_SIZE));
+	return le64_to_cpu(obj->o_cksum) == fletcher64((char *)obj + APFS_MAX_CKSUM_SIZE, size - APFS_MAX_CKSUM_SIZE);
+}
+
+int obj_verify_csum(struct apfs_obj_phys *obj) {
+	return obj_verify_csum_with_size(obj, sb->s_blocksize);
 }
 
 /**
  * read_object_nocheck_internal - Read an object header from disk
- * @bno:	block number for the object
+ * @bno:	first block number for the object
+ * @size:	object size in bytes
  * @obj:	object struct to receive the results
  * @noheader:	does this object have no header?
  *
  * Returns a pointer to the raw data of the object in memory, without running
  * any checks other than the Fletcher verification.
  */
-static void *read_object_nocheck_internal(u64 bno, struct object *obj, bool noheader)
+static void *read_object_nocheck_internal(u64 bno, u32 size, struct object *obj, bool noheader)
 {
 	struct apfs_obj_phys *raw;
 
-	raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-		   fd, bno * sb->s_blocksize);
+	raw = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, bno * sb->s_blocksize);
 	if (raw == MAP_FAILED)
 		system_error();
 
@@ -48,7 +50,7 @@ static void *read_object_nocheck_internal(u64 bno, struct object *obj, bool nohe
 	}
 
 	/* This one check is always needed */
-	if (!obj_verify_csum(raw)) {
+	if (!obj_verify_csum_with_size(raw, size)) {
 		report("Object header", "bad checksum in block 0x%llx.",
 		       (unsigned long long)bno);
 	}
@@ -59,13 +61,14 @@ static void *read_object_nocheck_internal(u64 bno, struct object *obj, bool nohe
 	obj->type = le32_to_cpu(raw->o_type) & APFS_OBJECT_TYPE_MASK;
 	obj->flags = le32_to_cpu(raw->o_type) & APFS_OBJECT_TYPE_FLAGS_MASK;
 	obj->subtype = le32_to_cpu(raw->o_subtype);
+	obj->size = size;
 
 	return raw;
 }
 
-void *read_object_nocheck(u64 bno, struct object *obj)
+void *read_object_nocheck(u64 bno, u32 size, struct object *obj)
 {
-	return read_object_nocheck_internal(bno, obj, false /* noheader */);
+	return read_object_nocheck_internal(bno, size, obj, false /* noheader */);
 }
 
 /**
@@ -138,12 +141,12 @@ static void *read_object_internal(u64 oid, struct htable_entry **omap_table, str
 	}
 
 	if (noheader) {
-		raw = read_object_nocheck_internal(bno, obj, noheader);
+		raw = read_object_nocheck_internal(bno, sb->s_blocksize, obj, noheader);
 		obj->oid = oid;
 		obj->block_nr = bno;
 		obj->xid = omap_rec->xid;
 	} else {
-		raw = read_object_nocheck(bno, obj);
+		raw = read_object_nocheck(bno, sb->s_blocksize, obj);
 	}
 
 	if (!ongoing_query) { /* Query code will revisit already parsed nodes */
@@ -308,7 +311,7 @@ void *read_ephemeral_object(u64 oid, struct object *obj)
 	map->m_seen = true;
 
 	/* Multiblock ephemeral objects may exist, but are not supported yet */
-	raw = read_object_nocheck(map->m_paddr, obj);
+	raw = read_object_nocheck(map->m_paddr, map->m_size, obj);
 	if ((obj->type | obj->flags) != map->m_type)
 		report("Ephemeral object", "type field doesn't match mapping.");
 	if (obj->subtype != map->m_subtype)

@@ -136,7 +136,7 @@ static void parse_spaceman_chunk_counts(struct apfs_spaceman_phys *raw)
 	sm->sm_cib_count = DIV_ROUND_UP(sm->sm_chunk_count,
 					sm->sm_chunks_per_cib);
 	sm->sm_cab_count = DIV_ROUND_UP(sm->sm_cib_count, sm->sm_cibs_per_cab);
-	/* CABs are simply skipped if they are not needed */
+	/* CABs are not used unless at least one can be filled */
 	if (sm->sm_cab_count == 1)
 		sm->sm_cab_count = 0;
 
@@ -305,7 +305,7 @@ static u64 parse_chunk_info_block(u64 bno, u32 index, u64 start, u64 *xid_p)
 	if (xid_p)
 		*xid_p = obj.xid;
 
-	munmap(cib, sb->s_blocksize);
+	munmap(cib, obj.size);
 	return start;
 }
 
@@ -360,7 +360,7 @@ static u64 parse_cib_addr_block(u64 bno, u32 index, u64 start)
 	if (obj.xid != max_cib_xid) /* Cab only changes if a cib changes */
 		report("Cib address block", "xid is too recent.");
 
-	munmap(cab, sb->s_blocksize);
+	munmap(cab, obj.size);
 	return start;
 }
 
@@ -385,7 +385,7 @@ static u64 spaceman_val_from_off(struct apfs_spaceman_phys *raw, u32 offset)
 		report("Spaceman", "offset is not aligned to 8 bytes.");
 	if (offset < sm->sm_struct_size)
 		report("Spaceman", "offset overlaps with structure.");
-	if (offset >= sb->s_blocksize || offset + sizeof(u64) > sb->s_blocksize)
+	if (offset >= sm->sm_obj_size || offset + sizeof(u64) > sm->sm_obj_size)
 		report("Spaceman", "offset is out of bounds.");
 	return *((u64 *)value_p);
 }
@@ -408,7 +408,7 @@ static u16 spaceman_16_from_off(struct apfs_spaceman_phys *raw, u32 offset)
 		report("Spaceman", "offset is not aligned to 2 bytes.");
 	if (offset < sm->sm_struct_size)
 		report("Spaceman", "offset overlaps with structure.");
-	if (offset >= sb->s_blocksize || offset + sizeof(u16) > sb->s_blocksize)
+	if (offset >= sm->sm_obj_size || offset + sizeof(u16) > sm->sm_obj_size)
 		report("Spaceman", "offset is out of bounds.");
 	return *((u16 *)value_p);
 }
@@ -433,7 +433,7 @@ static char *spaceman_256_from_off(struct apfs_spaceman_phys *raw, u32 offset)
 		report("Spaceman", "offset is not aligned to 8 bytes.");
 	if (offset < sm->sm_struct_size)
 		report("Spaceman", "offset overlaps with structure.");
-	if (offset >= sb->s_blocksize || offset + sz_256 > sb->s_blocksize)
+	if (offset >= sm->sm_obj_size || offset + sz_256 > sm->sm_obj_size)
 		report("Spaceman", "offset is out of bounds.");
 	return value_p;
 }
@@ -461,7 +461,7 @@ static void parse_spaceman_main_device(struct apfs_spaceman_phys *raw)
 
 	addr_off = le32_to_cpu(dev->sm_addr_offset);
 	if (!sm->sm_cab_count) {
-		/* If CABs are not needed, the spaceman just lists the CIBs */
+		/* If CABs are not used, the spaceman just lists the CIBs */
 		for (i = 0; i < sm->sm_cib_count; ++i) {
 			u64 bno = spaceman_val_from_off(raw, addr_off + i * sizeof(u64));
 			start = parse_chunk_info_block(bno, i, start, NULL /* xid_p */);
@@ -925,6 +925,7 @@ void check_spaceman(u64 oid)
 	if (obj.subtype != APFS_OBJECT_TYPE_INVALID)
 		report("Space manager", "wrong object subtype.");
 	sm->sm_xid = obj.xid;
+	sm->sm_obj_size = obj.size;
 
 	sm->sm_ip_base = le64_to_cpu(raw->sm_ip_base);
 	sm->sm_ip_block_count = le64_to_cpu(raw->sm_ip_block_count);
@@ -974,7 +975,7 @@ void check_spaceman(u64 oid)
 
 	compare_container_bitmaps(sm->sm_bitmap, sb->s_bitmap,
 				  sm->sm_chunk_count);
-	munmap(raw, sb->s_blocksize);
+	munmap(raw, obj.size);
 }
 
 /**
