@@ -54,9 +54,10 @@ struct parameters {
 #define CPOINT_MAP_BNO			CPOINT_DESC_BASE
 #define CPOINT_SB_BNO			(CPOINT_DESC_BASE + 1)
 #define REAPER_BNO			CPOINT_DATA_BASE
-#define SPACEMAN_BNO			(CPOINT_DATA_BASE + 1)
-#define	IP_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 2)
-#define MAIN_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 3)
+#define IP_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 1)
+#define MAIN_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 2)
+/* Spaceman comes last because it could need 2 blocks */
+#define SPACEMAN_BNO			(CPOINT_DATA_BASE + 3)
 #define MAIN_OMAP_BNO			20000
 #define MAIN_OMAP_ROOT_BNO		20001
 #define FIRST_VOL_BNO			20002

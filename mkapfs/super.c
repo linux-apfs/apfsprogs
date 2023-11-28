@@ -71,8 +71,8 @@ static void set_checkpoint_areas(struct apfs_nx_superblock *sb)
 	sb->nx_xp_data_base = cpu_to_le64(CPOINT_DATA_BASE);
 	sb->nx_xp_data_blocks = cpu_to_le32(CPOINT_DATA_BLOCKS);
 	/* Room for the space manager, the two free queues, and the reaper */
-	sb->nx_xp_data_len = cpu_to_le32(4);
-	sb->nx_xp_data_next = cpu_to_le32(4);
+	sb->nx_xp_data_len = cpu_to_le32(3 + spaceman_size() / param->blocksize);
+	sb->nx_xp_data_next = cpu_to_le32(3 + spaceman_size() / param->blocksize);
 	sb->nx_xp_data_index = 0;
 }
 
@@ -182,7 +182,7 @@ static void make_volume(u64 bno, u64 oid)
 	/* The root nodes of all four trees, plus the object map structure */
 	vsb->apfs_fs_alloc_count = cpu_to_le64(5);
 
-	set_object_header(&vsb->apfs_o, oid,
+	set_object_header(&vsb->apfs_o, param->blocksize, oid,
 			  APFS_OBJ_VIRTUAL | APFS_OBJECT_TYPE_FS,
 			  APFS_OBJECT_TYPE_INVALID);
 	munmap(vsb, param->blocksize);
@@ -214,7 +214,7 @@ static void make_cpoint_map_block(u64 bno)
 	map->cpm_type = cpu_to_le32(APFS_OBJ_EPHEMERAL |
 				    APFS_OBJECT_TYPE_SPACEMAN);
 	map->cpm_subtype = cpu_to_le32(APFS_OBJECT_TYPE_INVALID);
-	map->cpm_size = cpu_to_le32(param->blocksize);
+	map->cpm_size = cpu_to_le32(spaceman_size());
 	map->cpm_oid = cpu_to_le64(SPACEMAN_OID);
 	map->cpm_paddr = cpu_to_le64(SPACEMAN_BNO);
 
@@ -236,7 +236,7 @@ static void make_cpoint_map_block(u64 bno)
 	map->cpm_oid = cpu_to_le64(MAIN_FREE_QUEUE_OID);
 	map->cpm_paddr = cpu_to_le64(MAIN_FREE_QUEUE_BNO);
 
-	set_object_header(&block->cpm_o, bno,
+	set_object_header(&block->cpm_o, param->blocksize, bno,
 			  APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_CHECKPOINT_MAP,
 			  APFS_OBJECT_TYPE_INVALID);
 	munmap(block, param->blocksize);
@@ -272,7 +272,7 @@ static void make_empty_reaper(u64 bno, u64 oid)
 	reaper->nr_state_buffer_size = cpu_to_le32(param->blocksize -
 						   sizeof(*reaper));
 
-	set_object_header(&reaper->nr_o, oid,
+	set_object_header(&reaper->nr_o, param->blocksize, oid,
 			  APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_NX_REAPER,
 			  APFS_OBJECT_TYPE_INVALID);
 	munmap(reaper, param->blocksize);
@@ -302,8 +302,6 @@ void make_container(void)
 	sb_copy->nx_next_oid = cpu_to_le64(APFS_OID_RESERVED_COUNT + 100);
 	sb_copy->nx_next_xid = cpu_to_le64(MKFS_XID + 1);
 
-	set_checkpoint_areas(sb_copy);
-
 	sb_copy->nx_spaceman_oid = cpu_to_le64(SPACEMAN_OID);
 	make_spaceman(SPACEMAN_BNO, SPACEMAN_OID);
 	sb_copy->nx_reaper_oid = cpu_to_le64(REAPER_OID);
@@ -311,13 +309,16 @@ void make_container(void)
 	sb_copy->nx_omap_oid = cpu_to_le64(MAIN_OMAP_BNO);
 	make_omap_btree(MAIN_OMAP_BNO, false /* is_vol */);
 
+	/* After the spaceman because we need to know the spaceman's size */
+	set_checkpoint_areas(sb_copy);
+
 	sb_copy->nx_max_file_systems = cpu_to_le32(get_max_volumes(size));
 	sb_copy->nx_fs_oid[0] = cpu_to_le64(FIRST_VOL_OID);
 	make_volume(FIRST_VOL_BNO, FIRST_VOL_OID);
 
 	set_ephemeral_info(&sb_copy->nx_ephemeral_info[0]);
 
-	set_object_header(&sb_copy->nx_o, APFS_OID_NX_SUPERBLOCK,
+	set_object_header(&sb_copy->nx_o, param->blocksize, APFS_OID_NX_SUPERBLOCK,
 			  APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_NX_SUPERBLOCK,
 			  APFS_OBJECT_TYPE_INVALID);
 

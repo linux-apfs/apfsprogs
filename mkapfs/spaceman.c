@@ -29,7 +29,7 @@ static struct spaceman_info {
 
 	u64 first_chunk_bmap;	/* Block number for the first chunk's bitmap */
 	u64 first_cib;		/* Block number for first chunk-info block */
-} sm_info;
+} sm_info = {0};
 
 /**
  * blocks_per_chunk - Calculate the number of blocks per chunk
@@ -58,6 +58,24 @@ static inline u32 cibs_per_cab(void)
 	int cab_size = sizeof(struct apfs_cib_addr_block);
 
 	return (param->blocksize - cab_size) / sizeof(__le64);
+}
+
+/**
+ * spaceman_size - Calculate the size of the spaceman object in bytes
+ */
+u32 spaceman_size(void)
+{
+	u64 chunk_count = DIV_ROUND_UP(param->block_count, blocks_per_chunk());
+	u32 cib_count = DIV_ROUND_UP(chunk_count, chunks_per_cib());
+
+	/*
+	 * The spaceman must have room for the addresses of all main device
+	 * cibs, plus an extra offset for tier 2. Some containers require an
+	 * extra block to store this stuff.
+	 */
+	if ((cib_count + 1) * sizeof(__le64) + sm_info.cib_addr_base_off > param->blocksize)
+		return 2 * param->blocksize;
+	return param->blocksize;
 }
 
 #define MIN(X, Y) ((X) <= (Y) ? (X) : (Y))
@@ -215,7 +233,7 @@ static u64 make_chunk_info_block(u64 bno, int index, u64 start)
 	}
 	cib->cib_chunk_info_count = cpu_to_le32(i);
 
-	set_object_header(&cib->cib_o, bno,
+	set_object_header(&cib->cib_o, param->blocksize, bno,
 			  APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_SPACEMAN_CIB,
 			  APFS_OBJECT_TYPE_INVALID);
 	munmap(cib, param->blocksize);
@@ -236,11 +254,7 @@ static void make_devices(struct apfs_spaceman_phys *sm)
 	__le64 *cib_addr;
 	int i;
 
-	/*
-	 * We must have room for the addresses of all main device cibs, plus
-	 * an extra offset for tier 2.
-	 */
-	if ((cib_count + 1) * sizeof(__le64) + sm_info.cib_addr_base_off > param->blocksize) {
+	if (cib_count > cibs_per_cab()) {
 		printf("Large containers are not yet supported.\n");
 		exit(1);
 	}
@@ -373,7 +387,7 @@ static void make_internal_pool(struct apfs_spaceman_phys *sm)
  */
 void make_spaceman(u64 bno, u64 oid)
 {
-	struct apfs_spaceman_phys *sm = get_zeroed_block(bno);
+	struct apfs_spaceman_phys *sm = NULL;
 
 	sm_info.chunk_count = DIV_ROUND_UP(param->block_count, blocks_per_chunk());
 	sm_info.cib_count = DIV_ROUND_UP(sm_info.chunk_count, chunks_per_cib());
@@ -403,6 +417,8 @@ void make_spaceman(u64 bno, u64 oid)
 	sm_info.first_chunk_bmap = sm_info.ip_base;
 	sm_info.first_cib = sm_info.first_chunk_bmap + sm_info.used_chunks_end;
 
+	sm = get_zeroed_blocks(bno, spaceman_size());
+
 	sm->sm_block_size = cpu_to_le32(param->blocksize);
 	sm->sm_blocks_per_chunk = cpu_to_le32(blocks_per_chunk());
 	sm->sm_chunks_per_cib = cpu_to_le32(chunks_per_cib());
@@ -414,8 +430,8 @@ void make_spaceman(u64 bno, u64 oid)
 	make_internal_pool(sm);
 	make_alloc_bitmap();
 
-	set_object_header(&sm->sm_o, oid,
+	set_object_header(&sm->sm_o, spaceman_size(), oid,
 			  APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_SPACEMAN,
 			  APFS_OBJECT_TYPE_INVALID);
-	munmap(sm, param->blocksize);
+	munmap(sm, spaceman_size());
 }
