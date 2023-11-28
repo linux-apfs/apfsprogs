@@ -16,19 +16,21 @@
 static struct spaceman_info {
 	u64 chunk_count;
 	u32 cib_count;
+	u32 cab_count;
 	u64 ip_blocks;
 	u32 ip_bm_size;
 	u32 ip_bmap_blocks;
 	u64 ip_base;
 	u32 bm_addr_off;	/* Offset of bitmap address in the spaceman */
 	u32 bm_free_next_off;	/* Offset of free_next in the spaceman */
-	u32 cib_addr_base_off;	/* Offset of the cib address in the spaceman */
+	u32 cib_addr_base_off;	/* Offset of the cib/cab address in spaceman */
 
 	u64 used_blocks_end;	/* Block right after the last one we allocate */
 	u64 used_chunks_end;	/* Chunk right after the last one we allocate */
 
 	u64 first_chunk_bmap;	/* Block number for the first chunk's bitmap */
 	u64 first_cib;		/* Block number for first chunk-info block */
+	u64 first_cab;		/* Block number for first cib address block */
 } sm_info = {0};
 
 /**
@@ -67,6 +69,14 @@ u32 spaceman_size(void)
 {
 	u64 chunk_count = DIV_ROUND_UP(param->block_count, blocks_per_chunk());
 	u32 cib_count = DIV_ROUND_UP(chunk_count, chunks_per_cib());
+	u32 cab_count = DIV_ROUND_UP(cib_count, cibs_per_cab());
+
+	/*
+	 * I don't expect to ever deal with filesystems big enough to need more
+	 * than one block to list the cabs: that would be like 3.6 PB
+	 */
+	if (cab_count > 1)
+		return param->blocksize;
 
 	/*
 	 * The spaceman must have room for the addresses of all main device
@@ -242,6 +252,42 @@ static u64 make_chunk_info_block(u64 bno, int index, u64 start)
 }
 
 /**
+ * make_cib_addr_block - Make a cib address block
+ * @bno:	block number for the chunk-info block
+ * @index:	index of the chunk-info block
+ * @start:	first block number for the first chunk
+ *
+ * Returns the first block number for the first chunk of the next cib.
+ */
+static u64 make_cib_addr_block(u64 bno, int index, u64 start)
+{
+	struct apfs_cib_addr_block *cab = get_zeroed_block(bno);
+	int i;
+
+	cab->cab_index = cpu_to_le32(index);
+	for (i = 0; i < cibs_per_cab(); ++i) {
+		int cib_index;
+		u64 cib_bno;
+
+		if (start == param->block_count) /* No more chunks in device */
+			break;
+
+		cib_index = cibs_per_cab() * index + i;
+		cib_bno = sm_info.first_cib + cib_index;
+		cab->cab_cib_addr[i] = cpu_to_le64(cib_bno);
+		start = make_chunk_info_block(cib_bno, cib_index, start);
+	}
+	cab->cab_cib_count = cpu_to_le32(i);
+
+	set_object_header(&cab->cab_o, param->blocksize, bno,
+			  APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_SPACEMAN_CAB,
+			  APFS_OBJECT_TYPE_INVALID);
+	munmap(cab, param->blocksize);
+
+	return start;
+}
+
+/**
  * make_devices - Make the spaceman device structures
  * @sm: pointer to the on-disk spaceman structure
  */
@@ -250,32 +296,51 @@ static void make_devices(struct apfs_spaceman_phys *sm)
 	struct apfs_spaceman_device *dev = &sm->sm_dev[APFS_SD_MAIN];
 	u64 chunk_count = DIV_ROUND_UP(param->block_count, blocks_per_chunk());
 	u32 cib_count = DIV_ROUND_UP(chunk_count, chunks_per_cib());
+	u32 cab_count;
 	u64 start = 0;
-	__le64 *cib_addr;
 	int i;
 
-	if (cib_count > cibs_per_cab()) {
-		printf("Large containers are not yet supported.\n");
+	cab_count = DIV_ROUND_UP(cib_count, cibs_per_cab());
+	if (cab_count == 1)
+		cab_count = 0;
+
+	/*
+	 * We must have room for the addresses of all main device cabs, plus
+	 * an extra offset for tier 2.
+	 */
+	if ((cab_count + 1) * sizeof(__le64) + sm_info.cib_addr_base_off > param->blocksize) {
+		printf("Gigantic containers (> ~3.6 PB) not yet supported.\n");
 		exit(1);
 	}
 
 	dev->sm_block_count = cpu_to_le64(param->block_count);
 	dev->sm_chunk_count = cpu_to_le64(chunk_count);
 	dev->sm_cib_count = cpu_to_le32(cib_count);
-	dev->sm_cab_count = 0; /* Not supported, hence the block count limit */
+	dev->sm_cab_count = cpu_to_le32(cab_count);
 	dev->sm_free_count = cpu_to_le64(param->block_count -
 					 count_used_blocks());
 
 	dev->sm_addr_offset = cpu_to_le32(sm_info.cib_addr_base_off);
-	cib_addr = (void *)sm + sm_info.cib_addr_base_off;
-	for (i = 0; i < cib_count; ++i) {
-		cib_addr[i] = cpu_to_le64(sm_info.first_cib + i);
-		start = make_chunk_info_block(sm_info.first_cib + i, i, start);
+	if (!cab_count) {
+		__le64 *cib_addr = (void *)sm + sm_info.cib_addr_base_off;
+		for (i = 0; i < cib_count; ++i) {
+			cib_addr[i] = cpu_to_le64(sm_info.first_cib + i);
+			start = make_chunk_info_block(sm_info.first_cib + i, i, start);
+		}
+	} else {
+		__le64 *cab_addr = (void *)sm + sm_info.cib_addr_base_off;
+		for (i = 0; i < cab_count; ++i) {
+			cab_addr[i] = cpu_to_le64(sm_info.first_cab + i);
+			start = make_cib_addr_block(sm_info.first_cab + i, i, start);
+		}
 	}
 
 	/* For the tier2 device, just set the offset; the address is null */
 	dev = &sm->sm_dev[APFS_SD_TIER2];
-	dev->sm_addr_offset = cpu_to_le32(sm_info.cib_addr_base_off + cib_count * sizeof(__le64));
+	if (cab_count)
+		dev->sm_addr_offset = cpu_to_le32(sm_info.cib_addr_base_off + cab_count * sizeof(__le64));
+	else
+		dev->sm_addr_offset = cpu_to_le32(sm_info.cib_addr_base_off + cib_count * sizeof(__le64));
 }
 
 /**
@@ -311,6 +376,8 @@ static void make_ip_bitmap(void)
 {
 	void *bmap = get_zeroed_blocks(IP_BMAP_BASE, sm_info.ip_bm_size);
 
+	/* Cib address blocks */
+	bmap_mark_as_used(bmap, sm_info.first_cab - sm_info.ip_base, sm_info.cab_count);
 	/* Chunk-info blocks */
 	bmap_mark_as_used(bmap, sm_info.first_cib - sm_info.ip_base, sm_info.cib_count);
 	/* Allocation bitmap block */
@@ -391,7 +458,10 @@ void make_spaceman(u64 bno, u64 oid)
 
 	sm_info.chunk_count = DIV_ROUND_UP(param->block_count, blocks_per_chunk());
 	sm_info.cib_count = DIV_ROUND_UP(sm_info.chunk_count, chunks_per_cib());
-	sm_info.ip_blocks = (sm_info.chunk_count + sm_info.cib_count) * 3;
+	sm_info.cab_count = DIV_ROUND_UP(sm_info.cib_count, cibs_per_cab());
+	if (sm_info.cab_count == 1)
+		sm_info.cab_count = 0;
+	sm_info.ip_blocks = (sm_info.chunk_count + sm_info.cib_count + sm_info.cab_count) * 3;
 
 	/*
 	 * We have 16 ip bitmaps; each of them maps the whole ip and may span
@@ -412,10 +482,11 @@ void make_spaceman(u64 bno, u64 oid)
 
 	/*
 	 * Put the chunk bitmaps at the beginning of the internal pool, and
-	 * the cibs right after them.
+	 * the cibs right after them, followed by the cabs if any.
 	 */
 	sm_info.first_chunk_bmap = sm_info.ip_base;
 	sm_info.first_cib = sm_info.first_chunk_bmap + sm_info.used_chunks_end;
+	sm_info.first_cab = sm_info.first_cib + sm_info.cib_count;
 
 	sm = get_zeroed_blocks(bno, spaceman_size());
 
