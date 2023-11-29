@@ -12,6 +12,10 @@
 #include "object.h"
 #include "spaceman.h"
 #include "super.h"
+#include "version.h"
+
+/* String to identify the program and its version */
+#define MKFS_ID_STRING	"mkapfs by eafer (" GIT_COMMIT ")"
 
 /**
  * set_uuid - Set a UUID field

@@ -21,9 +21,6 @@ struct parameters {
 	bool		norm_sensitive;	/* Is it normalization-sensitive? */
 };
 
-/* String to identify the program and its version */
-#define MKFS_ID_STRING	"mkapfs for linux, version 0.1"
-
 /* Hardcoded transaction ids */
 #define MKFS_XID	1
 
