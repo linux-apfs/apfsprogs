@@ -34,7 +34,7 @@ ifdef SPARSE_VERSION
 	@sparse $(CFLAGS) $<
 endif
 
-super.o: version.h
+mkapfs.o super.o: version.h
 version.h: FORCE
 	@printf '#define GIT_COMMIT\t"%s"\n' $(GIT_COMMIT) > version.h
 

@@ -14,6 +14,7 @@
 #include <apfs/raw.h>
 #include "mkapfs.h"
 #include "super.h"
+#include "version.h"
 
 int fd;
 struct parameters *param;
@@ -36,7 +37,10 @@ static void usage(void)
  */
 static void version(void)
 {
-	printf("mkapfs version 0.1\n");
+	if (*GIT_COMMIT)
+		printf("mkapfs %s\n", GIT_COMMIT);
+	else
+		printf("mkapfs - unknown git commit id\n");
 	exit(1);
 }
 
