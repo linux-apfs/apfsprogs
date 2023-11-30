@@ -72,8 +72,9 @@ u32 spaceman_size(void)
 	u32 cab_count = DIV_ROUND_UP(cib_count, cibs_per_cab());
 
 	/*
-	 * I don't expect to ever deal with filesystems big enough to need more
-	 * than one block to list the cabs: that would be like 3.6 PB
+	 * I don't currently expect to deal with filesystems big enough to need
+	 * more than one block for cab addresses and ip bitmap metadata: that
+	 * would be like 113 TB.
 	 */
 	if (cab_count > 1)
 		return param->blocksize;
@@ -309,7 +310,7 @@ static void make_devices(struct apfs_spaceman_phys *sm)
 	 * an extra offset for tier 2.
 	 */
 	if ((cab_count + 1) * sizeof(__le64) + sm_info.cib_addr_base_off > param->blocksize) {
-		printf("Gigantic containers (> ~3.6 PB) not yet supported.\n");
+		printf("Huge containers (> ~113TB) not yet supported.\n");
 		exit(1);
 	}
 

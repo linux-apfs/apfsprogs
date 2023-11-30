@@ -43,6 +43,6 @@ test_size 8574096900096	# Maximum size
 test_size 8574096904192	# Minimum size
 test_size 15T
 
-# Filesystems < 128 Mib or > ~3.6 PiB not yet supported
+# Filesystems < 128 Mib or > ~113 TiB not yet supported
 
 success=1
