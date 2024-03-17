@@ -271,6 +271,10 @@ static void collect_dirstats(struct htable_entry *entry)
 	struct dirstat *stat = inode->i_dirstat;
 	struct dirstat *parent_stat = NULL;
 
+	/* Orphans report a stale parent id, don't take that seriously */
+	if (inode->i_first_parent == APFS_PRIV_DIR_INO_NUM)
+		return;
+
 	if (inode->i_parent_id >= APFS_MIN_USER_INO_NUM) {
 		parent_stat = get_inode(inode->i_parent_id)->i_dirstat;
 		if (stat && parent_stat && stat != parent_stat)
