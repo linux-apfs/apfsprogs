@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <apfs/parameters.h>
 #include <apfs/raw.h>
 #include "btree.h"
 #include "mkapfs.h"
@@ -101,8 +102,14 @@ static u32 get_max_volumes(u64 size)
  */
 static void set_ephemeral_info(__le64 *info)
 {
-	/* TODO: add support for small containers */
-	u64 min_block_count = APFS_NX_EPH_MIN_BLOCK_COUNT;
+	u64 container_size;
+	u64 min_block_count;
+
+	container_size = param->block_count * param->blocksize;
+	if (container_size < 128 * 1024 * 1024)
+		min_block_count = main_fq_node_limit(param->block_count);
+	else
+		min_block_count = APFS_NX_EPH_MIN_BLOCK_COUNT;
 
 	/* Only the first entry is documented, leave the others as zero */
 	*info = cpu_to_le64((min_block_count << 32)
