@@ -40,12 +40,7 @@ struct parameters {
 #define CPOINT_DESC_BLOCKS	64
 #define CPOINT_DATA_BASE	(CPOINT_DESC_BASE + CPOINT_DESC_BLOCKS)
 #define CPOINT_DATA_BLOCKS	5904
-
-/*
- * Constants describing the internal pool; these are hardcoded for now, but
- * should actually change with the container size.
- */
-#define IP_BMAP_BASE	21000				/* First ip bitmap */
+#define CPOINT_END		(CPOINT_DATA_BASE + CPOINT_DATA_BLOCKS)
 
 /* Hardcoded block numbers */
 #define CPOINT_MAP_BNO			CPOINT_DESC_BASE
@@ -53,16 +48,18 @@ struct parameters {
 #define REAPER_BNO			CPOINT_DATA_BASE
 #define IP_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 1)
 #define MAIN_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 2)
-/* Spaceman comes last because it could need 2 blocks */
+/* Spaceman comes last in the data area because it could need 2 blocks */
 #define SPACEMAN_BNO			(CPOINT_DATA_BASE + 3)
-#define MAIN_OMAP_BNO			20000
-#define MAIN_OMAP_ROOT_BNO		20001
-#define FIRST_VOL_BNO			20002
-#define FIRST_VOL_OMAP_BNO		20003
-#define FIRST_VOL_OMAP_ROOT_BNO		20004
-#define FIRST_VOL_CAT_ROOT_BNO		20005
-#define FIRST_VOL_EXTREF_ROOT_BNO	20006
-#define FIRST_VOL_SNAP_ROOT_BNO		20007
+#define MAIN_OMAP_BNO			CPOINT_END
+#define MAIN_OMAP_ROOT_BNO		(CPOINT_END + 1)
+#define FIRST_VOL_BNO			(CPOINT_END + 2)
+#define FIRST_VOL_OMAP_BNO		(CPOINT_END + 3)
+#define FIRST_VOL_OMAP_ROOT_BNO		(CPOINT_END + 4)
+#define FIRST_VOL_CAT_ROOT_BNO		(CPOINT_END + 5)
+#define FIRST_VOL_EXTREF_ROOT_BNO	(CPOINT_END + 6)
+#define FIRST_VOL_SNAP_ROOT_BNO		(CPOINT_END + 7)
+/* First ip bitmap comes last because the size is not hardcoded */
+#define IP_BMAP_BASE			(CPOINT_END + 8)
 
 /* Declarations for global variables */
 extern struct parameters *param;	/* Filesystem parameters */
