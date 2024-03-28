@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <apfs/parameters.h>
 #include <apfs/raw.h>
 #include <apfs/types.h>
 #include "apfsck.h"
@@ -322,11 +323,11 @@ static void check_ephemeral_information(__le64 *info)
 	assert(sb->s_block_count);
 	container_size = sb->s_block_count * sb->s_blocksize;
 
-	/* TODO: support for small containers is very important */
 	if (container_size < 128 * 1024 * 1024)
-		report_unknown("Small container size");
+		min_block_count = main_fq_node_limit(sb->s_block_count);
+	else
+		min_block_count = APFS_NX_EPH_MIN_BLOCK_COUNT;
 
-	min_block_count = APFS_NX_EPH_MIN_BLOCK_COUNT;
 	if (le64_to_cpu(info[0]) != ((min_block_count << 32)
 				  | (APFS_NX_MAX_FILE_SYSTEM_EPH_STRUCTS << 16)
 				  | APFS_NX_EPH_INFO_VERSION_1))
