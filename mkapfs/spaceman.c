@@ -489,7 +489,7 @@ void make_spaceman(u64 bno, u64 oid)
 	sm_info.first_cib = sm_info.first_chunk_bmap + sm_info.used_chunks_end;
 	sm_info.first_cab = sm_info.first_cib + sm_info.cib_count;
 
-	sm = get_zeroed_blocks(bno, spaceman_size());
+	sm = get_zeroed_blocks(bno, spaceman_size() / param->blocksize);
 
 	sm->sm_block_size = cpu_to_le32(param->blocksize);
 	sm->sm_blocks_per_chunk = cpu_to_le32(blocks_per_chunk());
