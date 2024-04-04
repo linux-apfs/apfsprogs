@@ -86,7 +86,7 @@ static inline u32 cpoint_data_blocks(void)
 	 */
 	if (param->block_count < 1048576) { /* Up to 4G */
 		u32 off_512M = (param->block_count - 262144) / 131072;
-		return 1248 + 488 * off_512M + 4 * ((param->block_count - (261280 + off_512M * 131776)) / 2272);
+		return 1248 + 488 * off_512M + 4 * (((long long)param->block_count - (261280 + off_512M * 131776)) / 2272);
 	}
 	if (param->block_count < 4063232) { /* Up to 10G */
 		u32 off_512M = (param->block_count - 1048576) / 131072;

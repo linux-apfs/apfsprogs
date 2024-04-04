@@ -46,4 +46,7 @@ test_size 15T
 
 # Filesystems > ~113 TiB not yet supported
 
+# Regression tests for sizes that caused problems in the past
+test_size 3G
+
 success=1
