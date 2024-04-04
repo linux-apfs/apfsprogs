@@ -137,7 +137,7 @@ static void complete_parameters(void)
 		fprintf(stderr, "%s: device is not big enough\n", progname);
 		exit(1);
 	}
-	if (param->block_count * param->blocksize < 24 * 1024 * 1024) {
+	if (param->block_count * param->blocksize < 512 * 1024) {
 		fprintf(stderr, "%s: such tiny containers are not supported\n",
 			progname);
 		exit(1);

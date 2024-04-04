@@ -21,6 +21,10 @@ struct parameters {
 	bool		norm_sensitive;	/* Is it normalization-sensitive? */
 };
 
+/* Declarations for global variables */
+extern struct parameters *param;	/* Filesystem parameters */
+extern int fd;				/* File descriptor for the device */
+
 /* Hardcoded transaction ids */
 #define MKFS_XID	1
 
@@ -32,17 +36,82 @@ struct parameters {
 #define	IP_FREE_QUEUE_OID	(FIRST_VOL_CAT_ROOT_OID + 1)
 #define MAIN_FREE_QUEUE_OID	(IP_FREE_QUEUE_OID + 1)
 
-/*
- * Constants describing the checkpoint areas; these are hardcoded for now, but
- * should actually change with the container size.
+/**
+ * cpoint_desc_blocks - Calculate the number of checkpoint descriptor blocks
  */
+static inline u32 cpoint_desc_blocks(void)
+{
+	/*
+	 * These numbers are a rough approximation of what I learned from
+	 * testing newfs_apfs. I don't think the exact block counts matter.
+	 */
+	if (param->block_count < 512 * 1024 / 4) /* Up to 512M */
+		return 8;
+	if (param->block_count < 1024 * 1024 / 4) /* Up to 1G */
+		return 12;
+	if (param->block_count < 50 * 1024 * 1024 / 4) { /* Up to 50G */
+		u32 off_512M = (param->block_count - 1024 * 1024 / 4) / (512 * 1024 / 4);
+		return 20 + 60 * off_512M / 23;
+	}
+
+	/*
+	 * From here on, newfs_apfs increases the number very slowly. I don't
+	 * think it matters...
+	 */
+	return 280;
+}
+
+/**
+ * cpoint_data_blocks - Calculate the number of checkpoint data blocks
+ */
+static inline u32 cpoint_data_blocks(void)
+{
+	/* I got these numbers from testing newfs_apfs */
+	if (param->block_count < 4545)
+		return 52;
+	if (param->block_count < 13633)
+		return 124;
+	if (param->block_count < 36353)
+		return 160 + 36 * ((param->block_count - 13633) / 4544);
+	if (param->block_count < 131777)
+		return 308 + 4 * ((param->block_count - 36353) / 4544);
+	if (param->block_count < 262144)
+		return 648 + 4 * ((param->block_count - 131777) / 4544);
+	if (param->block_count == 262144) /* 1G is a special case, odd */
+		return 992;
+
+	/*
+	 * At this point I got bored and the sizes stop matching exactly. The
+	 * official fsck doesn't care. TODO?
+	 */
+	if (param->block_count < 1048576) { /* Up to 4G */
+		u32 off_512M = (param->block_count - 262144) / 131072;
+		return 1248 + 488 * off_512M + 4 * ((param->block_count - (261280 + off_512M * 131776)) / 2272);
+	}
+	if (param->block_count < 4063232) { /* Up to 10G */
+		u32 off_512M = (param->block_count - 1048576) / 131072;
+		return 4112 + 256 * off_512M;
+	}
+	if (param->block_count < 13107200) { /* Up to 50G */
+		u32 off_512M = (param->block_count - 4063232) / 131072;
+		return 10000 + 256 * off_512M;
+	}
+
+	/*
+	 * From here on, newfs_apfs increases the number very slowly. I don't
+	 * think it matters...
+	 */
+	return 27672;
+}
+
+/* Description of the checkpoint areas */
 #define CPOINT_DESC_BASE	(APFS_NX_BLOCK_NUM + 1)
-#define CPOINT_DESC_BLOCKS	64
+#define CPOINT_DESC_BLOCKS	cpoint_desc_blocks()
 #define CPOINT_DATA_BASE	(CPOINT_DESC_BASE + CPOINT_DESC_BLOCKS)
-#define CPOINT_DATA_BLOCKS	5904
+#define CPOINT_DATA_BLOCKS	cpoint_data_blocks()
 #define CPOINT_END		(CPOINT_DATA_BASE + CPOINT_DATA_BLOCKS)
 
-/* Hardcoded block numbers */
+/* Block numbers calculated from the checkpoint areas */
 #define CPOINT_MAP_BNO			CPOINT_DESC_BASE
 #define CPOINT_SB_BNO			(CPOINT_DESC_BASE + 1)
 #define REAPER_BNO			CPOINT_DATA_BASE
@@ -60,10 +129,6 @@ struct parameters {
 #define FIRST_VOL_SNAP_ROOT_BNO		(CPOINT_END + 7)
 /* First ip bitmap comes last because the size is not hardcoded */
 #define IP_BMAP_BASE			(CPOINT_END + 8)
-
-/* Declarations for global variables */
-extern struct parameters *param;	/* Filesystem parameters */
-extern int fd;				/* File descriptor for the device */
 
 extern __attribute__((noreturn)) void system_error(void);
 extern __attribute__((noreturn)) void fatal(const char *message);
