@@ -353,7 +353,7 @@ static void make_ip_free_queue(struct apfs_spaceman_free_queue *fq)
 	fq->sfq_tree_oid = cpu_to_le64(IP_FREE_QUEUE_OID);
 	make_empty_btree_root(IP_FREE_QUEUE_BNO, IP_FREE_QUEUE_OID,
 			      APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE);
-	fq->sfq_oldest_xid = 0;	/* Is this correct? */
+	fq->sfq_oldest_xid = 0;
 	fq->sfq_tree_node_limit = cpu_to_le16(ip_fq_node_limit(sm_info.chunk_count));
 }
 
@@ -366,7 +366,7 @@ static void make_main_free_queue(struct apfs_spaceman_free_queue *fq)
 	fq->sfq_tree_oid = cpu_to_le64(MAIN_FREE_QUEUE_OID);
 	make_empty_btree_root(MAIN_FREE_QUEUE_BNO, MAIN_FREE_QUEUE_OID,
 			      APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE);
-	fq->sfq_oldest_xid = 0;	/* Is this correct? */
+	fq->sfq_oldest_xid = 0;
 	fq->sfq_tree_node_limit = cpu_to_le16(main_fq_node_limit(param->block_count));
 }
 
