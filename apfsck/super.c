@@ -623,8 +623,7 @@ static void parse_cloneinfo_epoch(struct volume_superblock *vsb)
 	/*
 	 * These "cloneinfo" fields are a way to determine if this volume was
 	 * modified by an older, buggy implementation that may have corrupted
-	 * the INODE_WAS_EVER_CLONED flags. I will report that as corruption
-	 * either way, so these checks will also assume that it never happens.
+	 * the INODE_WAS_EVER_CLONED flags.
 	 */
 	id_epoch = le64_to_cpu(raw->apfs_cloneinfo_id_epoch);
 	xid = le64_to_cpu(raw->apfs_cloneinfo_xid);
@@ -642,8 +641,9 @@ static void parse_cloneinfo_epoch(struct volume_superblock *vsb)
 	}
 
 	if (xid) {
+		/* I've never seen this either */
 		if (xid != vsb->v_last_xid)
-			report("Volume superblock", "out of date cloneinfo xid");
+			report_unknown("Out of date cloneinfo xid");
 	}
 
 	/*
