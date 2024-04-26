@@ -416,6 +416,8 @@ static void check_software_information(struct apfs_modified_by *formatted_by,
  */
 static void check_volume_flags(u64 flags)
 {
+	u64 incomp = le64_to_cpu(vsb->v_raw->apfs_incompatible_features);
+
 	if ((flags & APFS_FS_FLAGS_VALID_MASK) != flags)
 		report("Volume superblock", "invalid flag in use.");
 	if (flags & APFS_FS_RESERVED_4)
@@ -430,6 +432,21 @@ static void check_volume_flags(u64 flags)
 		report_unknown("Fusion drive");
 	if (flags & APFS_FS_ALWAYS_CHECK_EXTENTREF)
 		report_unknown("Forced extent reference checks");
+
+	if (flags & APFS_FS_PREVIOUSLY_SEALED)
+		report_unknown("Previously sealed volume");
+	if (flags & APFS_FS_PFK)
+		report_unknown("PFK volume flag");
+	if (flags & APFS_FS_UNKNOWN_200)
+		report_unknown("0x200 volume flag");
+
+	if ((bool)(flags & APFS_FS_PFK) != (bool)(incomp & APFS_INCOMPAT_PFK))
+		report("Volume superblock", "inconsistent PFK bits");
+	if ((bool)(flags & APFS_FS_PREVIOUSLY_SEALED) && (bool)(incomp & APFS_INCOMPAT_SEALED_VOLUME))
+		report("Volume superblock", "both sealed and unsealed");
+	/* Got this check from the official fsck, no idea what it's about */
+	if (!(bool)(flags & APFS_FS_SPILLEDOVER) && (bool)(incomp & APFS_INCOMPAT_SECONDARY_FSROOT))
+		report("Volume superblock", "secondary fsroot wihout spillover");
 }
 
 /**
@@ -466,14 +483,18 @@ static void check_incompat_vol_features(u64 flags)
 {
 	if ((flags & APFS_SUPPORTED_INCOMPAT_MASK) != flags)
 		report("Volume superblock", "unknown incompatible feature.");
-	if (flags & APFS_INCOMPAT_RESERVED_40)
-		report("Volume superblock", "reserved incompatible feature.");
+	if (flags & APFS_INCOMPAT_PFK)
+		report_unknown("PFK incompatible volume feature");
 	if (flags & APFS_INCOMPAT_DATALESS_SNAPS)
 		report_unknown("Dataless snapshots");
 	if (flags & APFS_INCOMPAT_ENC_ROLLED)
 		report_unknown("Change of encryption keys");
 	if (flags & APFS_INCOMPAT_INCOMPLETE_RESTORE)
 		report_unknown("Incomplete restore");
+	if (flags & APFS_INCOMPAT_UNKNOWN_80)
+		report_unknown("0x80 volume incompatible feature");
+	if (flags &  APFS_INCOMPAT_SECONDARY_FSROOT)
+		report_unknown("Secondary fsroot");
 
 	if ((bool)(flags & APFS_INCOMPAT_CASE_INSENSITIVE) &&
 	    (bool)(flags & APFS_INCOMPAT_NORMALIZATION_INSENSITIVE))
@@ -721,6 +742,18 @@ static void parse_integrity_meta(u64 oid)
 }
 
 /**
+ * check_doc_id_index_flags - Check consistency of document id index flags
+ * @flags: the flags
+ */
+static void check_doc_id_index_flags(u32 flags)
+{
+	if ((flags & APFS_DOC_ID_VALID_FLAGS) != flags)
+		report("Document id index", "invalid flag in use.");
+	if (flags)
+		report_unknown("Document id index flags");
+}
+
+/**
  * read_volume_super - Read the volume superblock and run some checks
  * @vol:	volume number
  * @vsb:	volume superblock struct to receive the results
@@ -844,6 +877,8 @@ void read_volume_super(int vol, struct volume_superblock *vsb, struct object *ob
 		report("Volume superblock", "reserved oid is set.");
 
 	parse_volume_group_info();
+
+	check_doc_id_index_flags(le32_to_cpu(vsb->v_raw->apfs_doc_id_index_flags));
 
 	vsb->v_extref_oid = le64_to_cpu(vsb->v_raw->apfs_extentref_tree_oid);
 	vsb->v_omap_oid = le64_to_cpu(vsb->v_raw->apfs_omap_oid);
