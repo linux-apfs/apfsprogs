@@ -491,8 +491,6 @@ static void check_incompat_vol_features(u64 flags)
 		report_unknown("Change of encryption keys");
 	if (flags & APFS_INCOMPAT_INCOMPLETE_RESTORE)
 		report_unknown("Incomplete restore");
-	if (flags & APFS_INCOMPAT_UNKNOWN_80)
-		report_unknown("0x80 volume incompatible feature");
 	if (flags &  APFS_INCOMPAT_SECONDARY_FSROOT)
 		report_unknown("Secondary fsroot");
 
