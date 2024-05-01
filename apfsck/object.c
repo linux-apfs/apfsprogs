@@ -193,9 +193,11 @@ static void *read_object_internal(u64 oid, struct htable_entry **omap_table, str
 		/*
 		 * When a snapshot is deleted, the following one is given its
 		 * physical extents; so its extent reference tree gets altered
-		 * under the current transaction.
+		 * under the current transaction. Sealing a volume also seems
+		 * to make some changes to existing snapshot objects, but I
+		 * haven't looked into it in depth so far (TODO).
 		 */
-		if (!vsb->v_in_snapshot || obj->subtype != APFS_OBJECT_TYPE_BLOCKREFTREE)
+		if (!vsb->v_in_snapshot || (!apfs_volume_is_sealed() && obj->subtype != APFS_OBJECT_TYPE_BLOCKREFTREE))
 			report("Object header", "bad transaction id in block 0x%llx.", (unsigned long long)bno);
 	}
 	if (vsb && vsb->v_first_xid > xid)
