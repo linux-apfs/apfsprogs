@@ -167,7 +167,7 @@ static void check_keybag_plaintext_block(u64 bno)
 {
 	u8 *plain = NULL;
 
-	plain = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, fd, bno * sb->s_blocksize);
+	plain = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, fd_main, bno * sb->s_blocksize);
 	if (plain == MAP_FAILED)
 		system_error();
 
@@ -195,7 +195,7 @@ static void check_keybag_ciphertext_block(u64 bno)
 	 */
 	sector = bno * (sb->s_blocksize / 0x200);
 
-	cipher = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, fd, bno * sb->s_blocksize);
+	cipher = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, fd_main, bno * sb->s_blocksize);
 	if (cipher == MAP_FAILED)
 		system_error();
 
@@ -218,7 +218,7 @@ static bool is_plaintext_obj(u64 bno)
 	void *raw = NULL;
 	bool ret;
 
-	raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, fd, bno * sb->s_blocksize);
+	raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, fd_main, bno * sb->s_blocksize);
 	if (raw == MAP_FAILED)
 		system_error();
 

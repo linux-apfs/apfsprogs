@@ -177,7 +177,7 @@ static void *read_chunk_bitmap(u64 addr, u64 bmap)
 	count = sb->s_blocksize;
 	offset = bmap * sb->s_blocksize;
 	do {
-		read_bytes = pread(fd, buf, count, offset);
+		read_bytes = pread(fd_main, buf, count, offset);
 		if (read_bytes < 0)
 			system_error();
 		buf += read_bytes;
@@ -755,7 +755,7 @@ static void read_ip_bitmap_block(u64 bmap_base, u32 bmap_len, u16 bmap_off, char
 	char *curr_blk = NULL;
 	u64 bno = bmap_base + bmap_off % bmap_len;
 
-	curr_blk = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, fd, bno * sb->s_blocksize);
+	curr_blk = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, fd_main, bno * sb->s_blocksize);
 	if (curr_blk == MAP_FAILED)
 		system_error();
 
@@ -844,7 +844,7 @@ static void check_ip_bitmap_blocks(struct apfs_spaceman_phys *raw)
 		int edge, j;
 
 		bmap = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-			    fd, (bmap_base + i) * sb->s_blocksize);
+			    fd_main, (bmap_base + i) * sb->s_blocksize);
 		if (bmap == MAP_FAILED)
 			system_error();
 

@@ -11,7 +11,8 @@
 extern unsigned int options;		/* Command line options */
 extern struct super_block *sb;		/* Filesystem superblock */
 extern struct volume_superblock *vsb;	/* Volume superblock */
-extern int fd;				/* File descriptor for the device */
+extern int fd_main;			/* File descriptor for the main device */
+extern int fd_tier2;			/* File descriptor for the tier 2 device, if any */
 extern bool ongoing_query;		/* Are we currently running a query? */
 
 /* Option flags */

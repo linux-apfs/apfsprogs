@@ -38,7 +38,7 @@ static void *read_object_nocheck_internal(u64 bno, u32 size, struct object *obj,
 {
 	struct apfs_obj_phys *raw;
 
-	raw = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, bno * sb->s_blocksize);
+	raw = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd_main, bno * sb->s_blocksize);
 	if (raw == MAP_FAILED)
 		system_error();
 

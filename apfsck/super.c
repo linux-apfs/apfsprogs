@@ -76,7 +76,7 @@ static struct apfs_nx_superblock *read_super_copy(void)
 	bsize_tmp = APFS_NX_DEFAULT_BLOCK_SIZE;
 
 	msb_raw = mmap(NULL, bsize_tmp, PROT_READ, MAP_PRIVATE,
-		       fd, APFS_NX_BLOCK_NUM * bsize_tmp);
+		       fd_main, APFS_NX_BLOCK_NUM * bsize_tmp);
 	if (msb_raw == MAP_FAILED)
 		system_error();
 	sb->s_blocksize = le32_to_cpu(msb_raw->nx_block_size);
@@ -86,7 +86,7 @@ static struct apfs_nx_superblock *read_super_copy(void)
 		munmap(msb_raw, bsize_tmp);
 
 		msb_raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-			       fd, APFS_NX_BLOCK_NUM * sb->s_blocksize);
+			       fd_main, APFS_NX_BLOCK_NUM * sb->s_blocksize);
 		if (msb_raw == MAP_FAILED)
 			system_error();
 	}
@@ -118,7 +118,7 @@ static struct apfs_nx_superblock *read_latest_super(u64 base, u32 blocks)
 		struct apfs_nx_superblock *current;
 
 		current = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-			       fd, bno * sb->s_blocksize);
+			       fd_main, bno * sb->s_blocksize);
 		if (current == MAP_FAILED)
 			system_error();
 
@@ -166,23 +166,41 @@ static void main_super_compare(struct apfs_nx_superblock *desc,
 }
 
 /**
- * get_device_size - Get the block count of the device or image being checked
- * @blocksize: the filesystem blocksize
+ * get_device_size - Get the block count for a given device or image
+ * @device_fd:	file descriptor for the device
+ * @blocksize:	the filesystem blocksize
  */
-static u64 get_device_size(unsigned int blocksize)
+static u64 get_device_size(int device_fd, unsigned int blocksize)
 {
 	struct stat buf;
 	u64 size;
 
-	if (fstat(fd, &buf))
+	if (fstat(device_fd, &buf))
 		system_error();
 
 	if ((buf.st_mode & S_IFMT) == S_IFREG)
 		return buf.st_size / blocksize;
 
-	if (ioctl(fd, BLKGETSIZE64, &size))
+	if (ioctl(device_fd, BLKGETSIZE64, &size))
 		system_error();
 	return size / blocksize;
+}
+
+static u64 get_main_device_size(unsigned int blocksize)
+{
+	return get_device_size(fd_main, blocksize);
+}
+
+static u64 get_tier2_device_size(unsigned int blocksize)
+{
+	if (fd_tier2 == -1)
+		return 0;
+	return get_device_size(fd_tier2, blocksize);
+}
+
+static u64 get_total_device_size(unsigned int blocksize)
+{
+	return get_main_device_size(blocksize) + get_tier2_device_size(blocksize);
 }
 
 /**
@@ -1165,7 +1183,7 @@ static void parse_main_super(struct super_block *sb)
 	sb->s_block_count = le64_to_cpu(sb->s_raw->nx_block_count);
 	if (!sb->s_block_count)
 		report("Container superblock", "reports no block count.");
-	if (sb->s_block_count > get_device_size(sb->s_blocksize))
+	if (sb->s_block_count > get_total_device_size(sb->s_blocksize))
 		report("Container superblock", "too many blocks for device.");
 
 	/*

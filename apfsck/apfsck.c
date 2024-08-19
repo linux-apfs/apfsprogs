@@ -13,7 +13,8 @@
 #include "super.h"
 #include "version.h"
 
-int fd;
+int fd_main;
+int fd_tier2 = -1;
 unsigned int options;
 static bool weird_state;
 static char *progname;
@@ -23,7 +24,7 @@ static char *progname;
  */
 static void usage(void)
 {
-	fprintf(stderr, "usage: %s [-cuvw] device\n", progname);
+	fprintf(stderr, "usage: %s [-cuvw] [-F tier2] device\n", progname);
 	exit(1);
 }
 
@@ -123,7 +124,7 @@ int main(int argc, char *argv[])
 
 	progname = argv[0];
 	while (1) {
-		int opt = getopt(argc, argv, "cuvw");
+		int opt = getopt(argc, argv, "cuvwF:");
 
 		if (opt == -1)
 			break;
@@ -140,6 +141,11 @@ int main(int argc, char *argv[])
 			break;
 		case 'v':
 			version();
+		case 'F':
+			fd_tier2 = open(optarg, O_RDONLY);
+			if (fd_tier2 == -1)
+				system_error();
+			break;
 		default:
 			usage();
 		}
@@ -149,8 +155,8 @@ int main(int argc, char *argv[])
 		usage();
 	filename = argv[optind];
 
-	fd = open(filename, O_RDONLY);
-	if (fd == -1)
+	fd_main = open(filename, O_RDONLY);
+	if (fd_main == -1)
 		system_error();
 
 	parse_filesystem();
