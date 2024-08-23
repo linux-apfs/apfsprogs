@@ -58,6 +58,11 @@ static int node_min_table_size(struct node *node)
 		val_size = leaf ? sizeof(struct apfs_fext_tree_val) : sizeof(__le64);
 		toc_size = sizeof(struct apfs_kvoff);
 		break;
+	case APFS_OBJECT_TYPE_FUSION_MIDDLE_TREE:
+		key_size = sizeof(struct apfs_fusion_mt_key);
+		val_size = leaf ? sizeof(struct apfs_fusion_mt_val) : sizeof(__le64);
+		toc_size = sizeof(struct apfs_kvoff);
+		break;
 	default:
 		/* It should at least have room for one record */
 		return sizeof(struct apfs_kvloc);
@@ -875,6 +880,8 @@ static void parse_subtree(struct node *root,
 		report("Omap snapshot tree", "key size should be fixed.");
 	if (btree_is_fext(btree) && !node_has_fixed_kv_size(root))
 		report("File extents tree", "key size should be fixed.");
+	if (btree_is_fusion_mt(btree) && !node_has_fixed_kv_size(root))
+		report("Fusion middle-tree", "key size should be fixed.");
 
 	/* This makes little sense, but it appears to be true */
 	if (btree_is_extentref(btree) && node_has_fixed_kv_size(root))
@@ -1020,7 +1027,7 @@ static void check_btree_footer_flags(u32 flags, struct btree *btree, char *ctx)
 		report(ctx, "nonpersistent flag is set.");
 
 	/* TODO: are these really the only allowed settings for the flag? */
-	aligned = btree_is_omap(btree) || btree_is_free_queue(btree) || btree_is_snapshots(btree) || btree_is_fext(btree);
+	aligned = btree_is_omap(btree) || btree_is_free_queue(btree) || btree_is_snapshots(btree) || btree_is_fext(btree) || btree_is_fusion_mt(btree);
 	if (aligned != !(flags & APFS_BTREE_KV_NONALIGNED))
 		report(ctx, "wrong alignment flag.");
 
@@ -1072,6 +1079,9 @@ static void check_btree_footer(struct btree *btree)
 		break;
 	case BTREE_TYPE_FEXT:
 		ctx = "File extents tree";
+		break;
+	case BTREE_TYPE_FUSION_MT:
+		ctx = "Fusion middle-tree";
 		break;
 	default:
 		report(NULL, "Bug!");
@@ -1152,6 +1162,23 @@ static void check_btree_footer(struct btree *btree)
 		if (le32_to_cpu(info->bt_longest_key) != sizeof(struct apfs_fext_tree_key))
 			report(ctx, "wrong maximum key size in info footer.");
 		if (le32_to_cpu(info->bt_longest_val) != sizeof(struct apfs_fext_tree_val))
+			report(ctx, "wrong maximum value size in info footer.");
+		return;
+	}
+
+	if (btree_is_fusion_mt(btree)) {
+		u32 longest_key = le32_to_cpu(info->bt_longest_key);
+		u32 longest_val = le32_to_cpu(info->bt_longest_val);
+
+		if (le32_to_cpu(info->bt_fixed.bt_key_size) != sizeof(struct apfs_fusion_mt_key))
+			report(ctx, "wrong key size in info footer.");
+		if (le32_to_cpu(info->bt_fixed.bt_val_size) != sizeof(struct apfs_fusion_mt_val))
+			report(ctx, "wrong value size in info footer.");
+
+		/* The fusion middle-tree may be empty */
+		if ((longest_key || btree->key_count) && longest_key != sizeof(struct apfs_fusion_mt_key))
+			report(ctx, "wrong maximum key size in info footer.");
+		if ((longest_val || btree->key_count) && longest_val != sizeof(struct apfs_fusion_mt_val))
 			report(ctx, "wrong maximum value size in info footer.");
 		return;
 	}
@@ -1400,6 +1427,36 @@ struct btree *parse_omap_btree(u64 oid)
 	check_btree_footer(omap);
 	munmap(raw, obj.size);
 	return omap;
+}
+
+/**
+ * parse_fusion_middle_tree - Parse a fusion mt and check for corruption
+ * @oid:	object id for the fusion middle-tree
+ *
+ * Returns a pointer to the btree struct for the fusion middle-tree.
+ */
+struct btree *parse_fusion_middle_tree(u64 oid)
+{
+	struct btree *mt = NULL;
+	struct key last_key = {0};
+
+	if (apfs_is_fusion_drive() != (bool)oid)
+		report("Fusion middle-tree", "oid incorrectly set/unset.");
+	if (!oid)
+		return NULL;
+
+	mt = calloc(1, sizeof(*mt));
+	if (!mt)
+		system_error();
+
+	mt->type = BTREE_TYPE_FUSION_MT;
+	mt->omap_table = NULL;
+	mt->root = read_node(oid, mt, NULL /* hash */);
+
+	parse_subtree(mt->root, &last_key, NULL);
+
+	check_btree_footer(mt);
+	return mt;
 }
 
 /**

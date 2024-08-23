@@ -297,7 +297,7 @@ static void verify_dstream_info_hash(struct listed_hash *info, struct dstream *d
 		if (bno == 0) /* A hole */
 			block = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 		else
-			block = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, fd_main, bno * sb->s_blocksize);
+			block = apfs_mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, bno * sb->s_blocksize);
 		if (block == MAP_FAILED)
 			system_error();
 

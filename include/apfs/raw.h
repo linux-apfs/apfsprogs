@@ -747,7 +747,7 @@ struct apfs_spaceman_device {
 } __packed;
 
 /* Indexes for a device array */
-enum {
+enum smdev {
 	APFS_SD_MAIN	= 0,
 	APFS_SD_TIER2	= 1,
 	APFS_SD_COUNT	= 2
@@ -1537,5 +1537,58 @@ struct apfs_compress_rsrc_data {
 		__le32 size;
 	} __packed block[0];
 } __packed;
+
+struct apfs_fusion_wbc_phys {
+	struct apfs_obj_phys fwp_objHdr;
+	__le64 fwp_version;
+	__le64 fwp_listHeadOid;
+	__le64 fwp_listTailOid;
+	__le64 fwp_stableHeadOffset;
+	__le64 fwp_stableTailOffset;
+	__le32 fwp_listBlocksCount;
+	__le32 fwp_reserved;
+	__le64 fwp_usedByRC;
+	struct apfs_prange fwp_rcStash;;
+} __packed;
+
+struct apfs_fusion_wbc_list_entry {
+	__le64 fwle_wbcLba;
+	__le64 fwle_targetLba;
+	__le64 fwle_length;
+} __packed;
+
+struct apfs_fusion_wbc_list_phys {
+	struct apfs_obj_phys fwlp_objHdr;
+	__le64 fwlp_version;
+	__le64 fwlp_tailOffset;
+	__le32 fwlp_indexBegin;
+	__le32 fwlp_indexEnd;
+	__le32 fwlp_indexMax;
+	__le32 fwlp_reserved;
+	struct apfs_fusion_wbc_list_entry fwlp_listEntries[];
+} __packed;
+
+#define APFS_FUSION_TIER2_DEVICE_BYTE_ADDR	0x4000000000000000ULL
+
+/*
+ * Structure of a key in a fusion middle-tree
+ */
+struct apfs_fusion_mt_key {
+	__le64 fmk_paddr;
+} __packed;
+
+/*
+ * Structure of a value in a fusion middle-tree
+ */
+struct apfs_fusion_mt_val {
+	__le64 fmv_lba;
+	__le32 fmv_length;
+	__le32 fmv_flags;
+} __packed;
+
+/* Flags for the fusion middle-tree */
+#define APFS_FUSION_MT_DIRTY	(1 << 0)
+#define APFS_FUSION_MT_TENANT	(1 << 1)
+#define APFS_FUSION_MT_ALLFLAGS	(FUSION_MT_DIRTY | FUSION_MT_TENANT)
 
 #endif	/* _RAW_H */

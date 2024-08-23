@@ -139,6 +139,66 @@ static struct apfs_nx_superblock *read_latest_super(u64 base, u32 blocks)
 }
 
 /**
+ * fusion_super_check - Check the superblock copy on the tier 2 device
+ * @mainsb: superblock copy in block zero of the main device
+ */
+static void fusion_super_compare(struct apfs_nx_superblock *mainsb)
+{
+	struct apfs_nx_superblock *tier2sb = NULL;
+	size_t to_read;
+	off_t offset;
+	ssize_t ret;
+
+	if (!apfs_is_fusion_drive())
+		return;
+
+	tier2sb = calloc(1, sb->s_blocksize);
+	if (!tier2sb)
+		system_error();
+
+	to_read = sb->s_blocksize;
+	offset = 0;
+	do {
+		ret = pread(fd_tier2, (void *)tier2sb + offset, to_read, offset);
+		if (ret < 0)
+			system_error();
+		to_read -= ret;
+		offset += ret;
+	} while (ret > 0);
+	if (to_read > 0)
+		report("Fusion drive", "tier 2 is too small.");
+
+	if (tier2sb->nx_o.o_xid != mainsb->nx_o.o_xid) {
+		report_crash("Block zero of tier 2 device");
+		return;
+	}
+	if (!obj_verify_csum(&tier2sb->nx_o))
+		report("Block zero of tier 2 device", "bad checksum.");
+
+	/*
+	 * The reference seems to have this backwards: the main device has the
+	 * bit set to zero, and the tier 2 set to 1. It's also not clear to me
+	 * what the meant by "the highest bit".
+	 */
+	if (sb->s_fusion_uuid[15] & 0x01)
+		report("Fusion driver", "wrong top bit for main device uuid.");
+	if (!(tier2sb->nx_fusion_uuid[15] & 0x01))
+		report("Fusion driver", "wrong top bit for tier 2 device uuid.");
+
+	/*
+	 * Both superblocks should be the same outside of that one bit (and
+	 * the checksum, of course).
+	 */
+	tier2sb->nx_fusion_uuid[15] &= ~0x01;
+	tier2sb->nx_o.o_cksum = mainsb->nx_o.o_cksum;
+	if (memcmp(mainsb, tier2sb, sb->s_blocksize))
+		report("Block zero", "fields don't match the checkpoint.");
+
+	free(tier2sb);
+	tier2sb = NULL;
+}
+
+/**
  * main_super_compare - Compare two copies of the container superblock
  * @desc: the superblock from the latest checkpoint
  * @copy: the superblock copy in block zero
@@ -193,14 +253,20 @@ static u64 get_main_device_size(unsigned int blocksize)
 
 static u64 get_tier2_device_size(unsigned int blocksize)
 {
+	u64 size;
+
 	if (fd_tier2 == -1)
 		return 0;
-	return get_device_size(fd_tier2, blocksize);
-}
+	size = get_device_size(fd_tier2, blocksize);
 
-static u64 get_total_device_size(unsigned int blocksize)
-{
-	return get_main_device_size(blocksize) + get_tier2_device_size(blocksize);
+	/*
+	 * I might later check the size to decide if the device exists, so
+	 * make sure this is always sane.
+	 */
+	if (size == 0)
+		report("Fusion drive", "tier 2 has size zero.");
+
+	return size;
 }
 
 /**
@@ -242,8 +308,11 @@ static void check_optional_main_features(u64 flags)
 		report("Container superblock", "unknown optional feature.");
 	if (flags & APFS_NX_FEATURE_DEFRAG)
 		report_unknown("Defragmentation");
-	if (flags & APFS_NX_FEATURE_LCFD)
-		report_unknown("Low-capacity fusion drive");
+	if (flags & APFS_NX_FEATURE_LCFD) {
+		/* TODO: what is this flag exactly? */
+		if (!apfs_is_fusion_drive())
+			report("Container superblock", "LCFD flag set on non-fusion drive.");
+	}
 }
 
 /**
@@ -268,8 +337,8 @@ static void check_incompat_main_features(u64 flags)
 		report_unknown("APFS version 1");
 	if (!(flags & APFS_NX_INCOMPAT_VERSION2))
 		report_unknown("APFS versions other than 2");
-	if (flags & APFS_NX_INCOMPAT_FUSION)
-		report_unknown("Fusion drive");
+	if ((bool)(flags & APFS_NX_INCOMPAT_FUSION) != (bool)(fd_tier2 != -1))
+		report("Container superblock", "bad setting for fusion flag.");
 }
 
 /**
@@ -447,7 +516,7 @@ static void check_volume_flags(u64 flags)
 		report("Volume superblock", "inconsistent crypto flags.");
 
 	if (flags & (APFS_FS_SPILLEDOVER | APFS_FS_RUN_SPILLOVER_CLEANER))
-		report_unknown("Fusion drive");
+		report_unknown("Fusion drive spillover");
 	if (flags & APFS_FS_ALWAYS_CHECK_EXTENTREF)
 		report_unknown("Forced extent reference checks");
 
@@ -1106,6 +1175,9 @@ void check_volume_super(void)
 	}
 }
 
+static struct object *parse_fusion_wbc_state(u64 oid);
+static void check_fusion_wbc(u64 bno, u64 blkcnt);
+
 /**
  * check_container - Check the whole container for a given checkpoint
  * @sb: checkpoint superblock
@@ -1121,6 +1193,11 @@ static void check_container(struct super_block *sb)
 	sb->s_omap = parse_omap_btree(le64_to_cpu(sb->s_raw->nx_omap_oid));
 	/* ...and in the reaper */
 	sb->s_reaper = parse_reaper(le64_to_cpu(sb->s_raw->nx_reaper_oid));
+
+	/* Check the fusion structures now */
+	sb->s_fusion_mt = parse_fusion_middle_tree(le64_to_cpu(sb->s_raw->nx_fusion_mt_oid));
+	sb->s_fusion_wbc = parse_fusion_wbc_state(le64_to_cpu(sb->s_raw->nx_fusion_wbc_oid));
+	check_fusion_wbc(le64_to_cpu(sb->s_raw->nx_fusion_wbc.pr_start_paddr), le64_to_cpu(sb->s_raw->nx_fusion_wbc.pr_block_count));
 
 	for (vol = 0; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol) {
 		struct apfs_superblock *vsb_raw;
@@ -1165,8 +1242,7 @@ static void check_container(struct super_block *sb)
  */
 static void parse_main_super(struct super_block *sb)
 {
-	u64 chunk_count;
-	int i;
+	u64 main_chunk_count, tier2_chunk_count;
 
 	assert(sb->s_raw);
 
@@ -1183,18 +1259,27 @@ static void parse_main_super(struct super_block *sb)
 	sb->s_block_count = le64_to_cpu(sb->s_raw->nx_block_count);
 	if (!sb->s_block_count)
 		report("Container superblock", "reports no block count.");
-	if (sb->s_block_count > get_total_device_size(sb->s_blocksize))
+	sb->s_main_blkcnt = get_main_device_size(sb->s_blocksize);
+	sb->s_tier2_blkcnt = get_tier2_device_size(sb->s_blocksize);
+	if (sb->s_block_count > sb->s_main_blkcnt + sb->s_tier2_blkcnt)
 		report("Container superblock", "too many blocks for device.");
 
 	/*
 	 * A chunk is the disk section covered by a single block in the
 	 * allocation bitmap.
 	 */
-	chunk_count = DIV_ROUND_UP(sb->s_block_count, 8 * sb->s_blocksize);
-	sb->s_bitmap = calloc(chunk_count, sb->s_blocksize);
-	if (!sb->s_bitmap)
+	main_chunk_count = DIV_ROUND_UP(sb->s_main_blkcnt, 8 * sb->s_blocksize);
+	sb->s_main_bitmap = calloc(main_chunk_count, sb->s_blocksize);
+	if (!sb->s_main_bitmap)
 		system_error();
-	((char *)sb->s_bitmap)[0] = 0x01; /* Block zero is always used */
+	((char *)sb->s_main_bitmap)[0] = 0x01; /* Block zero is always used */
+	if (sb->s_tier2_blkcnt) {
+		tier2_chunk_count = DIV_ROUND_UP(sb->s_tier2_blkcnt, 8 * sb->s_blocksize);
+		sb->s_tier2_bitmap = calloc(tier2_chunk_count, sb->s_blocksize);
+		if (!sb->s_tier2_bitmap)
+			system_error();
+		((char *)sb->s_tier2_bitmap)[0] = 0x01; /* Block zero is always used */
+	}
 
 	sb->s_max_vols = get_max_volumes(sb->s_block_count * sb->s_blocksize);
 	if (sb->s_max_vols != le32_to_cpu(sb->s_raw->nx_max_file_systems))
@@ -1235,20 +1320,14 @@ static void parse_main_super(struct super_block *sb)
 	check_efi_information(le64_to_cpu(sb->s_raw->nx_efi_jumpstart));
 	check_ephemeral_information(&sb->s_raw->nx_ephemeral_info[0]);
 
-	for (i = 0; i < 16; ++i) {
-		if (sb->s_raw->nx_fusion_uuid[i])
-			report_unknown("Fusion drive");
-	}
+	if (uuid_is_null(sb->s_raw->nx_fusion_uuid) != !apfs_is_fusion_drive())
+		report("Container superblock", "incorrect fusion uuid.");
+	memcpy(sb->s_fusion_uuid, sb->s_raw->nx_fusion_uuid, sizeof(sb->s_fusion_uuid));
 
 	/* Containers with no encryption may still have a value here, why? */
 	check_keybag(le64_to_cpu(sb->s_raw->nx_keylocker.pr_start_paddr), le64_to_cpu(sb->s_raw->nx_keylocker.pr_block_count));
 	/* TODO: actually check all this stuff */
 	container_bmap_mark_as_used(le64_to_cpu(sb->s_raw->nx_mkb_locker.pr_start_paddr), le64_to_cpu(sb->s_raw->nx_mkb_locker.pr_block_count));
-
-	if (sb->s_raw->nx_fusion_mt_oid || sb->s_raw->nx_fusion_wbc_oid ||
-	    sb->s_raw->nx_fusion_wbc.pr_start_paddr ||
-	    sb->s_raw->nx_fusion_wbc.pr_block_count)
-		report_unknown("Fusion drive");
 
 	sb->s_next_oid = le64_to_cpu(sb->s_raw->nx_next_oid);
 	if (sb->s_xid + 1 != le64_to_cpu(sb->s_raw->nx_next_xid))
@@ -1412,7 +1491,10 @@ void parse_filesystem(void)
 			munmap(sb->s_raw, sb->s_blocksize);
 		sb->s_raw = NULL;
 		sb->s_xid = 0;
-		free(sb->s_bitmap);
+		free(sb->s_main_bitmap);
+		sb->s_main_bitmap = NULL;
+		free(sb->s_tier2_bitmap);
+		sb->s_tier2_bitmap = NULL;
 
 		/* The checkpoint-mapping blocks come before the superblock */
 		map_blocks = parse_cpoint_map_blocks(desc_base, desc_blocks,
@@ -1457,6 +1539,7 @@ void parse_filesystem(void)
 	if (!sb->s_raw)
 		report("Checkpoint descriptor area", "no valid superblocks.");
 	main_super_compare(sb->s_raw, msb_raw_copy);
+	fusion_super_compare(msb_raw_copy);
 	munmap(msb_raw_copy, sb->s_blocksize);
 }
 
@@ -1543,4 +1626,74 @@ static struct object *parse_reaper(u64 oid)
 
 	munmap(raw, reaper->size);
 	return reaper;
+}
+
+/**
+ * parse_fusion_wbc_list - Parse and check the whole list of wbc entries
+ * @head_oid:	first list block oid
+ * @tail_oid:	last list block oid
+ * @version:	fusion wbc version
+ */
+static void parse_fusion_wbc_list(u64 head_oid, u64 tail_oid, u64 version)
+{
+	if (head_oid || tail_oid)
+		report_unknown("Nonempty fusion wb cache");
+}
+
+/**
+ * parse_fusion_wbc_state - Parse the fusion wbc state and check for corruption
+ * @oid: object id for the fusion write-back cache state
+ *
+ * Returns a pointer to the object struct for the wbc.
+ */
+static struct object *parse_fusion_wbc_state(u64 oid)
+{
+	struct apfs_fusion_wbc_phys *wbc = NULL;
+	struct object *obj = NULL;
+
+	if (apfs_is_fusion_drive() != (bool)oid)
+		report("Fusion wb cache", "oid incorrectly set/unset.");
+	if (!oid)
+		return NULL;
+
+	obj = calloc(1, sizeof(*obj));
+	if (!obj)
+		system_error();
+
+	wbc = read_ephemeral_object(oid, obj);
+	if (obj->type != APFS_OBJECT_TYPE_NX_FUSION_WBC)
+		report("Fusion wb cache", "wrong object type.");
+	if (obj->subtype != APFS_OBJECT_TYPE_INVALID)
+		report("Fusion wb cache", "wrong object subtype.");
+
+	if (le64_to_cpu(wbc->fwp_version) != 0x70)
+		report_unknown("Unknown version of fusion wb cache");
+	if (wbc->fwp_reserved)
+		report("Fusion wb cache", "reserved field in use.");
+
+	parse_fusion_wbc_list(le64_to_cpu(wbc->fwp_listHeadOid), le64_to_cpu(wbc->fwp_listTailOid), le64_to_cpu(wbc->fwp_version));
+	if (wbc->fwp_stableHeadOffset || wbc->fwp_stableTailOffset || wbc->fwp_listBlocksCount || wbc->fwp_usedByRC)
+		report_unknown("Nonempty fusion wb cache");
+	if (wbc->fwp_rcStash.pr_start_paddr || wbc->fwp_rcStash.pr_block_count)
+		report_unknown("Nonempty fusion wb cache");
+
+	munmap(wbc, obj->size);
+	return obj;
+}
+
+/**
+ * check_fusion_wbc - Check the address range for the wb cache
+ * @bno:	first block of the wb cache
+ * @blkcnt:	block count of the cache
+ */
+static void check_fusion_wbc(u64 bno, u64 blkcnt)
+{
+	if (!apfs_is_fusion_drive()) {
+		if (bno || blkcnt)
+			report("Fusion wb cache", "should not exist.");
+		return;
+	}
+	if (!bno || !blkcnt)
+		report("Fusion wb cache", "should exist.");
+	container_bmap_mark_as_used(bno, blkcnt);
 }

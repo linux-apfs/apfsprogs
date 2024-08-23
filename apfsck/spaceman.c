@@ -96,11 +96,22 @@ void ip_bmap_mark_as_used(u64 paddr, u64 length)
  */
 void container_bmap_mark_as_used(u64 paddr, u64 length)
 {
+	u64 tier2_blkno, dev_blkcnt;
+	bool tier2;
+	void *bitmap = NULL;
+
+	tier2_blkno = APFS_FUSION_TIER2_DEVICE_BYTE_ADDR >> sb->s_blocksize_bits;
+	tier2 = paddr >= tier2_blkno;
+	if (tier2)
+		paddr -= tier2_blkno;
+	dev_blkcnt = tier2 ? sb->s_tier2_blkcnt : sb->s_main_blkcnt;
+	bitmap = tier2 ? sb->s_tier2_bitmap : sb->s_main_bitmap;
+
 	/* Avoid out-of-bounds writes to the allocation bitmap */
-	if (paddr + length > sb->s_block_count || paddr + length < paddr)
+	if (paddr + length > dev_blkcnt || paddr + length < paddr)
 		report(NULL /* context */, "Out-of-range block number.");
 
-	bmap_mark_as_used(sb->s_bitmap, paddr, length);
+	bmap_mark_as_used(bitmap, paddr, length);
 }
 
 /**
@@ -108,8 +119,7 @@ void container_bmap_mark_as_used(u64 paddr, u64 length)
  * @raw: pointer to the raw spaceman structure
  *
  * Checks the counts of blocks per chunk, chunks per cib, and cibs per cab, and
- * reads them into the in-memory container superblock.  Also calculates the
- * total number of chunks and cibs in the container.
+ * reads them into the in-memory container superblock.
  */
 static void parse_spaceman_chunk_counts(struct apfs_spaceman_phys *raw)
 {
@@ -130,29 +140,18 @@ static void parse_spaceman_chunk_counts(struct apfs_spaceman_phys *raw)
 	sm->sm_cibs_per_cab = (sb->s_blocksize - cab_size) / sizeof(__le64);
 	if (le32_to_cpu(raw->sm_cibs_per_cab) != sm->sm_cibs_per_cab)
 		report("Space manager", "wrong count of cibs per cab.");
-
-	sm->sm_chunk_count = DIV_ROUND_UP(sb->s_block_count,
-					  sm->sm_blocks_per_chunk);
-	sm->sm_cib_count = DIV_ROUND_UP(sm->sm_chunk_count,
-					sm->sm_chunks_per_cib);
-	sm->sm_cab_count = DIV_ROUND_UP(sm->sm_cib_count, sm->sm_cibs_per_cab);
-	/* CABs are not used unless at least one can be filled */
-	if (sm->sm_cab_count == 1)
-		sm->sm_cab_count = 0;
-
-	if ((sm->sm_chunk_count + sm->sm_cib_count + sm->sm_cab_count) * 3 != sm->sm_ip_block_count)
-		report("Space manager", "wrong size of internal pool.");
 }
 
 /**
  * read_chunk_bitmap - Read a chunk's bitmap into memory
  * @addr: first block number for the chunk
  * @bmap: block number for the chunk's bitmap, or zero if the chunk is all free
+ * @dev: device that owns this chunk
  *
  * Returns a pointer to the chunk's bitmap, read into its proper position
  * within the in-memory bitmap for the container.
  */
-static void *read_chunk_bitmap(u64 addr, u64 bmap)
+static void *read_chunk_bitmap(u64 addr, u64 bmap, struct spaceman_device *dev)
 {
 	struct spaceman *sm = &sb->s_spaceman;
 	ssize_t read_bytes;
@@ -161,7 +160,7 @@ static void *read_chunk_bitmap(u64 addr, u64 bmap)
 	off_t offset;
 	u32 chunk_number;
 
-	assert(sm->sm_bitmap);
+	assert(dev->sm_bitmap);
 
 	/* Prevent out-of-bounds writes to sm->sm_bitmap */
 	if (addr & (sm->sm_blocks_per_chunk - 1))
@@ -170,14 +169,14 @@ static void *read_chunk_bitmap(u64 addr, u64 bmap)
 	if (addr >= sb->s_block_count)
 		report("Chunk-info", "chunk address is out of bounds.");
 
-	ret = buf = sm->sm_bitmap + chunk_number * sb->s_blocksize;
+	ret = buf = dev->sm_bitmap + chunk_number * sb->s_blocksize;
 	if (!bmap) /* The whole chunk is free, so leave this block as zero */
 		return ret;
 
 	count = sb->s_blocksize;
 	offset = bmap * sb->s_blocksize;
 	do {
-		read_bytes = pread(fd_main, buf, count, offset);
+		read_bytes = apfs_pread(buf, count, offset);
 		if (read_bytes < 0)
 			system_error();
 		buf += read_bytes;
@@ -212,11 +211,11 @@ static int count_chunk_free(void *bmap, u32 blks)
  * @is_last:	is this the last chunk of the device?
  * @start:	expected first block number for the chunk
  * @xid:	on return, the transaction id of the chunk
+ * @dev:	device that owns this chunk
  *
  * Returns the first block number for the next chunk.
  */
-static u64 parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last,
-			    u64 start, u64 *xid)
+static u64 parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last, u64 start, u64 *xid, struct spaceman_device *dev)
 {
 	struct spaceman *sm = &sb->s_spaceman;
 	u32 block_count;
@@ -230,16 +229,16 @@ static u64 parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last,
 		report("Chunk-info", "too many blocks.");
 	if (!is_last && block_count != sm->sm_blocks_per_chunk)
 		report("Chunk-info", "too few blocks.");
-	sm->sm_blocks += block_count;
+	dev->sm_blocks += block_count;
 
 	if (le64_to_cpu(chunk->ci_addr) != start)
 		report("Chunk-info block", "chunks are not consecutive.");
-	bitmap = read_chunk_bitmap(start, le64_to_cpu(chunk->ci_bitmap_addr));
+	bitmap = read_chunk_bitmap(start, le64_to_cpu(chunk->ci_bitmap_addr), dev);
 
 	free_count = le32_to_cpu(chunk->ci_free_count);
 	if (free_count != count_chunk_free(bitmap, block_count))
 		report("Chunk-info", "wrong count of free blocks.");
-	sm->sm_free += free_count;
+	dev->sm_free += free_count;
 
 	*xid = le64_to_cpu(chunk->ci_xid);
 	if (!*xid)
@@ -253,16 +252,17 @@ static u64 parse_chunk_info(struct apfs_chunk_info *chunk, bool is_last,
  * @index:	index of the chunk-info block
  * @start:	expected first block number for the first chunk
  * @xid_p:	on return, the transaction id of the cib (ignored if NULL)
+ * @dev:	device that owns this cib
  *
  * Returns the first block number for the first chunk of the next cib.
  */
-static u64 parse_chunk_info_block(u64 bno, u32 index, u64 start, u64 *xid_p)
+static u64 parse_chunk_info_block(u64 bno, u32 index, u64 start, u64 *xid_p, struct spaceman_device *dev)
 {
 	struct spaceman *sm = &sb->s_spaceman;
 	struct object obj;
 	struct apfs_chunk_info_block *cib;
 	u32 chunk_count;
-	bool last_cib = index == sm->sm_cib_count - 1;
+	bool last_cib = index == dev->sm_cib_count - 1;
 	u64 max_chunk_xid = 0;
 	int i;
 
@@ -284,7 +284,7 @@ static u64 parse_chunk_info_block(u64 bno, u32 index, u64 start, u64 *xid_p)
 		report("Chunk-info block", "too many chunks.");
 	if (!last_cib && chunk_count != sm->sm_chunks_per_cib)
 		report("Chunk-info block", "too few chunks.");
-	sm->sm_chunks += chunk_count;
+	dev->sm_chunks += chunk_count;
 
 	for (i = 0; i < chunk_count; ++i) {
 		bool last_block = false;
@@ -292,8 +292,7 @@ static u64 parse_chunk_info_block(u64 bno, u32 index, u64 start, u64 *xid_p)
 
 		if (last_cib && i == chunk_count - 1)
 			last_block = true;
-		start = parse_chunk_info(&cib->cib_chunk_info[i], last_block,
-					 start, &chunk_xid);
+		start = parse_chunk_info(&cib->cib_chunk_info[i], last_block, start, &chunk_xid, dev);
 
 		if (chunk_xid > obj.xid)
 			report("Chunk-info", "xid is too recent.");
@@ -314,16 +313,17 @@ static u64 parse_chunk_info_block(u64 bno, u32 index, u64 start, u64 *xid_p)
  * @bno:	block number of the chunk-info address block
  * @index:	index of the chunk-info address block
  * @start:	expected first block number for the first chunk
+ * @dev:	device that owns this cab
  *
  * Returns the first block number for the first chunk of the next cab.
  */
-static u64 parse_cib_addr_block(u64 bno, u32 index, u64 start)
+static u64 parse_cib_addr_block(u64 bno, u32 index, u64 start, struct spaceman_device *dev)
 {
 	struct spaceman *sm = &sb->s_spaceman;
 	struct object obj;
 	struct apfs_cib_addr_block *cab = NULL;
 	u32 cib_count;
-	bool last_cab = index == sm->sm_cab_count - 1;
+	bool last_cab = index == dev->sm_cab_count - 1;
 	u64 max_cib_xid = 0;
 	int i;
 
@@ -345,12 +345,12 @@ static u64 parse_cib_addr_block(u64 bno, u32 index, u64 start)
 		report("Cib address block", "too many cibs.");
 	if (!last_cab && cib_count != sm->sm_cibs_per_cab)
 		report("Cib address block", "too few cibs.");
-	sm->sm_cibs += cib_count;
+	dev->sm_cibs += cib_count;
 
 	for (i = 0; i < cib_count; ++i) {
 		u64 cib_xid;
 
-		start = parse_chunk_info_block(le64_to_cpu(cab->cab_cib_addr[i]), sm->sm_cibs_per_cab * index + i, start, &cib_xid);
+		start = parse_chunk_info_block(le64_to_cpu(cab->cab_cib_addr[i]), sm->sm_cibs_per_cab * index + i, start, &cib_xid, dev);
 
 		if (cib_xid > obj.xid)
 			report("Chunk-info block", "xid is too recent.");
@@ -439,79 +439,80 @@ static char *spaceman_256_from_off(struct apfs_spaceman_phys *raw, u32 offset)
 }
 
 /**
- * parse_spaceman_main_device - Parse and check the spaceman main device struct
- * @raw: pointer to the raw space manager
+ * parse_spaceman_device - Parse and check a spaceman's device struct
+ * @raw:	pointer to the raw space manager
+ * @which:	device to check
  */
-static void parse_spaceman_main_device(struct apfs_spaceman_phys *raw)
+static void parse_spaceman_device(struct apfs_spaceman_phys *raw, enum smdev which)
 {
 	struct spaceman *sm = &sb->s_spaceman;
-	struct apfs_spaceman_device *dev = &raw->sm_dev[APFS_SD_MAIN];
+	struct spaceman_device *dev = &sm->sm_dev[which];
+	struct apfs_spaceman_device *rawdev = &raw->sm_dev[which];
+	u64 blkcnt;
+	u32 cab_count;
 	u32 addr_off;
 	u64 start = 0;
 	int i;
 
-	if (le32_to_cpu(dev->sm_cab_count) != sm->sm_cab_count)
-		report("Spaceman device", "wrong count of chunk-info address blocks.");
-	if (le32_to_cpu(dev->sm_cib_count) != sm->sm_cib_count)
-		report("Spaceman device", "wrong count of chunk-info blocks.");
-	if (le64_to_cpu(dev->sm_chunk_count) != sm->sm_chunk_count)
-		report("Spaceman device", "wrong count of chunks.");
-	if (le64_to_cpu(dev->sm_block_count) != sb->s_block_count)
-		report("Spaceman device", "wrong block count.");
+	dev->sm_cab_count = le32_to_cpu(rawdev->sm_cab_count);
+	dev->sm_cib_count = le32_to_cpu(rawdev->sm_cib_count);
+	dev->sm_chunk_count = le64_to_cpu(rawdev->sm_chunk_count);
+	dev->sm_block_count = le64_to_cpu(rawdev->sm_block_count);
+	dev->sm_free_count = le64_to_cpu(rawdev->sm_free_count);
 
-	addr_off = le32_to_cpu(dev->sm_addr_offset);
-	if (!sm->sm_cab_count) {
+	sm->sm_total_chunk_count += dev->sm_chunk_count;
+	sm->sm_total_cib_count += dev->sm_cib_count;
+	sm->sm_total_cab_count += dev->sm_cab_count;
+	sm->sm_total_free_count += dev->sm_free_count;
+
+	blkcnt = which == APFS_SD_MAIN ? sb->s_main_blkcnt : sb->s_tier2_blkcnt;
+	if (dev->sm_block_count != blkcnt)
+		report("Spaceman device", "wrong block count.");
+	if (dev->sm_chunk_count != DIV_ROUND_UP(blkcnt, sm->sm_blocks_per_chunk))
+		report("Spaceman device", "wrong count of chunks.");
+	if (dev->sm_cib_count != DIV_ROUND_UP(dev->sm_chunk_count, sm->sm_chunks_per_cib))
+		report("Spaceman device", "wrong count of chunk-info blocks.");
+
+	cab_count = DIV_ROUND_UP(dev->sm_cib_count, sm->sm_cibs_per_cab);
+	/* CABs are not used unless at least one can be filled */
+	if (cab_count == 1)
+		cab_count = 0;
+	if (dev->sm_cab_count != cab_count)
+		report("Spaceman device", "wrong count of chunk-info address blocks.");
+
+	/* All bitmaps will need to be read into memory */
+	dev->sm_bitmap = calloc(dev->sm_chunk_count, sb->s_blocksize);
+	if (!dev->sm_bitmap)
+		system_error();
+
+	/*
+	 * TODO: is it mandatory that sm_addr_off for the tier2 device comes
+	 * right after the end of the same array for the main device?
+	 */
+	addr_off = le32_to_cpu(rawdev->sm_addr_offset);
+	if (!dev->sm_cab_count) {
 		/* If CABs are not used, the spaceman just lists the CIBs */
-		for (i = 0; i < sm->sm_cib_count; ++i) {
+		for (i = 0; i < dev->sm_cib_count; ++i) {
 			u64 bno = spaceman_val_from_off(raw, addr_off + i * sizeof(u64));
-			start = parse_chunk_info_block(bno, i, start, NULL /* xid_p */);
+			start = parse_chunk_info_block(bno, i, start, NULL /* xid_p */, dev);
 		}
 	} else {
-		for (i = 0; i < sm->sm_cab_count; ++i) {
+		for (i = 0; i < dev->sm_cab_count; ++i) {
 			u64 bno = spaceman_val_from_off(raw, addr_off + i * sizeof(u64));
-			start = parse_cib_addr_block(bno, i, start);
+			start = parse_cib_addr_block(bno, i, start, dev);
 		}
-		if (sm->sm_cib_count != sm->sm_cibs)
+		if (dev->sm_cib_count != dev->sm_cibs)
 			report("Spaceman device", "bad total number of cibs.");
 	}
 
-	if (sm->sm_chunk_count != sm->sm_chunks)
+	if (dev->sm_chunk_count != dev->sm_chunks)
 		report("Spaceman device", "bad total number of chunks.");
-	if (sb->s_block_count != sm->sm_blocks)
+	if (dev->sm_block_count != dev->sm_blocks)
 		report("Spaceman device", "bad total number of blocks.");
-	if (le64_to_cpu(dev->sm_free_count) != sm->sm_free)
+	if (dev->sm_free_count != dev->sm_free)
 		report("Spaceman device", "bad total number of free blocks.");
 
-	if (dev->sm_reserved || dev->sm_reserved2)
-		report("Spaceman device", "non-zero padding.");
-}
-
-/**
- * check_spaceman_tier2_device - Check that the second-tier device is empty
- * @raw: pointer to the raw space manager
- */
-static void check_spaceman_tier2_device(struct apfs_spaceman_phys *raw)
-{
-	struct spaceman *sm = &sb->s_spaceman;
-	struct apfs_spaceman_device *main_dev = &raw->sm_dev[APFS_SD_MAIN];
-	struct apfs_spaceman_device *dev = &raw->sm_dev[APFS_SD_TIER2];
-	u32 addr_off, main_addr_off, main_addr_end;
-
-	addr_off = le32_to_cpu(dev->sm_addr_offset);
-	main_addr_off = le32_to_cpu(main_dev->sm_addr_offset);
-	if (sm->sm_cab_count)
-		main_addr_end = main_addr_off + sm->sm_cab_count * sizeof(u64);
-	else
-		main_addr_end = main_addr_off + sm->sm_cib_count * sizeof(u64);
-	if (addr_off != main_addr_end)
-		report("Spaceman device", "not consecutive address offsets.");
-	if (spaceman_val_from_off(raw, addr_off)) /* Empty device has no cib */
-		report_unknown("Fusion drive");
-
-	if (dev->sm_block_count || dev->sm_chunk_count || dev->sm_cib_count ||
-	    dev->sm_cab_count || dev->sm_free_count)
-		report_unknown("Fusion drive");
-	if (dev->sm_reserved || dev->sm_reserved2)
+	if (rawdev->sm_reserved || rawdev->sm_reserved2)
 		report("Spaceman device", "non-zero padding.");
 }
 
@@ -647,6 +648,47 @@ static void check_spaceman_datazone(struct apfs_spaceman_datazone_info_phys *dz)
 }
 
 /**
+ * check_spaceman_tier2_fq_is_null - Check that a tier 2 free queue is unset
+ * @sfq_raw: raw free queue to check
+ */
+static void check_spaceman_free_queue_is_null(struct apfs_spaceman_free_queue *sfq_raw)
+{
+	if (sfq_raw->sfq_count || sfq_raw->sfq_tree_oid || sfq_raw->sfq_oldest_xid || sfq_raw->sfq_tree_node_limit)
+		report("Tier 2 free queue", "should not be set.");
+}
+
+/**
+ * check_spaceman_free_queue_dev - Check the free queue for a given device
+ * @sfq_raw:	raw free queue to check
+ * @which:	device for the queue
+ */
+static void check_spaceman_free_queue_dev(struct apfs_spaceman_free_queue *sfq_raw, enum smdev which)
+{
+	struct spaceman *sm = &sb->s_spaceman;
+	struct spaceman_device *dev = NULL;
+	struct free_queue *fq = NULL;
+	int idx;
+
+	if (which == APFS_SD_TIER2 && !apfs_is_fusion_drive())
+		return check_spaceman_free_queue_is_null(sfq_raw);
+
+	dev = &sm->sm_dev[which];
+	idx = which == APFS_SD_MAIN ? APFS_SFQ_MAIN : APFS_SFQ_TIER2;
+
+	dev->sm_dev_fq = parse_free_queue_btree(le64_to_cpu(sfq_raw->sfq_tree_oid), idx);
+	fq = dev->sm_dev_fq;
+
+	if (le64_to_cpu(sfq_raw->sfq_count) != fq->sfq_count)
+		report("Spaceman free queue", "wrong block count.");
+	if (le64_to_cpu(sfq_raw->sfq_oldest_xid) != fq->sfq_oldest_xid)
+		report("Spaceman free queue", "oldest xid is wrong.");
+	if (le16_to_cpu(sfq_raw->sfq_tree_node_limit) < fq->sfq_btree.node_count)
+		report("Spaceman free queue", "node count above limit.");
+	if (le16_to_cpu(sfq_raw->sfq_tree_node_limit) != main_fq_node_limit(dev->sm_blocks))
+		report("Spaceman free queue", "wrong node limit.");
+}
+
+/**
  * check_spaceman_free_queues - Check the spaceman free queues
  * @sfq: pointer to the raw free queue array
  */
@@ -654,11 +696,6 @@ static void check_spaceman_free_queues(struct apfs_spaceman_free_queue *sfq)
 {
 	struct spaceman *sm = &sb->s_spaceman;
 	int i;
-
-	if (sfq[APFS_SFQ_TIER2].sfq_count || sfq[APFS_SFQ_TIER2].sfq_tree_oid ||
-	    sfq[APFS_SFQ_TIER2].sfq_oldest_xid ||
-	    sfq[APFS_SFQ_TIER2].sfq_tree_node_limit)
-		report_unknown("Fusion drive");
 
 	for (i = 0; i < APFS_SFQ_COUNT; ++i) {
 		if (sfq[i].sfq_pad16 || sfq[i].sfq_pad32)
@@ -677,35 +714,33 @@ static void check_spaceman_free_queues(struct apfs_spaceman_free_queue *sfq)
 	if (le16_to_cpu(sfq[APFS_SFQ_IP].sfq_tree_node_limit) <
 					sm->sm_ip_fq->sfq_btree.node_count)
 		report("Spaceman free queue", "node count above limit.");
-	if (le16_to_cpu(sfq[APFS_SFQ_IP].sfq_tree_node_limit) != ip_fq_node_limit(sm->sm_chunks))
+	if (le16_to_cpu(sfq[APFS_SFQ_IP].sfq_tree_node_limit) != ip_fq_node_limit(sm->sm_total_chunk_count))
 		report("Spaceman free queue", "wrong node limit.");
 
-	sm->sm_main_fq = parse_free_queue_btree(
-				le64_to_cpu(sfq[APFS_SFQ_MAIN].sfq_tree_oid), APFS_SFQ_MAIN);
-	if (le64_to_cpu(sfq[APFS_SFQ_MAIN].sfq_count) !=
-					sm->sm_main_fq->sfq_count)
-		report("Spaceman free queue", "wrong block count.");
-	if (le64_to_cpu(sfq[APFS_SFQ_MAIN].sfq_oldest_xid) !=
-					sm->sm_main_fq->sfq_oldest_xid)
-		report("Spaceman free queue", "oldest xid is wrong.");
-	if (le16_to_cpu(sfq[APFS_SFQ_MAIN].sfq_tree_node_limit) <
-					sm->sm_main_fq->sfq_btree.node_count)
-		report("Spaceman free queue", "node count above limit.");
-	if (le16_to_cpu(sfq[APFS_SFQ_MAIN].sfq_tree_node_limit) != main_fq_node_limit(sm->sm_blocks))
-		report("Spaceman free queue", "wrong node limit.");
+	check_spaceman_free_queue_dev(&sfq[APFS_SFQ_MAIN], APFS_SD_MAIN);
+	check_spaceman_free_queue_dev(&sfq[APFS_SFQ_TIER2], APFS_SD_TIER2);
 }
 
 /**
- * compare_container_bitmaps - Verify the container's allocation bitmap
- * @sm_bmap:	allocation bitmap reported by the space manager
- * @real_bmap:	allocation bitmap assembled by the fsck
- * @chunks:	container chunk count, i.e., block count for the bitmaps
+ * compare_container_bitmaps_dev - Verify a device's allocation bitmap
+ * @which: device to check
  */
-static void compare_container_bitmaps(u64 *sm_bmap, u64 *real_bmap, u64 chunks)
+static void compare_container_bitmaps_dev(enum smdev which)
 {
-	unsigned long long bmap_size = sb->s_blocksize * chunks;
+	struct spaceman *sm = &sb->s_spaceman;
+	struct spaceman_device *dev = NULL;
+	u64 *reported_bmap = NULL, *real_bmap = NULL;
+	unsigned long long bmap_size;
 
-	if (memcmp(sm_bmap, real_bmap, bmap_size) != 0)
+	dev = &sm->sm_dev[which];
+	if (dev->sm_chunk_count == 0) /* No tier 2 device */
+		return;
+
+	reported_bmap = dev->sm_bitmap;
+	real_bmap = which == APFS_SD_MAIN ? sb->s_main_bitmap : sb->s_tier2_bitmap;
+	bmap_size = sb->s_blocksize * dev->sm_chunk_count;
+
+	if (memcmp(reported_bmap, real_bmap, bmap_size) != 0)
 		report("Space manager", "bad allocation bitmap.");
 }
 
@@ -755,7 +790,7 @@ static void read_ip_bitmap_block(u64 bmap_base, u32 bmap_len, u16 bmap_off, char
 	char *curr_blk = NULL;
 	u64 bno = bmap_base + bmap_off % bmap_len;
 
-	curr_blk = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, fd_main, bno * sb->s_blocksize);
+	curr_blk = apfs_mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, bno * sb->s_blocksize);
 	if (curr_blk == MAP_FAILED)
 		system_error();
 
@@ -843,8 +878,7 @@ static void check_ip_bitmap_blocks(struct apfs_spaceman_phys *raw)
 		char *bmap;
 		int edge, j;
 
-		bmap = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-			    fd_main, (bmap_base + i) * sb->s_blocksize);
+		bmap = apfs_mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, (bmap_base + i) * sb->s_blocksize);
 		if (bmap == MAP_FAILED)
 			system_error();
 
@@ -874,11 +908,15 @@ static void check_ip_bitmap_blocks(struct apfs_spaceman_phys *raw)
  */
 static void check_internal_pool(struct apfs_spaceman_phys *raw)
 {
+	struct spaceman *sm = &sb->s_spaceman;
 	char *pool_bmap;
 	u64 pool_base = le64_to_cpu(raw->sm_ip_base);
 	u64 pool_blocks = le64_to_cpu(raw->sm_ip_block_count);
 	u64 ip_chunk_count = le32_to_cpu(raw->sm_ip_bm_size_in_blocks);
 	u64 i;
+
+	if ((sm->sm_total_chunk_count + sm->sm_total_cib_count + sm->sm_total_cab_count) * 3 != pool_blocks)
+		report("Space manager", "wrong size of internal pool.");
 
 	pool_bmap = calloc(ip_chunk_count, sb->s_blocksize);
 	if (!pool_bmap)
@@ -955,13 +993,9 @@ void check_spaceman(u64 oid)
 		report("Space manager", "wrong block size.");
 	parse_spaceman_chunk_counts(raw);
 
-	/* All bitmaps will need to be read into memory */
-	sm->sm_bitmap = calloc(sm->sm_chunk_count, sb->s_blocksize);
-	if (!sm->sm_bitmap)
-		system_error();
+	parse_spaceman_device(raw, APFS_SD_MAIN);
+	parse_spaceman_device(raw, APFS_SD_TIER2);
 
-	parse_spaceman_main_device(raw);
-	check_spaceman_tier2_device(raw);
 	check_spaceman_free_queues(raw->sm_fq);
 	check_internal_pool(raw);
 	free(sb->s_ip_bitmap);
@@ -970,11 +1004,11 @@ void check_spaceman(u64 oid)
 		report("Space manager", "wrong block reservation total.");
 	if (le64_to_cpu(raw->sm_fs_reserve_alloc_count) != sm->sm_reserve_alloc_num)
 		report("Space manager", "wrong reserve block allocation total.");
-	if (sm->sm_reserve_block_num - sm->sm_reserve_alloc_num > sm->sm_free)
+	if (sm->sm_reserve_block_num - sm->sm_reserve_alloc_num > sm->sm_total_free_count)
 		report("Space manager", "block reservation not respected.");
 
-	compare_container_bitmaps(sm->sm_bitmap, sb->s_bitmap,
-				  sm->sm_chunk_count);
+	compare_container_bitmaps_dev(APFS_SD_MAIN);
+	compare_container_bitmaps_dev(APFS_SD_TIER2);
 	munmap(raw, obj.size);
 }
 
