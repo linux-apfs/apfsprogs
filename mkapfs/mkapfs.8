@@ -14,6 +14,8 @@ mkapfs \- create an APFS filesystem
 .IR UUID ]
 [\-u
 .IR UUID ]
+[\-F
+.IR tier2 ]
 .I device
 .RI [ blocks ]
 .SH DESCRIPTION
@@ -47,6 +49,9 @@ is chosen by /proc/sys/kernel/random/uuid.
 Print the version number of
 .B mkapfs
 and exit.
+.TP
+.BI \-F " tier2"
+Specify the tier 2 device for a fusion drive.
 .SH REPORTING BUGS
 Please report bugs via email or, if preferred, file a github issue at
 \%https://github.com/eafer/apfsprogs/issues.

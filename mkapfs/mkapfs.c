@@ -16,7 +16,8 @@
 #include "super.h"
 #include "version.h"
 
-int fd;
+int fd_main = -1;
+int fd_tier2 = -1;
 struct parameters *param;
 static char *progname;
 
@@ -26,7 +27,7 @@ static char *progname;
 static void usage(void)
 {
 	fprintf(stderr,
-		"usage: %s [-L label] [-U UUID] [-u UUID] [-sv] "
+		"usage: %s [-L label] [-U UUID] [-u UUID] [-F tier2] [-sv] "
 		"device [blocks]\n",
 		progname);
 	exit(1);
@@ -64,23 +65,36 @@ __attribute__((noreturn)) void fatal(const char *message)
 }
 
 /**
- * get_device_size - Get the block count of the device or image being formatted
- * @blocksize: the filesystem blocksize
+ * get_device_size - Get the block count for a given device or image
+ * @device_fd:	file descriptor for the device
+ * @blocksize:	the filesystem blocksize
  */
-static u64 get_device_size(unsigned int blocksize)
+static u64 get_device_size(int device_fd, unsigned int blocksize)
 {
 	struct stat buf;
 	u64 size;
 
-	if (fstat(fd, &buf))
+	if (fstat(device_fd, &buf))
 		system_error();
 
 	if ((buf.st_mode & S_IFMT) == S_IFREG)
 		return buf.st_size / blocksize;
 
-	if (ioctl(fd, BLKGETSIZE64, &size))
+	if (ioctl(device_fd, BLKGETSIZE64, &size))
 		system_error();
 	return size / blocksize;
+}
+
+static u64 get_main_device_size(unsigned int blocksize)
+{
+	return get_device_size(fd_main, blocksize);
+}
+
+static u64 get_tier2_device_size(unsigned int blocksize)
+{
+	if (fd_tier2 == -1)
+		return 0;
+	return get_device_size(fd_tier2, blocksize);
 }
 
 /**
@@ -125,21 +139,28 @@ static char *get_random_uuid(void)
  */
 static void complete_parameters(void)
 {
-	u64 dev_block_count;
-
 	if (!param->blocksize)
 		param->blocksize = APFS_NX_DEFAULT_BLOCK_SIZE;
 
-	dev_block_count = get_device_size(param->blocksize);
-	if (!param->block_count)
-		param->block_count = dev_block_count;
-	if (param->block_count > dev_block_count) {
-		fprintf(stderr, "%s: device is not big enough\n", progname);
-		exit(1);
+	param->main_blkcnt = get_main_device_size(param->blocksize);
+	param->tier2_blkcnt = get_tier2_device_size(param->blocksize);
+	if (param->block_count) {
+		if (param->block_count > param->main_blkcnt) {
+			fprintf(stderr, "%s: device is not big enough\n", progname);
+			exit(1);
+		}
+		param->main_blkcnt = param->block_count;
+	} else {
+		param->block_count = param->main_blkcnt + param->tier2_blkcnt;
 	}
-	if (param->block_count * param->blocksize < 512 * 1024) {
+	if (param->main_blkcnt * param->blocksize < 512 * 1024) {
 		fprintf(stderr, "%s: such tiny containers are not supported\n",
 			progname);
+		exit(1);
+	}
+	if (param->tier2_blkcnt && param->tier2_blkcnt * param->blocksize < 512 * 1024) {
+		/* TODO: is this really a problem for tier 2? */
+		fprintf(stderr, "%s: tier 2 is too small\n", progname);
 		exit(1);
 	}
 
@@ -157,6 +178,8 @@ static void complete_parameters(void)
 		param->main_uuid = get_random_uuid();
 	if (!param->vol_uuid)
 		param->vol_uuid = get_random_uuid();
+	if (fd_tier2 != -1)
+		param->fusion_uuid = get_random_uuid();
 }
 
 int main(int argc, char *argv[])
@@ -169,7 +192,7 @@ int main(int argc, char *argv[])
 		system_error();
 
 	while (1) {
-		int opt = getopt(argc, argv, "L:U:u:szv");
+		int opt = getopt(argc, argv, "L:U:u:szvF:");
 
 		if (opt == -1)
 			break;
@@ -192,6 +215,11 @@ int main(int argc, char *argv[])
 			break;
 		case 'v':
 			version();
+		case 'F':
+			fd_tier2 = open(optarg, O_RDWR);
+			if (fd_tier2 == -1)
+				system_error();
+			break;
 		default:
 			usage();
 		}
@@ -207,8 +235,11 @@ int main(int argc, char *argv[])
 		usage();
 	}
 
-	fd = open(filename, O_RDWR);
-	if (fd == -1)
+	if (param->block_count && fd_tier2 != -1)
+		fatal("block count can't be specified for a fusion drive");
+
+	fd_main = open(filename, O_RDWR);
+	if (fd_main == -1)
 		system_error();
 	complete_parameters();
 

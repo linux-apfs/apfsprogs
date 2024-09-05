@@ -27,20 +27,26 @@ static void set_empty_btree_info(struct apfs_btree_info *info, u32 subtype)
 
 	if (subtype == APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE)
 		flags = APFS_BTREE_EPHEMERAL | APFS_BTREE_ALLOW_GHOSTS;
+	else if (subtype == APFS_OBJECT_TYPE_FUSION_MIDDLE_TREE)
+		flags = APFS_BTREE_PHYSICAL;
 	else
 		flags = APFS_BTREE_PHYSICAL | APFS_BTREE_KV_NONALIGNED;
 
 	info->bt_fixed.bt_flags = cpu_to_le32(flags);
 	info->bt_fixed.bt_node_size = cpu_to_le32(param->blocksize);
 
+	/* The other two trees don't have fixed key/value sizes */
 	if (subtype == APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE) {
-		/* The other two trees don't have fixed key/value sizes */
-		info->bt_fixed.bt_key_size =
-		       cpu_to_le32(sizeof(struct apfs_spaceman_free_queue_key));
+		info->bt_fixed.bt_key_size = cpu_to_le32(sizeof(struct apfs_spaceman_free_queue_key));
 		info->bt_fixed.bt_val_size = cpu_to_le32(8);
-		info->bt_longest_key =
-		       cpu_to_le32(sizeof(struct apfs_spaceman_free_queue_key));
+		info->bt_longest_key = cpu_to_le32(sizeof(struct apfs_spaceman_free_queue_key));
 		info->bt_longest_val = cpu_to_le32(8);
+	}
+	if (subtype == APFS_OBJECT_TYPE_FUSION_MIDDLE_TREE) {
+		info->bt_fixed.bt_key_size = cpu_to_le32(sizeof(struct apfs_fusion_mt_key));
+		info->bt_fixed.bt_val_size = cpu_to_le32(sizeof(struct apfs_fusion_mt_val));
+		info->bt_longest_key = cpu_to_le32(sizeof(struct apfs_fusion_mt_key));
+		info->bt_longest_val = cpu_to_le32(sizeof(struct apfs_fusion_mt_val));
 	}
 	info->bt_node_count = cpu_to_le64(1); /* Only one node: the root */
 }
@@ -64,6 +70,11 @@ static int min_table_size(u32 type)
 	case APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE:
 		key_size = sizeof(struct apfs_spaceman_free_queue_key);
 		val_size = sizeof(__le64); /* We assume no ghosts here */
+		toc_size = sizeof(struct apfs_kvoff);
+		break;
+	case APFS_OBJECT_TYPE_FUSION_MIDDLE_TREE:
+		key_size = sizeof(struct apfs_fusion_mt_key);
+		val_size = sizeof(struct apfs_fusion_mt_val);
 		toc_size = sizeof(struct apfs_kvoff);
 		break;
 	default:
@@ -96,7 +107,7 @@ void make_empty_btree_root(u64 bno, u64 oid, u32 subtype)
 	int info_len = sizeof(struct apfs_btree_info);
 
 	flags = APFS_BTNODE_ROOT | APFS_BTNODE_LEAF;
-	if (subtype == APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE)
+	if (subtype == APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE || subtype == APFS_OBJECT_TYPE_FUSION_MIDDLE_TREE)
 		flags |= APFS_BTNODE_FIXED_KV_SIZE;
 	root->btn_flags = cpu_to_le16(flags);
 
