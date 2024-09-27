@@ -294,6 +294,8 @@ static void list_labels(void)
 		vsb = mmap(NULL, s_blocksize, PROT_READ, MAP_PRIVATE, dev_fd, vol_bno * s_blocksize);
 		if (vsb == MAP_FAILED)
 			system_error();
+		if (vsb->apfs_volname[APFS_VOLNAME_LEN - 1])
+			fatal("volume label is not properly null-terminated");
 		printf("%d\t%s\n", i, vsb->apfs_volname);
 		munmap(vsb, s_blocksize);
 	}
