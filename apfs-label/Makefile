@@ -15,10 +15,17 @@ GIT_COMMIT = $(shell git describe --always HEAD | tail -c 9)
 
 override CFLAGS += -Wall -Wno-address-of-packed-member -fno-strict-aliasing -I$(CURDIR)/../include
 
-apfs-label: $(OBJS)
+apfs-label: $(OBJS) $(LIBRARY)
 	@echo '  Linking...'
 	@$(CC) $(CFLAGS) $(LDFLAGS) -o apfs-label $(OBJS) $(LIBRARY)
 	@echo '  Build complete'
+
+# Build the common libraries
+$(LIBRARY): FORCE
+	@echo '  Building libraries...'
+	@$(MAKE) -C $(LIBDIR) --silent --no-print-directory
+	@echo '  Library build complete'
+FORCE:
 
 %.o: %.c
 	@echo '  Compiling $<...'
@@ -30,7 +37,6 @@ endif
 apfs-label.o: version.h
 version.h: FORCE
 	@printf '#define GIT_COMMIT\t"%s"\n' $(GIT_COMMIT) > version.h
-FORCE:
 
 -include $(DEPS)
 
