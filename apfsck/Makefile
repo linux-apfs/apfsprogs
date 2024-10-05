@@ -12,7 +12,7 @@ MANDIR = /share/man/man8
 
 SPARSE_VERSION := $(shell sparse --version 2>/dev/null)
 
-GIT_COMMIT = $(shell git describe --always HEAD | tail -c 9)
+GIT_COMMIT = "r$(shell git rev-list --count HEAD).$(shell git rev-parse --short=7 HEAD)"
 
 override CFLAGS += -Wall -Wno-address-of-packed-member -fno-strict-aliasing -I$(CURDIR)/../include
 
