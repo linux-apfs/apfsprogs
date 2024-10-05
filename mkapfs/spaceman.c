@@ -311,7 +311,7 @@ static void make_devices(struct apfs_spaceman_phys *sm)
 	 */
 	if ((cab_count + 1) * sizeof(__le64) + sm_info.cib_addr_base_off > param->blocksize) {
 		printf("Huge containers (> ~113TB) not yet supported.\n");
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	dev->sm_block_count = cpu_to_le64(param->block_count);
