@@ -37,11 +37,13 @@ static void usage(void)
  */
 static void version(void)
 {
-	if (*GIT_COMMIT)
+	if (*GIT_COMMIT) {
 		printf("mkapfs %s\n", GIT_COMMIT);
-	else
+		exit(EXIT_SUCCESS);
+	} else {
 		printf("mkapfs - unknown git commit id\n");
-	exit(1);
+		exit(1);
+	}
 }
 
 /**
