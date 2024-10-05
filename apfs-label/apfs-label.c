@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <apfs/checksum.h>
 #include <apfs/raw.h>
 #include "version.h"
@@ -306,14 +307,18 @@ static void list_labels(void)
 
 int main(int argc, char *argv[])
 {
-	const char *filename = NULL;
-
 	if (argc == 0)
 		exit(1);
 	progname = argv[0];
 
+	static const struct option long_options[] = {
+		{ .name = "version", .has_arg = no_argument , .flag = NULL, .val = 'v' },
+		{ 0 },
+	};
+
 	while (1) {
-		int opt = getopt(argc, argv, "v");
+		int opt_index = 0;
+		int opt = getopt_long(argc, argv, "v", long_options, &opt_index);
 
 		if (opt == -1)
 			break;
@@ -328,7 +333,8 @@ int main(int argc, char *argv[])
 
 	if (optind != argc - 1)
 		usage();
-	filename = argv[optind];
+
+	const char *filename = argv[optind];
 
 	dev_fd = open(filename, O_RDONLY);
 	if (dev_fd == -1)
