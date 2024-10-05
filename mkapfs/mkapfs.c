@@ -29,7 +29,7 @@ static void usage(void)
 		"usage: %s [-L label] [-U UUID] [-u UUID] [-sv] "
 		"device [blocks]\n",
 		progname);
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -41,7 +41,7 @@ static void version(void)
 		printf("mkapfs %s\n", GIT_COMMIT);
 	else
 		printf("mkapfs - unknown git commit id\n");
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -50,7 +50,7 @@ static void version(void)
 __attribute__((noreturn)) void system_error(void)
 {
 	perror(progname);
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -60,7 +60,7 @@ __attribute__((noreturn)) void system_error(void)
 __attribute__((noreturn)) void fatal(const char *message)
 {
 	fprintf(stderr, "%s: %s\n", progname, message);
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -135,12 +135,12 @@ static void complete_parameters(void)
 		param->block_count = dev_block_count;
 	if (param->block_count > dev_block_count) {
 		fprintf(stderr, "%s: device is not big enough\n", progname);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 	if (param->block_count * param->blocksize < 512 * 1024) {
 		fprintf(stderr, "%s: such tiny containers are not supported\n",
 			progname);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	/* Every volume must have a label; use the same default as Apple */
@@ -150,7 +150,7 @@ static void complete_parameters(void)
 	/* Make sure the volume label fits, along with its null termination */
 	if (strlen(param->label) + 1 > APFS_VOLNAME_LEN) {
 		fprintf(stderr, "%s: volume label is too long\n", progname);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	if (!param->main_uuid)

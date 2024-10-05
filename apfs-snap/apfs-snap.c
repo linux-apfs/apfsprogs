@@ -21,7 +21,7 @@ static char *progname;
 static void usage(void)
 {
 	fprintf(stderr, "usage: %s mountpoint name\n", progname);
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -33,7 +33,7 @@ static void version(void)
 		printf("apfs-snap %s\n", GIT_COMMIT);
 	else
 		printf("apfs-snap - unknown git commit id\n");
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -42,7 +42,7 @@ static void version(void)
 static __attribute__((noreturn)) void system_error(void)
 {
 	perror(progname);
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -52,7 +52,7 @@ static __attribute__((noreturn)) void system_error(void)
 static __attribute__((noreturn)) void fatal(const char *message)
 {
 	fprintf(stderr, "%s: %s\n", progname, message);
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 #define APFS_SNAP_MAX_NAMELEN	255
@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
 	int fd;
 
 	if (argc == 0)
-		exit(1);
+		exit(EXIT_FAILURE);
 	progname = argv[0];
 
 	while (1) {
