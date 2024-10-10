@@ -482,12 +482,11 @@ static void make_internal_pool(struct apfs_spaceman_phys *sm)
 				cpu_to_le32(APFS_SPACEMAN_IP_BM_TX_MULTIPLIER);
 	sm->sm_ip_block_count = cpu_to_le64(sm_info.ip_blocks);
 	sm->sm_ip_base = cpu_to_le64(sm_info.ip_base);
-	/* No support for multiblock bitmaps */
 	sm->sm_ip_bm_size_in_blocks = cpu_to_le32(sm_info.ip_bm_size);
 
 	sm->sm_ip_bm_block_count = cpu_to_le32(sm_info.ip_bmap_blocks);
 	sm->sm_ip_bm_base = cpu_to_le64(IP_BMAP_BASE);
-	for (i = 0; i < sm_info.ip_bmap_blocks; ++i) /* We use no blocks from the ip */
+	for (i = 0; i < sm_info.ip_bmap_blocks; ++i)
 		munmap(get_zeroed_block(IP_BMAP_BASE + i), param->blocksize);
 
 	/* The current bitmaps are the first in the ring */
