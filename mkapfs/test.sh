@@ -13,6 +13,7 @@ success=0
 set -e
 cleanup() {
 	rm -f /tmp/sizetest.img
+	rm -f /tmp/sizetest2.img
 	[ $success -eq 1 ] && echo "TEST PASSED" || echo "TEST FAILED"
 }
 trap cleanup exit
@@ -21,6 +22,13 @@ test_size() {
 	truncate -s $1 /tmp/sizetest.img
 	./mkapfs /tmp/sizetest.img
 	../apfsck/apfsck -cuw /tmp/sizetest.img
+}
+
+test_fusion_sizes() {
+	truncate -s $1 /tmp/sizetest.img
+	truncate -s $2 /tmp/sizetest2.img
+	./mkapfs -F /tmp/sizetest2.img /tmp/sizetest.img
+	../apfsck/apfsck -cuw -F /tmp/sizetest2.img /tmp/sizetest.img
 }
 
 # Single block ip bitmap, single block spaceman, no CABs
@@ -50,6 +58,13 @@ sizes[11]=3G
 touch /tmp/sizetest.img
 for sz in ${sizes[@]}; do
 	test_size $sz
+done
+
+touch /tmp/sizetest2.img
+for sz1 in ${sizes[@]}; do
+	for sz2 in ${sizes[@]}; do
+		test_fusion_sizes $sz1 $sz2
+	done
 done
 
 success=1
