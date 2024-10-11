@@ -23,30 +23,33 @@ test_size() {
 	../apfsck/apfsck -cuw /tmp/sizetest.img
 }
 
-touch /tmp/sizetest.img
-
 # Single block ip bitmap, single block spaceman, no CABs
-test_size 512K # Minimum size
-test_size 15G
-test_size 1454383300608	# Maximum size
+sizes[0]=512K # Minimum size
+sizes[1]=15G
+sizes[2]=1454383300608	# Maximum size
 
 # Multiblock ip bitmap, single block spaceman, no CABs
-test_size 1454383304704	# Minimum size
-test_size 3T
-test_size 7390296539136	# Maximum size
+sizes[3]=1454383304704	# Minimum size
+sizes[4]=3T
+sizes[5]=7390296539136	# Maximum size
 
 # Multiblock ip bitmap, multiblock spaceman, no CABs
-test_size 7390296543232	# Minimum size
-test_size 7T
-test_size 8574096900096	# Maximum size
+sizes[6]=7390296543232	# Minimum size
+sizes[7]=7T
+sizes[8]=8574096900096	# Maximum size
 
 # Multiblock ip bitmap, single block spaceman, has CABs
-test_size 8574096904192	# Minimum size
-test_size 15T
+sizes[9]=8574096904192	# Minimum size
+sizes[10]=15T
 
 # Filesystems > ~113 TiB not yet supported
 
 # Regression tests for sizes that caused problems in the past
-test_size 3G
+sizes[11]=3G
+
+touch /tmp/sizetest.img
+for sz in ${sizes[@]}; do
+	test_size $sz
+done
 
 success=1
