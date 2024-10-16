@@ -312,7 +312,6 @@ void *read_ephemeral_object(u64 oid, struct object *obj)
 		report("Checkpoint map", "an ephemeral object id was reused.");
 	map->m_seen = true;
 
-	/* Multiblock ephemeral objects may exist, but are not supported yet */
 	raw = read_object_nocheck(map->m_paddr, map->m_size, obj);
 	if ((obj->type | obj->flags) != map->m_type)
 		report("Ephemeral object", "type field doesn't match mapping.");
