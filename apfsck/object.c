@@ -237,7 +237,7 @@ static void free_cpoint_map(struct htable_entry *entry)
 	struct cpoint_map *map = (struct cpoint_map *)entry;
 	u32 blk_count = map->m_size >> sb->s_blocksize_bits;
 	u64 obj_start = map->m_paddr;
-	u64 obj_end = map->m_paddr + blk_count; /* Objects can't wrap, right? */
+	u64 obj_end = map->m_paddr + blk_count; /* Objects can wrap. TODO! */
 	u64 data_start = sb->s_data_base;
 	u64 data_end = sb->s_data_base + sb->s_data_blocks;
 	u64 valid_start;

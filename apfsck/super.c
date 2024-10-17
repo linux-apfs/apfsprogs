@@ -1334,11 +1334,28 @@ static void parse_main_super(struct super_block *sb)
 		report("Container superblock", "next transaction id is wrong.");
 }
 
+struct checkpoint_info {
+	u64 desc_base;
+	u64 data_base;
+	u32 desc_blocks;
+	u32 data_blocks;
+	u32 desc_next;
+	u32 data_next;
+	u32 desc_index;
+	u32 data_index;
+	u32 desc_len;
+	u32 data_len;
+};
+
 /**
  * parse_cpoint_map - Parse and verify a checkpoint mapping
- * @raw: the raw checkpoint mapping
+ * @raw:	the raw checkpoint mapping
+ * @cp_info:	information about the checkpoint areas
+ * @idx:	expected index for the mapping
+ *
+ * Returns the expected index for the next mapping.
  */
-static void parse_cpoint_map(struct apfs_checkpoint_mapping *raw)
+static u32 parse_cpoint_map(struct apfs_checkpoint_mapping *raw, struct checkpoint_info *cp_info, u32 idx)
 {
 	struct cpoint_map *map;
 
@@ -1348,6 +1365,8 @@ static void parse_cpoint_map(struct apfs_checkpoint_mapping *raw)
 	if (!raw->cpm_paddr)
 		report("Checkpoint map", "invalid physical address.");
 	map->m_paddr = le64_to_cpu(raw->cpm_paddr);
+	if (map->m_paddr != cp_info->data_base + idx)
+		report("Chekpoint map", "out of order or with holes.");
 
 	map->m_type = le32_to_cpu(raw->cpm_type);
 	map->m_subtype = le32_to_cpu(raw->cpm_subtype);
@@ -1364,23 +1383,26 @@ static void parse_cpoint_map(struct apfs_checkpoint_mapping *raw)
 		report("Checkpoint map", "non-zero padding.");
 	if (raw->cpm_fs_oid)
 		report_unknown("Ephemeral object belonging to a volume");
+
+	idx += map->m_size >> sb->s_blocksize_bits;
+	return idx % cp_info->data_blocks;
 }
 
 /**
  * parse_cpoint_map_blocks - Parse and verify a checkpoint's mapping blocks
- * @desc_base:		first block of the checkpoint descriptor area
- * @desc_blocks:	block count of the checkpoint descriptor area
- * @index:		index of the first mapping block for the checkpoint
+ * @cp_info:	information about the checkpoint areas
+ * @index:	index of the first mapping block for the checkpoint
  *
  * Returns the number of checkpoint-mapping blocks, and sets @index to the
  * index of their checkpoint superblock.
  */
-static u32 parse_cpoint_map_blocks(u64 desc_base, u32 desc_blocks, u32 *index)
+static u32 parse_cpoint_map_blocks(struct checkpoint_info *cp_info, u32 *index)
 {
 	struct object obj;
 	struct apfs_checkpoint_map_phys *raw;
 	u32 blk_count = 0;
 	u32 cpm_count;
+	u32 obj_idx;
 
 	/*
 	 * The current superblock hasn't been parsed yet, so this xid would be
@@ -1391,8 +1413,9 @@ static u32 parse_cpoint_map_blocks(u64 desc_base, u32 desc_blocks, u32 *index)
 	assert(!sb->s_cpoint_map_table);
 	sb->s_cpoint_map_table = alloc_htable();
 
+	obj_idx = cp_info->data_index;
 	while (1) {
-		u64 bno = desc_base + *index;
+		u64 bno = cp_info->desc_base + *index;
 		u32 flags;
 		int i;
 
@@ -1418,21 +1441,61 @@ static u32 parse_cpoint_map_blocks(u64 desc_base, u32 desc_blocks, u32 *index)
 								sb->s_blocksize)
 			report("Checkpoint maps", "won't fit in block.");
 		for (i = 0; i < cpm_count; ++i)
-			parse_cpoint_map(&raw->cpm_map[i]);
+			obj_idx = parse_cpoint_map(&raw->cpm_map[i], cp_info, obj_idx);
 
 		flags = le32_to_cpu(raw->cpm_flags);
 
 		munmap(raw, obj.size);
 		blk_count++;
-		*index = (*index + 1) % desc_blocks;
+		*index = (*index + 1) % cp_info->desc_blocks;
 
 		if ((flags & APFS_CHECKPOINT_MAP_LAST) != flags)
 			report("Checkpoint map", "invalid flag in use.");
 		if (flags & APFS_CHECKPOINT_MAP_LAST)
-			return blk_count;
-		if (blk_count == desc_blocks)
+			break;
+		if (blk_count == cp_info->desc_blocks)
 			report("Checkpoint", "no mapping block marked last.");
 	}
+
+	if (obj_idx != cp_info->data_next)
+		report("Checkpoint maps", "overlap or have holes.");
+	return blk_count;
+}
+
+/**
+ * preread_checkpoint_info - Read the superblock fields that are needed early on
+ * @nx_sb_copy:	superblock backup on block zero
+ * @info:	on return, information about the checkpoint areas
+ */
+static void preread_checkpoint_info(struct apfs_nx_superblock *nx_sb_copy, struct checkpoint_info *info)
+{
+	struct apfs_nx_superblock *msb_raw_latest = NULL;
+
+	/* We want to mount the latest valid checkpoint among the descriptors */
+	info->desc_base = le64_to_cpu(nx_sb_copy->nx_xp_desc_base);
+	if (info->desc_base >> 63 != 0) {
+		/* The highest bit is set when checkpoints are not contiguous */
+		report("Block zero", "checkpoint descriptor tree not yet supported.");
+	}
+	info->desc_blocks = le32_to_cpu(nx_sb_copy->nx_xp_desc_blocks);
+	if (info->desc_blocks > 10000) /* Arbitrary loop limit, is it enough? */
+		report("Block zero", "too many checkpoint descriptors?");
+
+	info->data_base = le64_to_cpu(nx_sb_copy->nx_xp_data_base);
+	info->data_blocks = le32_to_cpu(nx_sb_copy->nx_xp_data_blocks);
+
+	/* Find the valid range, as reported by the latest descriptor */
+	msb_raw_latest = read_latest_super(info->desc_base, info->desc_blocks);
+	info->desc_next = le32_to_cpu(msb_raw_latest->nx_xp_desc_next);
+	info->desc_index = le32_to_cpu(msb_raw_latest->nx_xp_desc_index);
+	if (info->desc_next >= info->desc_blocks || info->desc_index >= info->desc_blocks)
+		report("Checkpoint superblock", "out of range checkpoint descriptors.");
+	info->data_next = le32_to_cpu(msb_raw_latest->nx_xp_data_next);
+	info->data_index = le32_to_cpu(msb_raw_latest->nx_xp_data_index);
+	if (info->data_next >= info->data_blocks || info->data_index >= info->data_blocks)
+		report("Checkpoint superblock", "out of range checkpoint data.");
+	munmap(msb_raw_latest, sb->s_blocksize);
+	msb_raw_latest = NULL;
 }
 
 /**
@@ -1440,11 +1503,10 @@ static u32 parse_cpoint_map_blocks(u64 desc_base, u32 desc_blocks, u32 *index)
  */
 void parse_filesystem(void)
 {
-	struct apfs_nx_superblock *msb_raw_copy, *msb_raw_latest;
-	u64 desc_base;
-	u32 desc_blocks;
+	struct apfs_nx_superblock *msb_raw_copy;
+	struct checkpoint_info cp_info = {0};
 	long long valid_blocks;
-	u32 desc_next, desc_index, index;
+	u32 index;
 
 	sb = calloc(1, sizeof(*sb));
 	if (!sb)
@@ -1453,33 +1515,19 @@ void parse_filesystem(void)
 	/* Read the superblock from the last clean unmount */
 	msb_raw_copy = read_super_copy();
 
-	/* We want to mount the latest valid checkpoint among the descriptors */
-	desc_base = le64_to_cpu(msb_raw_copy->nx_xp_desc_base);
-	if (desc_base >> 63 != 0) {
-		/* The highest bit is set when checkpoints are not contiguous */
-		report("Block zero",
-		       "checkpoint descriptor tree not yet supported.");
-	}
-	desc_blocks = le32_to_cpu(msb_raw_copy->nx_xp_desc_blocks);
-	if (desc_blocks > 10000) /* Arbitrary loop limit, is it enough? */
-		report("Block zero", "too many checkpoint descriptors?");
-
-	/* Find the valid range, as reported by the latest descriptor */
-	msb_raw_latest = read_latest_super(desc_base, desc_blocks);
-	desc_next = le32_to_cpu(msb_raw_latest->nx_xp_desc_next);
-	desc_index = le32_to_cpu(msb_raw_latest->nx_xp_desc_index);
-	if (desc_next >= desc_blocks || desc_index >= desc_blocks)
-		report("Checkpoint superblock",
-		       "out of range checkpoint descriptors.");
-	munmap(msb_raw_latest, sb->s_blocksize);
-	msb_raw_latest = NULL;
+	/*
+	 * We'll read the superblock in full only after going through the
+	 * checkpoint mapping blocks, so we need to know a few fields related
+	 * to the checkpoints ahead of time.
+	 */
+	preread_checkpoint_info(msb_raw_copy, &cp_info);
 
 	/*
 	 * Now go through the valid checkpoints one by one, though it seems
 	 * that cleanly unmounted filesystems only preserve the last one.
 	 */
-	index = desc_index;
-	valid_blocks = (desc_blocks + desc_next - desc_index) % desc_blocks;
+	index = cp_info.desc_index;
+	valid_blocks = (cp_info.desc_blocks + cp_info.desc_next - cp_info.desc_index) % cp_info.desc_blocks;
 	while (valid_blocks > 0) {
 		struct object obj;
 		struct apfs_nx_superblock *raw;
@@ -1497,11 +1545,10 @@ void parse_filesystem(void)
 		sb->s_tier2_bitmap = NULL;
 
 		/* The checkpoint-mapping blocks come before the superblock */
-		map_blocks = parse_cpoint_map_blocks(desc_base, desc_blocks,
-						     &index);
+		map_blocks = parse_cpoint_map_blocks(&cp_info, &index);
 		valid_blocks -= map_blocks;
 
-		bno = desc_base + index;
+		bno = cp_info.desc_base + index;
 		raw = read_object_nocheck(bno, sb->s_blocksize, &obj);
 		if (parse_object_flags(obj.flags, false) != APFS_OBJ_EPHEMERAL)
 			report("Checkpoint superblock", "bad storage type.");
@@ -1520,7 +1567,7 @@ void parse_filesystem(void)
 		parse_main_super(sb);
 
 		/* Do this now, after parse_main_super() allocated the bitmap */
-		container_bmap_mark_as_used(desc_base, desc_blocks);
+		container_bmap_mark_as_used(cp_info.desc_base, cp_info.desc_blocks);
 		container_bmap_mark_as_used(sb->s_data_base, sb->s_data_blocks);
 
 		check_container(sb);
@@ -1529,7 +1576,7 @@ void parse_filesystem(void)
 		sb->s_cpoint_map_table = NULL;
 
 		/* One more block for the checkpoint superblock itself */
-		index = (index + 1) % desc_blocks;
+		index = (index + 1) % cp_info.desc_blocks;
 		valid_blocks--;
 	}
 
