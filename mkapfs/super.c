@@ -15,6 +15,8 @@
 #include "super.h"
 #include "version.h"
 
+struct ephemeral_info eph_info = {0};
+
 /* String to identify the program and its version */
 #define MKFS_ID_STRING	"mkapfs by eafer (" GIT_COMMIT ")"
 
@@ -80,8 +82,8 @@ static void set_checkpoint_areas(struct apfs_nx_superblock *sb)
 	 * for the fusion writeback cache and the tier 2 free queue, which
 	 * usually don't exist.
 	 */
-	sb->nx_xp_data_len = cpu_to_le32(5 + spaceman_size() / param->blocksize);
-	sb->nx_xp_data_next = cpu_to_le32(5 + spaceman_size() / param->blocksize);
+	sb->nx_xp_data_len = cpu_to_le32(eph_info.total_blkcnt);
+	sb->nx_xp_data_next = cpu_to_le32(eph_info.total_blkcnt);
 	sb->nx_xp_data_index = 0;
 }
 
@@ -204,18 +206,6 @@ static void make_volume(u64 bno, u64 oid)
 }
 
 /**
- * cpm_count - Return the number of checkpoint mappings
- */
-static int cpm_count(void)
-{
-	if (fd_tier2 == -1)
-		return 4; /* Reaper, spaceman, free queues */
-
-	/* Fusion drives have another free queue, plus the wb cache state */
-	return 6;
-}
-
-/**
  * make_cpoint_map_block - Make the mapping block for the one checkpoint
  * @bno: block number to use
  */
@@ -223,63 +213,65 @@ static void make_cpoint_map_block(u64 bno)
 {
 	struct apfs_checkpoint_map_phys *block = get_zeroed_block(bno);
 	struct apfs_checkpoint_mapping *map;
+	int idx = 0;
 
 	block->cpm_flags = cpu_to_le32(APFS_CHECKPOINT_MAP_LAST);
-	block->cpm_count = cpu_to_le32(cpm_count());
 
 	/* Set the checkpoint mapping for the reaper */
-	map = &block->cpm_map[0];
+	map = &block->cpm_map[idx++];
 	map->cpm_type = cpu_to_le32(APFS_OBJ_EPHEMERAL |
 				    APFS_OBJECT_TYPE_NX_REAPER);
 	map->cpm_subtype = cpu_to_le32(APFS_OBJECT_TYPE_INVALID);
 	map->cpm_size = cpu_to_le32(param->blocksize);
 	map->cpm_oid = cpu_to_le64(REAPER_OID);
-	map->cpm_paddr = cpu_to_le64(REAPER_BNO);
+	map->cpm_paddr = cpu_to_le64(eph_info.reaper_bno);
 
 	/* Set the checkpoint mapping for the space manager */
-	map = &block->cpm_map[1];
+	map = &block->cpm_map[idx++];
 	map->cpm_type = cpu_to_le32(APFS_OBJ_EPHEMERAL |
 				    APFS_OBJECT_TYPE_SPACEMAN);
 	map->cpm_subtype = cpu_to_le32(APFS_OBJECT_TYPE_INVALID);
-	map->cpm_size = cpu_to_le32(spaceman_size());
+	map->cpm_size = cpu_to_le32(eph_info.spaceman_sz);
 	map->cpm_oid = cpu_to_le64(SPACEMAN_OID);
-	map->cpm_paddr = cpu_to_le64(SPACEMAN_BNO);
+	map->cpm_paddr = cpu_to_le64(eph_info.spaceman_bno);
 
 	/* Set the checkpoint mapping for the internal-pool free queue root */
-	map = &block->cpm_map[2];
+	map = &block->cpm_map[idx++];
 	map->cpm_type = cpu_to_le32(APFS_OBJ_EPHEMERAL |
 				    APFS_OBJECT_TYPE_BTREE);
 	map->cpm_subtype = cpu_to_le32(APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE);
 	map->cpm_size = cpu_to_le32(param->blocksize);
 	map->cpm_oid = cpu_to_le64(IP_FREE_QUEUE_OID);
-	map->cpm_paddr = cpu_to_le64(IP_FREE_QUEUE_BNO);
+	map->cpm_paddr = cpu_to_le64(eph_info.ip_free_queue_bno);
 
 	/* Set the checkpoint mapping for the main device free queue root */
-	map = &block->cpm_map[3];
+	map = &block->cpm_map[idx++];
 	map->cpm_type = cpu_to_le32(APFS_OBJ_EPHEMERAL |
 				    APFS_OBJECT_TYPE_BTREE);
 	map->cpm_subtype = cpu_to_le32(APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE);
 	map->cpm_size = cpu_to_le32(param->blocksize);
 	map->cpm_oid = cpu_to_le64(MAIN_FREE_QUEUE_OID);
-	map->cpm_paddr = cpu_to_le64(MAIN_FREE_QUEUE_BNO);
+	map->cpm_paddr = cpu_to_le64(eph_info.main_free_queue_bno);
 
 	if (fd_tier2 != -1) {
 		/* Set the checkpoint mapping for the tier 2 free queue root */
-		map = &block->cpm_map[4];
+		map = &block->cpm_map[idx++];
 		map->cpm_type = cpu_to_le32(APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_BTREE);
 		map->cpm_subtype = cpu_to_le32(APFS_OBJECT_TYPE_SPACEMAN_FREE_QUEUE);
 		map->cpm_size = cpu_to_le32(param->blocksize);
 		map->cpm_oid = cpu_to_le64(TIER2_FREE_QUEUE_OID);
-		map->cpm_paddr = cpu_to_le64(TIER2_FREE_QUEUE_BNO);
+		map->cpm_paddr = cpu_to_le64(eph_info.tier2_free_queue_bno);
 
 		/* Set the checkpoint mapping for the fusion wb cache state */
-		map = &block->cpm_map[5];
+		map = &block->cpm_map[idx++];
 		map->cpm_type = cpu_to_le32(APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_NX_FUSION_WBC);
 		map->cpm_subtype = cpu_to_le32(APFS_OBJECT_TYPE_INVALID);
 		map->cpm_size = cpu_to_le32(param->blocksize);
 		map->cpm_oid = cpu_to_le64(FUSION_WBC_OID);
-		map->cpm_paddr = cpu_to_le64(FUSION_WBC_BNO);
+		map->cpm_paddr = cpu_to_le64(eph_info.fusion_wbc_bno);
 	}
+
+	block->cpm_count = cpu_to_le32(idx);
 
 	set_object_header(&block->cpm_o, param->blocksize, bno,
 			  APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_CHECKPOINT_MAP,
@@ -360,6 +352,25 @@ static void make_empty_fusion_wbc_state(u64 bno, u64 oid)
 }
 
 /**
+ * set_ephemeral_bnos - Decide the block numbers for the ephemeral objects
+ */
+static void set_ephemeral_bnos(void)
+{
+	eph_info.reaper_bno = CPOINT_DATA_BASE;
+	eph_info.spaceman_bno = eph_info.reaper_bno + 1;
+	eph_info.spaceman_sz = spaceman_size();
+	eph_info.spaceman_blkcnt = eph_info.spaceman_sz / param->blocksize;
+	eph_info.ip_free_queue_bno = eph_info.spaceman_bno + eph_info.spaceman_blkcnt;
+	eph_info.main_free_queue_bno = eph_info.ip_free_queue_bno + 1;
+	eph_info.total_blkcnt = eph_info.main_free_queue_bno - eph_info.reaper_bno + 1;
+	if (fd_tier2 != -1) {
+		eph_info.tier2_free_queue_bno = eph_info.main_free_queue_bno + 1;
+		eph_info.fusion_wbc_bno = eph_info.tier2_free_queue_bno + 1;
+		eph_info.total_blkcnt += 2;
+	}
+}
+
+/**
  * make_container - Make the whole filesystem
  */
 void make_container(void)
@@ -389,23 +400,29 @@ void make_container(void)
 	sb_copy->nx_next_oid = cpu_to_le64(APFS_OID_RESERVED_COUNT + 100);
 	sb_copy->nx_next_xid = cpu_to_le64(MKFS_XID + 1);
 
+	/*
+	 * We need to know the spaceman size before we can decide the location
+	 * of the other ephemeral objects.
+	 */
+	set_spaceman_info();
+	set_ephemeral_bnos();
+
 	sb_copy->nx_spaceman_oid = cpu_to_le64(SPACEMAN_OID);
-	make_spaceman(SPACEMAN_BNO, SPACEMAN_OID);
+	make_spaceman(eph_info.spaceman_bno, SPACEMAN_OID);
 	sb_copy->nx_reaper_oid = cpu_to_le64(REAPER_OID);
-	make_empty_reaper(REAPER_BNO, REAPER_OID);
+	make_empty_reaper(eph_info.reaper_bno, REAPER_OID);
 	sb_copy->nx_omap_oid = cpu_to_le64(MAIN_OMAP_BNO);
 	make_omap_btree(MAIN_OMAP_BNO, false /* is_vol */);
 	if (fd_tier2 != -1) {
 		sb_copy->nx_fusion_mt_oid = cpu_to_le64(FUSION_MT_BNO);
 		make_empty_btree_root(FUSION_MT_BNO, FUSION_MT_BNO, APFS_OBJECT_TYPE_FUSION_MIDDLE_TREE);
 		sb_copy->nx_fusion_wbc_oid = cpu_to_le64(FUSION_WBC_OID);
-		make_empty_fusion_wbc_state(FUSION_WBC_BNO, FUSION_WBC_OID);
+		make_empty_fusion_wbc_state(eph_info.fusion_wbc_bno, FUSION_WBC_OID);
 		sb_copy->nx_fusion_wbc.pr_start_paddr = cpu_to_le64(FUSION_WBC_FIRST_BNO);
 		/* TODO: figure out the formula for the block count */
 		sb_copy->nx_fusion_wbc.pr_block_count = cpu_to_le64(1);
 	}
 
-	/* After the spaceman because we need to know the spaceman's size */
 	set_checkpoint_areas(sb_copy);
 
 	sb_copy->nx_max_file_systems = cpu_to_le32(get_max_volumes(size));

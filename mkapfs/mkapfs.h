@@ -121,17 +121,25 @@ static inline u32 cpoint_data_blocks(void)
 #define CPOINT_DATA_BLOCKS	cpoint_data_blocks()
 #define CPOINT_END		(CPOINT_DATA_BASE + CPOINT_DATA_BLOCKS)
 
-/* Block numbers calculated from the checkpoint areas */
+/*
+ * Some block numbers for ephemeral objects will need to be calculated on
+ * runtime, so that they can all be kept consecutive and in the right order.
+ */
+extern struct ephemeral_info {
+	u64 reaper_bno;
+	u64 spaceman_bno;
+	u32 spaceman_sz;
+	u32 spaceman_blkcnt;
+	u64 ip_free_queue_bno;
+	u64 main_free_queue_bno;
+	u64 tier2_free_queue_bno;
+	u64 fusion_wbc_bno;
+	u32 total_blkcnt;
+} eph_info;
+
+/* Hardcoded block numbers calculated from the checkpoint areas */
 #define CPOINT_MAP_BNO			CPOINT_DESC_BASE
 #define CPOINT_SB_BNO			(CPOINT_DESC_BASE + 1)
-#define REAPER_BNO			CPOINT_DATA_BASE
-#define IP_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 1)
-#define MAIN_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 2)
-/* These two typically left unused, but it shouldn't matter */
-#define TIER2_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 3)
-#define FUSION_WBC_BNO			(CPOINT_DATA_BASE + 4)
-/* Spaceman comes last in the data area because it could need multiple blocks */
-#define SPACEMAN_BNO			(CPOINT_DATA_BASE + 5)
 #define MAIN_OMAP_BNO			CPOINT_END
 #define MAIN_OMAP_ROOT_BNO		(CPOINT_END + 1)
 #define FIRST_VOL_BNO			(CPOINT_END + 2)
