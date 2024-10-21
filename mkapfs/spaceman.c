@@ -544,6 +544,9 @@ void set_spaceman_info(void)
 	sm_info.total_cib_count = main_dev->cib_count + tier2_dev->cib_count;
 	sm_info.total_cab_count = main_dev->cab_count + tier2_dev->cab_count;
 	sm_info.ip_blocks = (sm_info.total_chunk_count + sm_info.total_cib_count + sm_info.total_cab_count) * 3;
+	/* Just a rough limit in case tier 2 is huge */
+	if (sm_info.ip_blocks > param->main_blkcnt / 2)
+		fatal("internal pool too big for the main device");
 
 	/*
 	 * We have 16 ip bitmaps; each of them maps the whole ip and may span

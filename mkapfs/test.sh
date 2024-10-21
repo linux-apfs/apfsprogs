@@ -31,6 +31,13 @@ test_fusion_sizes() {
 	../apfsck/apfsck -cuw -F /tmp/sizetest2.img /tmp/sizetest.img
 }
 
+confirm_mkfs_failure() {
+	truncate -s $1 /tmp/sizetest.img
+	truncate -s $2 /tmp/sizetest2.img
+	# Confirm that this fails cleanly, not with sigbus
+	./mkapfs -F /tmp/sizetest2.img /tmp/sizetest.img >/dev/null 2>&1 || [ $? -eq 1 ]
+}
+
 # Single block ip bitmap, single block spaceman, no CABs
 sizes[0]=512K # Minimum size
 sizes[1]=15G
@@ -63,7 +70,12 @@ done
 touch /tmp/sizetest2.img
 for sz1 in ${sizes[@]}; do
 	for sz2 in ${sizes[@]}; do
-		test_fusion_sizes $sz1 $sz2
+		# The main device needs to be large enough to map tier 2
+		if [ "$sz1" = "512K" -a "$sz2" != "512K" ]; then
+			confirm_mkfs_failure $sz1 $sz2
+		else
+			test_fusion_sizes $sz1 $sz2
+		fi
 	done
 done
 

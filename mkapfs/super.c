@@ -368,6 +368,10 @@ static void set_ephemeral_bnos(void)
 		eph_info.fusion_wbc_bno = eph_info.tier2_free_queue_bno + 1;
 		eph_info.total_blkcnt += 2;
 	}
+
+	/* Just a rough limit in case tier 2 is huge */
+	if (eph_info.total_blkcnt >= CPOINT_DATA_BLOCKS / 4)
+		fatal("space manager too big for the main device");
 }
 
 /**
