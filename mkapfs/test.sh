@@ -46,10 +46,10 @@ sizes[2]=1454383300608	# Maximum size
 # Multiblock ip bitmap, single block spaceman, no CABs
 sizes[3]=1454383304704	# Minimum size
 sizes[4]=3T
-sizes[5]=7390296539136	# Maximum size
+sizes[5]=7407207972864	# Maximum size
 
 # Multiblock ip bitmap, multiblock spaceman, no CABs
-sizes[6]=7390296543232	# Minimum size
+sizes[6]=7407207976960	# Minimum size
 sizes[7]=7T
 sizes[8]=8574096900096	# Maximum size
 
