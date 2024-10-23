@@ -1009,7 +1009,7 @@ void check_spaceman(u64 oid)
 
 	compare_container_bitmaps_dev(APFS_SD_MAIN);
 	compare_container_bitmaps_dev(APFS_SD_TIER2);
-	munmap(raw, obj.size);
+	free(raw);
 }
 
 /**

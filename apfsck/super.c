@@ -1358,6 +1358,7 @@ struct checkpoint_info {
 static u32 parse_cpoint_map(struct apfs_checkpoint_mapping *raw, struct checkpoint_info *cp_info, u32 idx)
 {
 	struct cpoint_map *map;
+	u32 start_off, blkcnt;
 
 	map = get_cpoint_map(le64_to_cpu(raw->cpm_oid));
 	if (map->m_paddr)
@@ -1374,6 +1375,7 @@ static u32 parse_cpoint_map(struct apfs_checkpoint_mapping *raw, struct checkpoi
 	map->m_size = le32_to_cpu(raw->cpm_size);
 	if (map->m_size & (sb->s_blocksize - 1))
 		report("Checkpoint map", "size isn't multiple of block size.");
+	blkcnt = map->m_size >> sb->s_blocksize_bits;
 	if ((map->m_type & APFS_OBJECT_TYPE_MASK) != APFS_OBJECT_TYPE_SPACEMAN) {
 		if (map->m_size != sb->s_blocksize)
 			report_unknown("Large non-spaceman ephemeral objects");
@@ -1384,7 +1386,11 @@ static u32 parse_cpoint_map(struct apfs_checkpoint_mapping *raw, struct checkpoi
 	if (raw->cpm_fs_oid)
 		report_unknown("Ephemeral object belonging to a volume");
 
-	idx += map->m_size >> sb->s_blocksize_bits;
+	start_off = (cp_info->data_blocks + idx - cp_info->data_index) % cp_info->data_blocks;
+	if (start_off >= cp_info->data_len || start_off + blkcnt > cp_info->data_len)
+		report("Checkpoint map", "object index outside valid range.");
+
+	idx += blkcnt;
 	return idx % cp_info->data_blocks;
 }
 
@@ -1494,6 +1500,8 @@ static void preread_checkpoint_info(struct apfs_nx_superblock *nx_sb_copy, struc
 	info->data_index = le32_to_cpu(msb_raw_latest->nx_xp_data_index);
 	if (info->data_next >= info->data_blocks || info->data_index >= info->data_blocks)
 		report("Checkpoint superblock", "out of range checkpoint data.");
+	info->desc_len = le32_to_cpu(msb_raw_latest->nx_xp_desc_len);
+	info->data_len = le32_to_cpu(msb_raw_latest->nx_xp_data_len);
 	munmap(msb_raw_latest, sb->s_blocksize);
 	msb_raw_latest = NULL;
 }
@@ -1647,7 +1655,7 @@ static struct object *parse_reaper(u64 oid)
 			report_unknown("Nonempty reaper list");
 		/* TODO: nrl_free? */
 
-		munmap(list_raw, list.size);
+		free(list_raw);
 	} else {
 		if (raw->nr_completed_id || raw->nr_head || raw->nr_rlcount || raw->nr_type)
 			report("Reaper", "should be empty.");
@@ -1671,7 +1679,7 @@ static struct object *parse_reaper(u64 oid)
 	if (flags & APFS_NR_CONTINUE)
 		report_unknown("Object being reaped");
 
-	munmap(raw, reaper->size);
+	free(raw);
 	return reaper;
 }
 
@@ -1724,7 +1732,7 @@ static struct object *parse_fusion_wbc_state(u64 oid)
 	if (wbc->fwp_rcStash.pr_start_paddr || wbc->fwp_rcStash.pr_block_count)
 		report_unknown("Nonempty fusion wb cache");
 
-	munmap(wbc, obj->size);
+	free(wbc);
 	return obj;
 }
 

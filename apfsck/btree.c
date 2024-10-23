@@ -390,9 +390,21 @@ static struct node *read_node(u64 oid, struct btree *btree, u8 *hash)
  */
 static void node_free(struct node *node)
 {
+	struct object *obj = NULL;
+
 	if (node_is_root(node))
 		return;	/* The root nodes are needed by the sb until the end */
-	munmap(node->raw, node->object.size);
+	obj = &node->object;
+
+	/*
+	 * Ephemeral objects may wrap around so they are actually copied to
+	 * memory, not just mmapped. Hacky, like much of the fsck.
+	 */
+	if ((obj->flags & APFS_OBJ_STORAGETYPE_MASK) == APFS_OBJ_EPHEMERAL)
+		free(node->raw);
+	else
+		munmap(node->raw, obj->size);
+
 	free(node->free_key_bmap);
 	free(node->free_val_bmap);
 	free(node->used_key_bmap);
