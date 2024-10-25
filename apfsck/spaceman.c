@@ -747,35 +747,48 @@ static void compare_container_bitmaps_dev(enum smdev which)
 /**
  * check_ip_free_next - Check the free_next field for the internal pool
  * @free_next:	256-bit field to check
- * @free_head:	first free block in the ip circular buffer
- * @free_len:	number of free blocks in the ip circular buffer
+ * @free_head:	first block in the linked list of free blocks
+ * @free_tail:	last block in the linked list of free blocks
  * @bmap_count:	total number of ip bitmaps
+ *
+ * Returns the number of used entries.
  */
-static void check_ip_free_next(__le16 *free_next, u16 free_head, u16 free_len, u32 bmap_count)
+static int check_ip_free_next(__le16 *free_next, u16 free_head, u16 free_tail, u32 bmap_count)
 {
-	__le16 *expected;
-	u32 i;
-
-	expected = calloc(bmap_count, sizeof(*free_next));
-	if (!expected)
-		system_error();
+	u16 curr, next, i;
+	int used_count = 0;
 
 	/*
-	 * Ip bitmap blocks are marked with numbers 1,2,3,...,14,15,0 in
-	 * free_next, except when they are in use: those get overwritten with
-	 * 0xFFFF.
+	 * Entries for free ip bitmap blocks are a linked list, where each one
+	 * gives the index of the next one. The blocks in between are used;
+	 * they aren't part of the list, so their entries are set to the
+	 * invalid index 0xFFFF.
 	 */
-	for (i = 0; i < bmap_count; i++) {
-		u32 index_in_free = (bmap_count + i - free_head) % bmap_count;
+	curr = free_tail;
+	next = free_head;
+	do {
+		if (curr >= bmap_count || next >= bmap_count)
+			report("Internal pool", "free bitmaps are out-of-bounds.");
+		for (i = (curr + 1) % bmap_count; i != next; i = (i + 1) % bmap_count) {
+			if (le16_to_cpu(free_next[i]) != APFS_SPACEMAN_IP_BM_INDEX_INVALID)
+				report("Free ip bitmaps list", "used block not marked correctly.");
+			++used_count;
+			/* Don't loop forever when the list is corrupted */
+			if (i == free_tail)
+				report("Free ip bitmaps list", "skips over its tail.");
+		}
+		curr = next;
+		next = le16_to_cpu(free_next[curr]);
+	} while (curr != free_tail);
 
-		if (index_in_free < free_len)
-			expected[i] = cpu_to_le16((1 + i) % bmap_count);
-		else
-			expected[i] = cpu_to_le16(0xFFFF);
-	}
+	/*
+	 * The tail itself is also set to the invalid index because the linked
+	 * list ends there. Its block is free, though.
+	 */
+	if (le16_to_cpu(free_next[free_tail]) != APFS_SPACEMAN_IP_BM_INDEX_INVALID)
+		report("Free ip bitmaps list", "free tail is not used.");
 
-	if (memcmp(free_next, expected, bmap_count * sizeof(*free_next)))
-		report("Space manager", "Bad ip_bm_free_next bitmap.");
+	return used_count;
 }
 
 /**
@@ -811,9 +824,10 @@ static void parse_ip_bitmap_list(struct apfs_spaceman_phys *raw, char *bmap)
 	u16 bmap_off;
 	u32 bmap_length = le32_to_cpu(raw->sm_ip_bm_block_count);
 	u32 bm_size_in_blocks = le32_to_cpu(raw->sm_ip_bm_size_in_blocks);
-	u16 free_head, free_tail, free_length;
-	char *free_next;
-	u32 i;
+	u16 free_head, free_tail, used_count;
+	__le16 *free_next = NULL;
+	u16 *used_bitmaps = NULL;
+	u32 i, j;
 
 	/*
 	 * The bitmap area is a ring structure that keeps both the currently
@@ -821,8 +835,7 @@ static void parse_ip_bitmap_list(struct apfs_spaceman_phys *raw, char *bmap)
 	 * for this.
 	 */
 
-	/* The head and tail fit in 16-bit fields, so the length also should */
-	if (bmap_length > (u16)(~0U))
+	if (bmap_length > APFS_SPACEMAN_IP_BM_BLOCK_COUNT_MAX)
 		report("Internal pool", "bitmap list is too long.");
 
 	if (bmap_length != 16 * bm_size_in_blocks)
@@ -830,26 +843,39 @@ static void parse_ip_bitmap_list(struct apfs_spaceman_phys *raw, char *bmap)
 
 	free_head = le16_to_cpu(raw->sm_ip_bm_free_head);
 	free_tail = le16_to_cpu(raw->sm_ip_bm_free_tail);
-	free_length = (bmap_length + free_tail - free_head) % bmap_length;
 
-	if (free_head >= bmap_length || free_tail >= bmap_length)
-		report("Internal pool", "free bitmaps are out-of-bounds.");
-	if (free_length != bmap_length - (bm_size_in_blocks + 1))
-		report_unknown("Ip bitmaps in use not one above size");
-
-	free_next = spaceman_256_from_off(raw, le32_to_cpu(raw->sm_ip_bm_free_next_offset));
-	check_ip_free_next((__le16 *)free_next, free_head, free_length, bmap_length);
+	free_next = (__le16 *)spaceman_256_from_off(raw, le32_to_cpu(raw->sm_ip_bm_free_next_offset));
+	used_count = check_ip_free_next((__le16 *)free_next, free_head, free_tail, bmap_length);
+	if (used_count != bm_size_in_blocks)
+		report("Internal pool", "incorrect count of used blocks.");
 
 	container_bmap_mark_as_used(bmap_base, bmap_length);
 
+	used_bitmaps = calloc(used_count, sizeof(*used_bitmaps));
+	if (!used_bitmaps)
+		system_error();
+	used_bitmaps[0] = free_tail;
 	for (i = 0; i < bm_size_in_blocks; ++i) {
 		bmap_off = spaceman_16_from_off(raw, le32_to_cpu(raw->sm_ip_bitmap_offset) + i * sizeof(bmap_off));
 		if (bmap_off >= bmap_length)
 			report("Internal pool", "bitmap block is out-of-bounds.");
-		if ((bmap_length + bmap_off - free_head) % bmap_length < free_length)
-			report("Internal pool", "current bitmap listed as free.");
+		if (le16_to_cpu(free_next[bmap_off]) != APFS_SPACEMAN_IP_BM_INDEX_INVALID)
+			report("Internal pool", "used bitmap marked as free.");
 		read_ip_bitmap_block(bmap_base, bmap_length, bmap_off, bmap + i * sb->s_blocksize);
+
+		/*
+		 * Make sure that the same bitmap blocks aren't being reused
+		 * for different ip chunks. Remember that the first used bitmap
+		 * is the one for free_tail, set outside this loop.
+		 */
+		for (j = 0; j < i + 1; ++j) {
+			if (used_bitmaps[j] == bmap_off)
+				report("Internal pool", "same bitmap used twice.");
+		}
+		used_bitmaps[i + 1] = bmap_off;
 	}
+	free(used_bitmaps);
+	used_bitmaps = NULL;
 }
 
 /**
