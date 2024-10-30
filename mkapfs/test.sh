@@ -38,6 +38,12 @@ confirm_mkfs_failure() {
 	./mkapfs -F /tmp/sizetest2.img /tmp/sizetest.img >/dev/null 2>&1 || [ $? -eq 1 ]
 }
 
+test_partial() {
+	truncate -s $1 /tmp/sizetest.img
+	./mkapfs /tmp/sizetest.img $2
+	../apfsck/apfsck -cuw /tmp/sizetest.img
+}
+
 # Single block ip bitmap, single block spaceman, no CABs
 sizes[0]=512K # Minimum size
 sizes[1]=15G
@@ -78,5 +84,8 @@ for sz1 in ${sizes[@]}; do
 		fi
 	done
 done
+
+# Regression test for filesystems that don't fill the whole device
+test_partial 15G 262144
 
 success=1

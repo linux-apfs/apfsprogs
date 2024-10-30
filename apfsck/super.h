@@ -87,8 +87,8 @@ struct super_block {
 	unsigned long s_blocksize;
 	unsigned char s_blocksize_bits;
 	u64 s_block_count; /* Number of blocks in the container */
-	u64 s_main_blkcnt; /* Number of blocks in the main device */
-	u64 s_tier2_blkcnt; /* Number of blocks in the tier 2 device */
+	u64 s_max_main_blkcnt; /* Maximum number of blocks in the main device */
+	u64 s_max_tier2_blkcnt; /* Maximum number of blocks in the tier 2 device */
 	u64 s_xid; /* Transaction id for the superblock */
 	u64 s_next_oid;	/* Next virtual object id to be used */
 	u32 s_max_vols; /* Maximum number of volumes allowed */

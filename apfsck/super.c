@@ -1242,7 +1242,7 @@ static void check_container(struct super_block *sb)
  */
 static void parse_main_super(struct super_block *sb)
 {
-	u64 main_chunk_count, tier2_chunk_count;
+	u64 max_main_chunk_count, max_tier2_chunk_count;
 
 	assert(sb->s_raw);
 
@@ -1259,23 +1259,23 @@ static void parse_main_super(struct super_block *sb)
 	sb->s_block_count = le64_to_cpu(sb->s_raw->nx_block_count);
 	if (!sb->s_block_count)
 		report("Container superblock", "reports no block count.");
-	sb->s_main_blkcnt = get_main_device_size(sb->s_blocksize);
-	sb->s_tier2_blkcnt = get_tier2_device_size(sb->s_blocksize);
-	if (sb->s_block_count > sb->s_main_blkcnt + sb->s_tier2_blkcnt)
+	sb->s_max_main_blkcnt = get_main_device_size(sb->s_blocksize);
+	sb->s_max_tier2_blkcnt = get_tier2_device_size(sb->s_blocksize);
+	if (sb->s_block_count > sb->s_max_main_blkcnt + sb->s_max_tier2_blkcnt)
 		report("Container superblock", "too many blocks for device.");
 
 	/*
 	 * A chunk is the disk section covered by a single block in the
 	 * allocation bitmap.
 	 */
-	main_chunk_count = DIV_ROUND_UP(sb->s_main_blkcnt, 8 * sb->s_blocksize);
-	sb->s_main_bitmap = calloc(main_chunk_count, sb->s_blocksize);
+	max_main_chunk_count = DIV_ROUND_UP(sb->s_max_main_blkcnt, 8 * sb->s_blocksize);
+	sb->s_main_bitmap = calloc(max_main_chunk_count, sb->s_blocksize);
 	if (!sb->s_main_bitmap)
 		system_error();
 	((char *)sb->s_main_bitmap)[0] = 0x01; /* Block zero is always used */
-	if (sb->s_tier2_blkcnt) {
-		tier2_chunk_count = DIV_ROUND_UP(sb->s_tier2_blkcnt, 8 * sb->s_blocksize);
-		sb->s_tier2_bitmap = calloc(tier2_chunk_count, sb->s_blocksize);
+	if (sb->s_max_tier2_blkcnt) {
+		max_tier2_chunk_count = DIV_ROUND_UP(sb->s_max_tier2_blkcnt, 8 * sb->s_blocksize);
+		sb->s_tier2_bitmap = calloc(max_tier2_chunk_count, sb->s_blocksize);
 		if (!sb->s_tier2_bitmap)
 			system_error();
 		((char *)sb->s_tier2_bitmap)[0] = 0x01; /* Block zero is always used */
