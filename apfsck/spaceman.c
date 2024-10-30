@@ -851,7 +851,7 @@ static void parse_ip_bitmap_list(struct apfs_spaceman_phys *raw, char *bmap)
 
 	container_bmap_mark_as_used(bmap_base, bmap_length);
 
-	used_bitmaps = calloc(used_count, sizeof(*used_bitmaps));
+	used_bitmaps = calloc(used_count + 1, sizeof(*used_bitmaps));
 	if (!used_bitmaps)
 		system_error();
 	used_bitmaps[0] = free_tail;
