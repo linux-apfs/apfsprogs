@@ -755,12 +755,12 @@ static void compare_container_bitmaps_dev(enum smdev which)
  */
 static int check_ip_free_next(__le16 *free_next, u16 free_head, u16 free_tail, u32 bmap_count)
 {
-	u16 curr, next, i;
-	int used_count = 0;
+	u16 curr, next;
+	int free_count = 0;
 
 	/*
 	 * Entries for free ip bitmap blocks are a linked list, where each one
-	 * gives the index of the next one. The blocks in between are used;
+	 * gives the index of the next one. The rest of the blocks are used;
 	 * they aren't part of the list, so their entries are set to the
 	 * invalid index 0xFFFF.
 	 */
@@ -769,14 +769,8 @@ static int check_ip_free_next(__le16 *free_next, u16 free_head, u16 free_tail, u
 	do {
 		if (curr >= bmap_count || next >= bmap_count)
 			report("Internal pool", "free bitmaps are out-of-bounds.");
-		for (i = (curr + 1) % bmap_count; i != next; i = (i + 1) % bmap_count) {
-			if (le16_to_cpu(free_next[i]) != APFS_SPACEMAN_IP_BM_INDEX_INVALID)
-				report("Free ip bitmaps list", "used block not marked correctly.");
-			++used_count;
-			/* Don't loop forever when the list is corrupted */
-			if (i == free_tail)
-				report("Free ip bitmaps list", "skips over its tail.");
-		}
+		if (++free_count >= bmap_count)
+			report("Internal pool", "free bitmap list loops.");
 		curr = next;
 		next = le16_to_cpu(free_next[curr]);
 	} while (curr != free_tail);
@@ -788,7 +782,7 @@ static int check_ip_free_next(__le16 *free_next, u16 free_head, u16 free_tail, u
 	if (le16_to_cpu(free_next[free_tail]) != APFS_SPACEMAN_IP_BM_INDEX_INVALID)
 		report("Free ip bitmaps list", "free tail is not used.");
 
-	return used_count;
+	return bmap_count - free_count;
 }
 
 /**
