@@ -449,7 +449,7 @@ static void make_ip_bitmap(void)
 }
 
 /**
- * make_ip_bm_free_next - Fill the free_next field for the internal pool
+ * make_ip_bm_free_next - Set up the free_next list for the internal pool
  * @addr: pointer to the beginning of the field
  */
 static void make_ip_bm_free_next(__le16 *addr)
@@ -457,15 +457,17 @@ static void make_ip_bm_free_next(__le16 *addr)
 	int i;
 
 	/*
-	 * Ip bitmap blocks are marked with numbers 1,2,3,...,ip_bmap_blocks,0
-	 * in free_next, except when they are in use: those get overwritten with
+	 * Free ip bitmap blocks are kept in a linked list. For the mkfs this
+	 * just means that they get marked with numbers that are one above
+	 * their index, except for the tail block which gets the invalid index
+	 * 0xFFFF. Blocks in use are not part of the list, so they also get
 	 * 0xFFFF.
 	 */
 	for (i = 0; i < sm_info.ip_bm_size; ++i)
-		addr[i] = cpu_to_le16(0xFFFF);
+		addr[i] = cpu_to_le16(APFS_SPACEMAN_IP_BM_INDEX_INVALID);
 	for (i = sm_info.ip_bm_size; i < sm_info.ip_bmap_blocks - 1; i++)
 		addr[i] = cpu_to_le16(i + 1);
-	addr[sm_info.ip_bmap_blocks - 1] = cpu_to_le16(0xFFFF);
+	addr[sm_info.ip_bmap_blocks - 1] = cpu_to_le16(APFS_SPACEMAN_IP_BM_INDEX_INVALID);
 }
 
 /**
