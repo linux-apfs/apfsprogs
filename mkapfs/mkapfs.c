@@ -30,7 +30,7 @@ static void usage(void)
 		"usage: %s [-L label] [-U UUID] [-u UUID] [-F tier2] [-sv] "
 		"device [blocks]\n",
 		progname);
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -42,7 +42,7 @@ static void version(void)
 		printf("mkapfs %s\n", GIT_COMMIT);
 	else
 		printf("mkapfs - unknown git commit id\n");
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -51,7 +51,7 @@ static void version(void)
 __attribute__((noreturn)) void system_error(void)
 {
 	perror(progname);
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -61,7 +61,7 @@ __attribute__((noreturn)) void system_error(void)
 __attribute__((noreturn)) void fatal(const char *message)
 {
 	fprintf(stderr, "%s: %s\n", progname, message);
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -147,7 +147,7 @@ static void complete_parameters(void)
 	if (param->block_count) {
 		if (param->block_count > param->main_blkcnt) {
 			fprintf(stderr, "%s: device is not big enough\n", progname);
-			exit(1);
+			exit(EXIT_FAILURE);
 		}
 		param->main_blkcnt = param->block_count;
 	} else {
@@ -156,7 +156,7 @@ static void complete_parameters(void)
 	if (param->main_blkcnt * param->blocksize < 512 * 1024) {
 		fprintf(stderr, "%s: such tiny containers are not supported\n",
 			progname);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 	if (param->tier2_blkcnt && param->tier2_blkcnt * param->blocksize < 512 * 1024) {
 		/* TODO: is this really a problem for tier 2? */
@@ -171,7 +171,7 @@ static void complete_parameters(void)
 	/* Make sure the volume label fits, along with its null termination */
 	if (strlen(param->label) + 1 > APFS_VOLNAME_LEN) {
 		fprintf(stderr, "%s: volume label is too long\n", progname);
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	if (!param->main_uuid)

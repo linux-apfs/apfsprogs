@@ -25,7 +25,7 @@ static char *progname;
 static void usage(void)
 {
 	fprintf(stderr, "usage: %s [-cuvw] [-F tier2] device\n", progname);
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -37,7 +37,7 @@ static void version(void)
 		printf("apfsck %s\n", GIT_COMMIT);
 	else
 		printf("apfsck - unknown git commit id\n");
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -46,7 +46,7 @@ static void version(void)
 __attribute__((noreturn)) void system_error(void)
 {
 	perror(progname);
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -70,7 +70,7 @@ __attribute__((noreturn, format(printf, 2, 3)))	void report(const char *context,
 	else
 		printf("%s\n", buf);
 
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
