@@ -27,7 +27,7 @@ static char *progname;
 static void usage(void)
 {
 	fprintf(stderr,
-		"usage: %s [-L label] [-U UUID] [-u UUID] [-F tier2] [-sv] "
+		"usage: %s [-L label] [-U UUID] [-u UUID] [-F tier2] [-B tier2-blocks] [-sv] "
 		"device [blocks]\n",
 		progname);
 	exit(EXIT_FAILURE);
@@ -139,20 +139,27 @@ static char *get_random_uuid(void)
  */
 static void complete_parameters(void)
 {
+	u64 main_blkcnt_limit, tier2_blkcnt_limit;
+
 	if (!param->blocksize)
 		param->blocksize = APFS_NX_DEFAULT_BLOCK_SIZE;
 
-	param->main_blkcnt = get_main_device_size(param->blocksize);
-	param->tier2_blkcnt = get_tier2_device_size(param->blocksize);
-	if (param->block_count) {
-		if (param->block_count > param->main_blkcnt) {
-			fprintf(stderr, "%s: device is not big enough\n", progname);
-			exit(EXIT_FAILURE);
-		}
-		param->main_blkcnt = param->block_count;
-	} else {
-		param->block_count = param->main_blkcnt + param->tier2_blkcnt;
+	main_blkcnt_limit = get_main_device_size(param->blocksize);
+	tier2_blkcnt_limit = get_tier2_device_size(param->blocksize);
+	if (!param->main_blkcnt)
+		param->main_blkcnt = main_blkcnt_limit;
+	if (!param->tier2_blkcnt)
+		param->tier2_blkcnt = tier2_blkcnt_limit;
+	if (param->main_blkcnt > main_blkcnt_limit) {
+		fprintf(stderr, "%s: main device is not big enough\n", progname);
+		exit(EXIT_FAILURE);
 	}
+	if (param->tier2_blkcnt > tier2_blkcnt_limit) {
+		fprintf(stderr, "%s: tier 2 device is not big enough\n", progname);
+		exit(EXIT_FAILURE);
+	}
+	param->block_count = param->main_blkcnt + param->tier2_blkcnt;
+
 	if (param->main_blkcnt * param->blocksize < 512 * 1024) {
 		fprintf(stderr, "%s: such tiny containers are not supported\n",
 			progname);
@@ -192,7 +199,7 @@ int main(int argc, char *argv[])
 		system_error();
 
 	while (1) {
-		int opt = getopt(argc, argv, "L:U:u:szvF:");
+		int opt = getopt(argc, argv, "L:U:u:szvF:B:");
 
 		if (opt == -1)
 			break;
@@ -220,6 +227,10 @@ int main(int argc, char *argv[])
 			if (fd_tier2 == -1)
 				system_error();
 			break;
+		case 'B':
+			/* TODO: reject malformed numbers */
+			param->tier2_blkcnt = atoll(optarg);
+			break;
 		default:
 			usage();
 		}
@@ -228,15 +239,12 @@ int main(int argc, char *argv[])
 	if (optind == argc - 2) {
 		filename = argv[optind];
 		/* TODO: reject malformed numbers? */
-		param->block_count = atoll(argv[optind + 1]);
+		param->main_blkcnt = atoll(argv[optind + 1]);
 	} else if (optind == argc - 1) {
 		filename = argv[optind];
 	} else {
 		usage();
 	}
-
-	if (param->block_count && fd_tier2 != -1)
-		fatal("block count can't be specified for a fusion drive");
 
 	fd_main = open(filename, O_RDWR);
 	if (fd_main == -1)

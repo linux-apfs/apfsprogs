@@ -16,6 +16,8 @@ mkapfs \- create an APFS filesystem
 .IR UUID ]
 [\-F
 .IR tier2 ]
+[\-B
+.IR tier2-blocks ]
 .I device
 .RI [ blocks ]
 .SH DESCRIPTION
@@ -23,7 +25,7 @@ mkapfs \- create an APFS filesystem
 is an experimental tool to create an APFS filesystem with a single volume on
 the given
 .IR device .
-The number of blocks in the container can be specified in
+The number of blocks for the device can be specified in
 .IR blocks ,
 otherwise the whole disk is used.
 .SH OPTIONS
@@ -52,6 +54,11 @@ and exit.
 .TP
 .BI \-F " tier2"
 Specify the tier 2 device for a fusion drive.
+.TP
+.BI \-B " tier2-blocks"
+Specify the size (in blocks) for the tier 2 device given by the
+.B \-F
+option. By default the whole disk is used.
 .SH REPORTING BUGS
 Please report bugs via email or, if preferred, file a github issue at
 \%https://github.com/eafer/apfsprogs/issues.
