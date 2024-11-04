@@ -25,7 +25,7 @@ static char *progname;
 static void usage(void)
 {
 	fprintf(stderr, "usage: %s [-cuvw] [-F tier2] device\n", progname);
-  exit(EXIT_FAILURE);
+	exit(EXIT_FAILURE);
 }
 
 /**
