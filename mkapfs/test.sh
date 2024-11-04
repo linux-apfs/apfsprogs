@@ -13,6 +13,7 @@ success=0
 set -e
 cleanup() {
 	rm -f /tmp/sizetest.img
+	rm -f /tmp/sizetest2.img
 	[ $success -eq 1 ] && echo "TEST PASSED" || echo "TEST FAILED"
 }
 trap cleanup exit
@@ -23,30 +24,68 @@ test_size() {
 	../apfsck/apfsck -cuw /tmp/sizetest.img
 }
 
-touch /tmp/sizetest.img
+test_fusion_sizes() {
+	truncate -s $1 /tmp/sizetest.img
+	truncate -s $2 /tmp/sizetest2.img
+	./mkapfs -F /tmp/sizetest2.img /tmp/sizetest.img
+	../apfsck/apfsck -cuw -F /tmp/sizetest2.img /tmp/sizetest.img
+}
+
+confirm_mkfs_failure() {
+	truncate -s $1 /tmp/sizetest.img
+	truncate -s $2 /tmp/sizetest2.img
+	# Confirm that this fails cleanly, not with sigbus
+	./mkapfs -F /tmp/sizetest2.img /tmp/sizetest.img >/dev/null 2>&1 || [ $? -eq 1 ]
+}
+
+test_partial() {
+	truncate -s $1 /tmp/sizetest.img
+	./mkapfs /tmp/sizetest.img $2
+	../apfsck/apfsck -cuw /tmp/sizetest.img
+}
 
 # Single block ip bitmap, single block spaceman, no CABs
-test_size 512K # Minimum size
-test_size 15G
-test_size 1454383300608	# Maximum size
+sizes[0]=512K # Minimum size
+sizes[1]=15G
+sizes[2]=1454383300608	# Maximum size
 
 # Multiblock ip bitmap, single block spaceman, no CABs
-test_size 1454383304704	# Minimum size
-test_size 3T
-test_size 7390296539136	# Maximum size
+sizes[3]=1454383304704	# Minimum size
+sizes[4]=3T
+sizes[5]=7407207972864	# Maximum size
 
 # Multiblock ip bitmap, multiblock spaceman, no CABs
-test_size 7390296543232	# Minimum size
-test_size 7T
-test_size 8574096900096	# Maximum size
+sizes[6]=7407207976960	# Minimum size
+sizes[7]=7T
+sizes[8]=8574096900096	# Maximum size
 
 # Multiblock ip bitmap, single block spaceman, has CABs
-test_size 8574096904192	# Minimum size
-test_size 15T
+sizes[9]=8574096904192	# Minimum size
+sizes[10]=15T
 
 # Filesystems > ~113 TiB not yet supported
 
 # Regression tests for sizes that caused problems in the past
-test_size 3G
+sizes[11]=3G
+
+touch /tmp/sizetest.img
+for sz in ${sizes[@]}; do
+	test_size $sz
+done
+
+touch /tmp/sizetest2.img
+for sz1 in ${sizes[@]}; do
+	for sz2 in ${sizes[@]}; do
+		# The main device needs to be large enough to map tier 2
+		if [ "$sz1" = "512K" -a "$sz2" != "512K" ]; then
+			confirm_mkfs_failure $sz1 $sz2
+		else
+			test_fusion_sizes $sz1 $sz2
+		fi
+	done
+done
+
+# Regression test for filesystems that don't fill the whole device
+test_partial 15G 262144
 
 success=1

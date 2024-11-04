@@ -41,7 +41,7 @@ void read_whole_dstream(u64 oid, void *buf, loff_t size)
         if(bno == 0)
             report("Compressed file", "has a hole.");
 
-        block = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, fd, bno * sb->s_blocksize);
+        block = apfs_mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, bno * sb->s_blocksize);
         if(block == MAP_FAILED)
             system_error();
         memcpy(buf, block, curr_copylen);

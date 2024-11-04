@@ -76,13 +76,19 @@ struct volume_superblock {
 /* Superblock data in memory */
 struct super_block {
 	struct apfs_nx_superblock *s_raw;
-	void *s_bitmap;	/* Allocation bitmap for the whole container */
+	void *s_main_bitmap; /* Allocation bitmap for the main device */
+	void *s_tier2_bitmap; /* Allocation bitmap for the tier 2 device */
 	void *s_ip_bitmap; /* Allocation bitmap for the internal pool */
+	char s_fusion_uuid[16]; /* Fusion drive UUID set on the main device */
+	struct btree *s_fusion_mt; /* Fusion middle-tree */
+	struct object *s_fusion_wbc; /* Fusion write-back cache */
 	struct btree *s_omap;
 	struct object *s_reaper;
 	unsigned long s_blocksize;
 	unsigned char s_blocksize_bits;
 	u64 s_block_count; /* Number of blocks in the container */
+	u64 s_max_main_blkcnt; /* Maximum number of blocks in the main device */
+	u64 s_max_tier2_blkcnt; /* Maximum number of blocks in the tier 2 device */
 	u64 s_xid; /* Transaction id for the superblock */
 	u64 s_next_oid;	/* Next virtual object id to be used */
 	u32 s_max_vols; /* Maximum number of volumes allowed */
@@ -178,6 +184,13 @@ static inline bool apfs_is_system_volume_in_group(void)
 	u16 role = apfs_volume_role();
 
 	return apfs_volume_is_in_group() && role == APFS_VOL_ROLE_SYSTEM;
+}
+
+static inline bool apfs_is_fusion_drive(void)
+{
+	u64 flags = le64_to_cpu(sb->s_raw->nx_incompatible_features);
+
+	return flags & APFS_NX_INCOMPAT_FUSION;
 }
 
 /**

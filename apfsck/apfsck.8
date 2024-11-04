@@ -8,6 +8,8 @@ apfsck \- check an APFS filesystem
 .SH SYNOPSIS
 .B apfsck
 [\-cuvw]
+[\-F
+.IR tier2 ]
 .I device
 .SH DESCRIPTION
 Unless you are an APFS developer, you are probably not interested in this tool.
@@ -33,6 +35,9 @@ and exit.
 .TP
 .B \-w
 Report unexplained inconsistencies that may or may not be corruption.
+.TP
+.BI \-F " tier2"
+Specify the tier 2 device for a fusion drive.
 .SH EXIT STATUS
 The exit status is 0 if there was nothing to report, 1 otherwise.
 .SH REPORTING BUGS

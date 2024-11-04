@@ -132,6 +132,7 @@ struct query {
 #define BTREE_TYPE_FREE_QUEUE	5 /* The tree is for a free-space queue */
 #define BTREE_TYPE_SNAPSHOTS	6 /* The tree is for omap snapshots */
 #define BTREE_TYPE_FEXT		7 /* The tree is for file extents */
+#define BTREE_TYPE_FUSION_MT	8 /* The is the fusion middle-tree */
 
 /* In-memory structure representing a b-tree */
 struct btree {
@@ -207,12 +208,22 @@ static inline bool btree_is_fext(struct btree *btree)
 	return btree->type == BTREE_TYPE_FEXT;
 }
 
+/**
+ * btree_is_fusion_mt - Check if a b-tree is a fusion middle-tree
+ * @btree: the b-tree to check
+ */
+static inline bool btree_is_fusion_mt(struct btree *btree)
+{
+	return btree->type == BTREE_TYPE_FUSION_MT;
+}
+
 extern struct free_queue *parse_free_queue_btree(u64 oid, int index);
 extern struct btree *parse_snap_meta_btree(u64 oid);
 extern struct btree *parse_extentref_btree(u64 oid);
 extern struct btree *parse_omap_btree(u64 oid);
 extern struct btree *parse_cat_btree(u64 oid, struct htable_entry **omap_table);
 extern struct btree *parse_fext_btree(u64 oid);
+extern struct btree *parse_fusion_middle_tree(u64 oid);
 extern struct query *alloc_query(struct node *node, struct query *parent);
 extern void free_query(struct query *query);
 extern int btree_query(struct query **query);

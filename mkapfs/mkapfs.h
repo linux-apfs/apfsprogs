@@ -14,16 +14,20 @@
 struct parameters {
 	unsigned long	blocksize;	/* Block size */
 	u64		block_count;	/* Number of blocks in the container */
+	u64		main_blkcnt;	/* Number of blocks in the main device */
+	u64		tier2_blkcnt;	/* Number of blocks in the tier 2 device */
 	char		*label;		/* Volume label */
 	char		*main_uuid;	/* Container UUID in standard format */
 	char		*vol_uuid;	/* Volume UUID in standard format */
+	char		*fusion_uuid;	/* Fusion drive UUID in standard format */
 	bool		case_sensitive;	/* Is the filesystem case-sensitive? */
 	bool		norm_sensitive;	/* Is it normalization-sensitive? */
 };
 
 /* Declarations for global variables */
 extern struct parameters *param;	/* Filesystem parameters */
-extern int fd;				/* File descriptor for the device */
+extern int fd_main;			/* File descriptor for the main device */
+extern int fd_tier2;			/* File descriptor for the tier 2 device, if any */
 
 /* Hardcoded transaction ids */
 #define MKFS_XID	1
@@ -35,9 +39,13 @@ extern int fd;				/* File descriptor for the device */
 #define FIRST_VOL_CAT_ROOT_OID	(FIRST_VOL_OID + 1)
 #define	IP_FREE_QUEUE_OID	(FIRST_VOL_CAT_ROOT_OID + 1)
 #define MAIN_FREE_QUEUE_OID	(IP_FREE_QUEUE_OID + 1)
+#define TIER2_FREE_QUEUE_OID	(MAIN_FREE_QUEUE_OID + 1)
+#define FUSION_WBC_OID		(TIER2_FREE_QUEUE_OID + 1)
 
 /**
  * cpoint_desc_blocks - Calculate the number of checkpoint descriptor blocks
+ *
+ * TODO: what if the tier 2 device is much bigger than the main one?
  */
 static inline u32 cpoint_desc_blocks(void)
 {
@@ -63,6 +71,8 @@ static inline u32 cpoint_desc_blocks(void)
 
 /**
  * cpoint_data_blocks - Calculate the number of checkpoint data blocks
+ *
+ * TODO: what if the tier 2 device is much bigger than the main one?
  */
 static inline u32 cpoint_data_blocks(void)
 {
@@ -111,14 +121,25 @@ static inline u32 cpoint_data_blocks(void)
 #define CPOINT_DATA_BLOCKS	cpoint_data_blocks()
 #define CPOINT_END		(CPOINT_DATA_BASE + CPOINT_DATA_BLOCKS)
 
-/* Block numbers calculated from the checkpoint areas */
+/*
+ * Some block numbers for ephemeral objects will need to be calculated on
+ * runtime, so that they can all be kept consecutive and in the right order.
+ */
+extern struct ephemeral_info {
+	u64 reaper_bno;
+	u64 spaceman_bno;
+	u32 spaceman_sz;
+	u32 spaceman_blkcnt;
+	u64 ip_free_queue_bno;
+	u64 main_free_queue_bno;
+	u64 tier2_free_queue_bno;
+	u64 fusion_wbc_bno;
+	u32 total_blkcnt;
+} eph_info;
+
+/* Hardcoded block numbers calculated from the checkpoint areas */
 #define CPOINT_MAP_BNO			CPOINT_DESC_BASE
 #define CPOINT_SB_BNO			(CPOINT_DESC_BASE + 1)
-#define REAPER_BNO			CPOINT_DATA_BASE
-#define IP_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 1)
-#define MAIN_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 2)
-/* Spaceman comes last in the data area because it could need 2 blocks */
-#define SPACEMAN_BNO			(CPOINT_DATA_BASE + 3)
 #define MAIN_OMAP_BNO			CPOINT_END
 #define MAIN_OMAP_ROOT_BNO		(CPOINT_END + 1)
 #define FIRST_VOL_BNO			(CPOINT_END + 2)
@@ -127,11 +148,26 @@ static inline u32 cpoint_data_blocks(void)
 #define FIRST_VOL_CAT_ROOT_BNO		(CPOINT_END + 5)
 #define FIRST_VOL_EXTREF_ROOT_BNO	(CPOINT_END + 6)
 #define FIRST_VOL_SNAP_ROOT_BNO		(CPOINT_END + 7)
+#define FUSION_MT_BNO			(CPOINT_END + 8)
+/* Just a single block for now (TODO) */
+#define FUSION_WBC_FIRST_BNO		(CPOINT_END + 9)
 /* First ip bitmap comes last because the size is not hardcoded */
-#define IP_BMAP_BASE			(CPOINT_END + 8)
+#define IP_BMAP_BASE			(CPOINT_END + 10)
 
 extern __attribute__((noreturn)) void system_error(void);
 extern __attribute__((noreturn)) void fatal(const char *message);
+
+/* Forwards the mmap() call to the proper device of a fusion drive */
+static inline void *apfs_mmap(void *addr, size_t length, int prot, int flags, u64 offset)
+{
+	if (offset >= APFS_FUSION_TIER2_DEVICE_BYTE_ADDR) {
+		if (fd_tier2 == -1)
+			fatal("allocation attempted in missing tier 2 device.");
+		offset -= APFS_FUSION_TIER2_DEVICE_BYTE_ADDR;
+		return mmap(addr, length, prot, flags, fd_tier2, (off_t)offset);
+	}
+	return mmap(addr, length, prot, flags, fd_main, (off_t)offset);
+}
 
 /**
  * get_zeroed_blocks - Map and zero contiguous filesystem blocks
@@ -148,7 +184,7 @@ static inline void *get_zeroed_blocks(u64 bno, u64 count)
 	if (size / count != param->blocksize)
 		fatal("overflow detected on disk area mapping");
 
-	blocks = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, bno * param->blocksize);
+	blocks = apfs_mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, bno * param->blocksize);
 	if (blocks == MAP_FAILED)
 		system_error();
 	memset(blocks, 0, size);

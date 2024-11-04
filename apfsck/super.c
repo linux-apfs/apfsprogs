@@ -76,7 +76,7 @@ static struct apfs_nx_superblock *read_super_copy(void)
 	bsize_tmp = APFS_NX_DEFAULT_BLOCK_SIZE;
 
 	msb_raw = mmap(NULL, bsize_tmp, PROT_READ, MAP_PRIVATE,
-		       fd, APFS_NX_BLOCK_NUM * bsize_tmp);
+		       fd_main, APFS_NX_BLOCK_NUM * bsize_tmp);
 	if (msb_raw == MAP_FAILED)
 		system_error();
 	sb->s_blocksize = le32_to_cpu(msb_raw->nx_block_size);
@@ -86,7 +86,7 @@ static struct apfs_nx_superblock *read_super_copy(void)
 		munmap(msb_raw, bsize_tmp);
 
 		msb_raw = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-			       fd, APFS_NX_BLOCK_NUM * sb->s_blocksize);
+			       fd_main, APFS_NX_BLOCK_NUM * sb->s_blocksize);
 		if (msb_raw == MAP_FAILED)
 			system_error();
 	}
@@ -118,7 +118,7 @@ static struct apfs_nx_superblock *read_latest_super(u64 base, u32 blocks)
 		struct apfs_nx_superblock *current;
 
 		current = mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE,
-			       fd, bno * sb->s_blocksize);
+			       fd_main, bno * sb->s_blocksize);
 		if (current == MAP_FAILED)
 			system_error();
 
@@ -136,6 +136,66 @@ static struct apfs_nx_superblock *read_latest_super(u64 base, u32 blocks)
 	if (!latest)
 		report("Checkpoint descriptor area", "no valid superblock.");
 	return latest;
+}
+
+/**
+ * fusion_super_check - Check the superblock copy on the tier 2 device
+ * @mainsb: superblock copy in block zero of the main device
+ */
+static void fusion_super_compare(struct apfs_nx_superblock *mainsb)
+{
+	struct apfs_nx_superblock *tier2sb = NULL;
+	size_t to_read;
+	off_t offset;
+	ssize_t ret;
+
+	if (!apfs_is_fusion_drive())
+		return;
+
+	tier2sb = calloc(1, sb->s_blocksize);
+	if (!tier2sb)
+		system_error();
+
+	to_read = sb->s_blocksize;
+	offset = 0;
+	do {
+		ret = pread(fd_tier2, (void *)tier2sb + offset, to_read, offset);
+		if (ret < 0)
+			system_error();
+		to_read -= ret;
+		offset += ret;
+	} while (ret > 0);
+	if (to_read > 0)
+		report("Fusion drive", "tier 2 is too small.");
+
+	if (tier2sb->nx_o.o_xid != mainsb->nx_o.o_xid) {
+		report_crash("Block zero of tier 2 device");
+		return;
+	}
+	if (!obj_verify_csum(&tier2sb->nx_o))
+		report("Block zero of tier 2 device", "bad checksum.");
+
+	/*
+	 * The reference seems to have this backwards: the main device has the
+	 * bit set to zero, and the tier 2 set to 1. It's also not clear to me
+	 * what the meant by "the highest bit".
+	 */
+	if (sb->s_fusion_uuid[15] & 0x01)
+		report("Fusion driver", "wrong top bit for main device uuid.");
+	if (!(tier2sb->nx_fusion_uuid[15] & 0x01))
+		report("Fusion driver", "wrong top bit for tier 2 device uuid.");
+
+	/*
+	 * Both superblocks should be the same outside of that one bit (and
+	 * the checksum, of course).
+	 */
+	tier2sb->nx_fusion_uuid[15] &= ~0x01;
+	tier2sb->nx_o.o_cksum = mainsb->nx_o.o_cksum;
+	if (memcmp(mainsb, tier2sb, sb->s_blocksize))
+		report("Block zero", "fields don't match the checkpoint.");
+
+	free(tier2sb);
+	tier2sb = NULL;
 }
 
 /**
@@ -166,23 +226,47 @@ static void main_super_compare(struct apfs_nx_superblock *desc,
 }
 
 /**
- * get_device_size - Get the block count of the device or image being checked
- * @blocksize: the filesystem blocksize
+ * get_device_size - Get the block count for a given device or image
+ * @device_fd:	file descriptor for the device
+ * @blocksize:	the filesystem blocksize
  */
-static u64 get_device_size(unsigned int blocksize)
+static u64 get_device_size(int device_fd, unsigned int blocksize)
 {
 	struct stat buf;
 	u64 size;
 
-	if (fstat(fd, &buf))
+	if (fstat(device_fd, &buf))
 		system_error();
 
 	if ((buf.st_mode & S_IFMT) == S_IFREG)
 		return buf.st_size / blocksize;
 
-	if (ioctl(fd, BLKGETSIZE64, &size))
+	if (ioctl(device_fd, BLKGETSIZE64, &size))
 		system_error();
 	return size / blocksize;
+}
+
+static u64 get_main_device_size(unsigned int blocksize)
+{
+	return get_device_size(fd_main, blocksize);
+}
+
+static u64 get_tier2_device_size(unsigned int blocksize)
+{
+	u64 size;
+
+	if (fd_tier2 == -1)
+		return 0;
+	size = get_device_size(fd_tier2, blocksize);
+
+	/*
+	 * I might later check the size to decide if the device exists, so
+	 * make sure this is always sane.
+	 */
+	if (size == 0)
+		report("Fusion drive", "tier 2 has size zero.");
+
+	return size;
 }
 
 /**
@@ -224,8 +308,11 @@ static void check_optional_main_features(u64 flags)
 		report("Container superblock", "unknown optional feature.");
 	if (flags & APFS_NX_FEATURE_DEFRAG)
 		report_unknown("Defragmentation");
-	if (flags & APFS_NX_FEATURE_LCFD)
-		report_unknown("Low-capacity fusion drive");
+	if (flags & APFS_NX_FEATURE_LCFD) {
+		/* TODO: what is this flag exactly? */
+		if (!apfs_is_fusion_drive())
+			report("Container superblock", "LCFD flag set on non-fusion drive.");
+	}
 }
 
 /**
@@ -250,8 +337,8 @@ static void check_incompat_main_features(u64 flags)
 		report_unknown("APFS version 1");
 	if (!(flags & APFS_NX_INCOMPAT_VERSION2))
 		report_unknown("APFS versions other than 2");
-	if (flags & APFS_NX_INCOMPAT_FUSION)
-		report_unknown("Fusion drive");
+	if ((bool)(flags & APFS_NX_INCOMPAT_FUSION) != (bool)(fd_tier2 != -1))
+		report("Container superblock", "bad setting for fusion flag.");
 }
 
 /**
@@ -429,7 +516,7 @@ static void check_volume_flags(u64 flags)
 		report("Volume superblock", "inconsistent crypto flags.");
 
 	if (flags & (APFS_FS_SPILLEDOVER | APFS_FS_RUN_SPILLOVER_CLEANER))
-		report_unknown("Fusion drive");
+		report_unknown("Fusion drive spillover");
 	if (flags & APFS_FS_ALWAYS_CHECK_EXTENTREF)
 		report_unknown("Forced extent reference checks");
 
@@ -1088,6 +1175,9 @@ void check_volume_super(void)
 	}
 }
 
+static struct object *parse_fusion_wbc_state(u64 oid);
+static void check_fusion_wbc(u64 bno, u64 blkcnt);
+
 /**
  * check_container - Check the whole container for a given checkpoint
  * @sb: checkpoint superblock
@@ -1103,6 +1193,11 @@ static void check_container(struct super_block *sb)
 	sb->s_omap = parse_omap_btree(le64_to_cpu(sb->s_raw->nx_omap_oid));
 	/* ...and in the reaper */
 	sb->s_reaper = parse_reaper(le64_to_cpu(sb->s_raw->nx_reaper_oid));
+
+	/* Check the fusion structures now */
+	sb->s_fusion_mt = parse_fusion_middle_tree(le64_to_cpu(sb->s_raw->nx_fusion_mt_oid));
+	sb->s_fusion_wbc = parse_fusion_wbc_state(le64_to_cpu(sb->s_raw->nx_fusion_wbc_oid));
+	check_fusion_wbc(le64_to_cpu(sb->s_raw->nx_fusion_wbc.pr_start_paddr), le64_to_cpu(sb->s_raw->nx_fusion_wbc.pr_block_count));
 
 	for (vol = 0; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol) {
 		struct apfs_superblock *vsb_raw;
@@ -1147,8 +1242,7 @@ static void check_container(struct super_block *sb)
  */
 static void parse_main_super(struct super_block *sb)
 {
-	u64 chunk_count;
-	int i;
+	u64 max_main_chunk_count, max_tier2_chunk_count;
 
 	assert(sb->s_raw);
 
@@ -1165,18 +1259,27 @@ static void parse_main_super(struct super_block *sb)
 	sb->s_block_count = le64_to_cpu(sb->s_raw->nx_block_count);
 	if (!sb->s_block_count)
 		report("Container superblock", "reports no block count.");
-	if (sb->s_block_count > get_device_size(sb->s_blocksize))
+	sb->s_max_main_blkcnt = get_main_device_size(sb->s_blocksize);
+	sb->s_max_tier2_blkcnt = get_tier2_device_size(sb->s_blocksize);
+	if (sb->s_block_count > sb->s_max_main_blkcnt + sb->s_max_tier2_blkcnt)
 		report("Container superblock", "too many blocks for device.");
 
 	/*
 	 * A chunk is the disk section covered by a single block in the
 	 * allocation bitmap.
 	 */
-	chunk_count = DIV_ROUND_UP(sb->s_block_count, 8 * sb->s_blocksize);
-	sb->s_bitmap = calloc(chunk_count, sb->s_blocksize);
-	if (!sb->s_bitmap)
+	max_main_chunk_count = DIV_ROUND_UP(sb->s_max_main_blkcnt, 8 * sb->s_blocksize);
+	sb->s_main_bitmap = calloc(max_main_chunk_count, sb->s_blocksize);
+	if (!sb->s_main_bitmap)
 		system_error();
-	((char *)sb->s_bitmap)[0] = 0x01; /* Block zero is always used */
+	((char *)sb->s_main_bitmap)[0] = 0x01; /* Block zero is always used */
+	if (sb->s_max_tier2_blkcnt) {
+		max_tier2_chunk_count = DIV_ROUND_UP(sb->s_max_tier2_blkcnt, 8 * sb->s_blocksize);
+		sb->s_tier2_bitmap = calloc(max_tier2_chunk_count, sb->s_blocksize);
+		if (!sb->s_tier2_bitmap)
+			system_error();
+		((char *)sb->s_tier2_bitmap)[0] = 0x01; /* Block zero is always used */
+	}
 
 	sb->s_max_vols = get_max_volumes(sb->s_block_count * sb->s_blocksize);
 	if (sb->s_max_vols != le32_to_cpu(sb->s_raw->nx_max_file_systems))
@@ -1217,33 +1320,45 @@ static void parse_main_super(struct super_block *sb)
 	check_efi_information(le64_to_cpu(sb->s_raw->nx_efi_jumpstart));
 	check_ephemeral_information(&sb->s_raw->nx_ephemeral_info[0]);
 
-	for (i = 0; i < 16; ++i) {
-		if (sb->s_raw->nx_fusion_uuid[i])
-			report_unknown("Fusion drive");
-	}
+	if (uuid_is_null(sb->s_raw->nx_fusion_uuid) != !apfs_is_fusion_drive())
+		report("Container superblock", "incorrect fusion uuid.");
+	memcpy(sb->s_fusion_uuid, sb->s_raw->nx_fusion_uuid, sizeof(sb->s_fusion_uuid));
 
 	/* Containers with no encryption may still have a value here, why? */
 	check_keybag(le64_to_cpu(sb->s_raw->nx_keylocker.pr_start_paddr), le64_to_cpu(sb->s_raw->nx_keylocker.pr_block_count));
 	/* TODO: actually check all this stuff */
 	container_bmap_mark_as_used(le64_to_cpu(sb->s_raw->nx_mkb_locker.pr_start_paddr), le64_to_cpu(sb->s_raw->nx_mkb_locker.pr_block_count));
 
-	if (sb->s_raw->nx_fusion_mt_oid || sb->s_raw->nx_fusion_wbc_oid ||
-	    sb->s_raw->nx_fusion_wbc.pr_start_paddr ||
-	    sb->s_raw->nx_fusion_wbc.pr_block_count)
-		report_unknown("Fusion drive");
-
 	sb->s_next_oid = le64_to_cpu(sb->s_raw->nx_next_oid);
 	if (sb->s_xid + 1 != le64_to_cpu(sb->s_raw->nx_next_xid))
 		report("Container superblock", "next transaction id is wrong.");
 }
 
+struct checkpoint_info {
+	u64 desc_base;
+	u64 data_base;
+	u32 desc_blocks;
+	u32 data_blocks;
+	u32 desc_next;
+	u32 data_next;
+	u32 desc_index;
+	u32 data_index;
+	u32 desc_len;
+	u32 data_len;
+};
+
 /**
  * parse_cpoint_map - Parse and verify a checkpoint mapping
- * @raw: the raw checkpoint mapping
+ * @raw:	the raw checkpoint mapping
+ * @cp_info:	information about the checkpoint areas
+ * @idx:	expected index for the mapping
+ *
+ * Returns the expected index for the next mapping.
  */
-static void parse_cpoint_map(struct apfs_checkpoint_mapping *raw)
+static u32 parse_cpoint_map(struct apfs_checkpoint_mapping *raw, struct checkpoint_info *cp_info, u32 idx)
 {
 	struct cpoint_map *map;
+	u32 start_off, blkcnt;
 
 	map = get_cpoint_map(le64_to_cpu(raw->cpm_oid));
 	if (map->m_paddr)
@@ -1251,6 +1366,8 @@ static void parse_cpoint_map(struct apfs_checkpoint_mapping *raw)
 	if (!raw->cpm_paddr)
 		report("Checkpoint map", "invalid physical address.");
 	map->m_paddr = le64_to_cpu(raw->cpm_paddr);
+	if (map->m_paddr != cp_info->data_base + idx)
+		report("Chekpoint map", "out of order or with holes.");
 
 	map->m_type = le32_to_cpu(raw->cpm_type);
 	map->m_subtype = le32_to_cpu(raw->cpm_subtype);
@@ -1258,6 +1375,7 @@ static void parse_cpoint_map(struct apfs_checkpoint_mapping *raw)
 	map->m_size = le32_to_cpu(raw->cpm_size);
 	if (map->m_size & (sb->s_blocksize - 1))
 		report("Checkpoint map", "size isn't multiple of block size.");
+	blkcnt = map->m_size >> sb->s_blocksize_bits;
 	if ((map->m_type & APFS_OBJECT_TYPE_MASK) != APFS_OBJECT_TYPE_SPACEMAN) {
 		if (map->m_size != sb->s_blocksize)
 			report_unknown("Large non-spaceman ephemeral objects");
@@ -1267,23 +1385,30 @@ static void parse_cpoint_map(struct apfs_checkpoint_mapping *raw)
 		report("Checkpoint map", "non-zero padding.");
 	if (raw->cpm_fs_oid)
 		report_unknown("Ephemeral object belonging to a volume");
+
+	start_off = (cp_info->data_blocks + idx - cp_info->data_index) % cp_info->data_blocks;
+	if (start_off >= cp_info->data_len || start_off + blkcnt > cp_info->data_len)
+		report("Checkpoint map", "object index outside valid range.");
+
+	idx += blkcnt;
+	return idx % cp_info->data_blocks;
 }
 
 /**
  * parse_cpoint_map_blocks - Parse and verify a checkpoint's mapping blocks
- * @desc_base:		first block of the checkpoint descriptor area
- * @desc_blocks:	block count of the checkpoint descriptor area
- * @index:		index of the first mapping block for the checkpoint
+ * @cp_info:	information about the checkpoint areas
+ * @index:	index of the first mapping block for the checkpoint
  *
  * Returns the number of checkpoint-mapping blocks, and sets @index to the
  * index of their checkpoint superblock.
  */
-static u32 parse_cpoint_map_blocks(u64 desc_base, u32 desc_blocks, u32 *index)
+static u32 parse_cpoint_map_blocks(struct checkpoint_info *cp_info, u32 *index)
 {
 	struct object obj;
 	struct apfs_checkpoint_map_phys *raw;
 	u32 blk_count = 0;
 	u32 cpm_count;
+	u32 obj_idx;
 
 	/*
 	 * The current superblock hasn't been parsed yet, so this xid would be
@@ -1294,8 +1419,9 @@ static u32 parse_cpoint_map_blocks(u64 desc_base, u32 desc_blocks, u32 *index)
 	assert(!sb->s_cpoint_map_table);
 	sb->s_cpoint_map_table = alloc_htable();
 
+	obj_idx = cp_info->data_index;
 	while (1) {
-		u64 bno = desc_base + *index;
+		u64 bno = cp_info->desc_base + *index;
 		u32 flags;
 		int i;
 
@@ -1321,21 +1447,63 @@ static u32 parse_cpoint_map_blocks(u64 desc_base, u32 desc_blocks, u32 *index)
 								sb->s_blocksize)
 			report("Checkpoint maps", "won't fit in block.");
 		for (i = 0; i < cpm_count; ++i)
-			parse_cpoint_map(&raw->cpm_map[i]);
+			obj_idx = parse_cpoint_map(&raw->cpm_map[i], cp_info, obj_idx);
 
 		flags = le32_to_cpu(raw->cpm_flags);
 
 		munmap(raw, obj.size);
 		blk_count++;
-		*index = (*index + 1) % desc_blocks;
+		*index = (*index + 1) % cp_info->desc_blocks;
 
 		if ((flags & APFS_CHECKPOINT_MAP_LAST) != flags)
 			report("Checkpoint map", "invalid flag in use.");
 		if (flags & APFS_CHECKPOINT_MAP_LAST)
-			return blk_count;
-		if (blk_count == desc_blocks)
+			break;
+		if (blk_count == cp_info->desc_blocks)
 			report("Checkpoint", "no mapping block marked last.");
 	}
+
+	if (obj_idx != cp_info->data_next)
+		report("Checkpoint maps", "overlap or have holes.");
+	return blk_count;
+}
+
+/**
+ * preread_checkpoint_info - Read the superblock fields that are needed early on
+ * @nx_sb_copy:	superblock backup on block zero
+ * @info:	on return, information about the checkpoint areas
+ */
+static void preread_checkpoint_info(struct apfs_nx_superblock *nx_sb_copy, struct checkpoint_info *info)
+{
+	struct apfs_nx_superblock *msb_raw_latest = NULL;
+
+	/* We want to mount the latest valid checkpoint among the descriptors */
+	info->desc_base = le64_to_cpu(nx_sb_copy->nx_xp_desc_base);
+	if (info->desc_base >> 63 != 0) {
+		/* The highest bit is set when checkpoints are not contiguous */
+		report("Block zero", "checkpoint descriptor tree not yet supported.");
+	}
+	info->desc_blocks = le32_to_cpu(nx_sb_copy->nx_xp_desc_blocks);
+	if (info->desc_blocks > 10000) /* Arbitrary loop limit, is it enough? */
+		report("Block zero", "too many checkpoint descriptors?");
+
+	info->data_base = le64_to_cpu(nx_sb_copy->nx_xp_data_base);
+	info->data_blocks = le32_to_cpu(nx_sb_copy->nx_xp_data_blocks);
+
+	/* Find the valid range, as reported by the latest descriptor */
+	msb_raw_latest = read_latest_super(info->desc_base, info->desc_blocks);
+	info->desc_next = le32_to_cpu(msb_raw_latest->nx_xp_desc_next);
+	info->desc_index = le32_to_cpu(msb_raw_latest->nx_xp_desc_index);
+	if (info->desc_next >= info->desc_blocks || info->desc_index >= info->desc_blocks)
+		report("Checkpoint superblock", "out of range checkpoint descriptors.");
+	info->data_next = le32_to_cpu(msb_raw_latest->nx_xp_data_next);
+	info->data_index = le32_to_cpu(msb_raw_latest->nx_xp_data_index);
+	if (info->data_next >= info->data_blocks || info->data_index >= info->data_blocks)
+		report("Checkpoint superblock", "out of range checkpoint data.");
+	info->desc_len = le32_to_cpu(msb_raw_latest->nx_xp_desc_len);
+	info->data_len = le32_to_cpu(msb_raw_latest->nx_xp_data_len);
+	munmap(msb_raw_latest, sb->s_blocksize);
+	msb_raw_latest = NULL;
 }
 
 /**
@@ -1343,11 +1511,10 @@ static u32 parse_cpoint_map_blocks(u64 desc_base, u32 desc_blocks, u32 *index)
  */
 void parse_filesystem(void)
 {
-	struct apfs_nx_superblock *msb_raw_copy, *msb_raw_latest;
-	u64 desc_base;
-	u32 desc_blocks;
+	struct apfs_nx_superblock *msb_raw_copy;
+	struct checkpoint_info cp_info = {0};
 	long long valid_blocks;
-	u32 desc_next, desc_index, index;
+	u32 index;
 
 	sb = calloc(1, sizeof(*sb));
 	if (!sb)
@@ -1356,33 +1523,19 @@ void parse_filesystem(void)
 	/* Read the superblock from the last clean unmount */
 	msb_raw_copy = read_super_copy();
 
-	/* We want to mount the latest valid checkpoint among the descriptors */
-	desc_base = le64_to_cpu(msb_raw_copy->nx_xp_desc_base);
-	if (desc_base >> 63 != 0) {
-		/* The highest bit is set when checkpoints are not contiguous */
-		report("Block zero",
-		       "checkpoint descriptor tree not yet supported.");
-	}
-	desc_blocks = le32_to_cpu(msb_raw_copy->nx_xp_desc_blocks);
-	if (desc_blocks > 10000) /* Arbitrary loop limit, is it enough? */
-		report("Block zero", "too many checkpoint descriptors?");
-
-	/* Find the valid range, as reported by the latest descriptor */
-	msb_raw_latest = read_latest_super(desc_base, desc_blocks);
-	desc_next = le32_to_cpu(msb_raw_latest->nx_xp_desc_next);
-	desc_index = le32_to_cpu(msb_raw_latest->nx_xp_desc_index);
-	if (desc_next >= desc_blocks || desc_index >= desc_blocks)
-		report("Checkpoint superblock",
-		       "out of range checkpoint descriptors.");
-	munmap(msb_raw_latest, sb->s_blocksize);
-	msb_raw_latest = NULL;
+	/*
+	 * We'll read the superblock in full only after going through the
+	 * checkpoint mapping blocks, so we need to know a few fields related
+	 * to the checkpoints ahead of time.
+	 */
+	preread_checkpoint_info(msb_raw_copy, &cp_info);
 
 	/*
 	 * Now go through the valid checkpoints one by one, though it seems
 	 * that cleanly unmounted filesystems only preserve the last one.
 	 */
-	index = desc_index;
-	valid_blocks = (desc_blocks + desc_next - desc_index) % desc_blocks;
+	index = cp_info.desc_index;
+	valid_blocks = (cp_info.desc_blocks + cp_info.desc_next - cp_info.desc_index) % cp_info.desc_blocks;
 	while (valid_blocks > 0) {
 		struct object obj;
 		struct apfs_nx_superblock *raw;
@@ -1394,14 +1547,16 @@ void parse_filesystem(void)
 			munmap(sb->s_raw, sb->s_blocksize);
 		sb->s_raw = NULL;
 		sb->s_xid = 0;
-		free(sb->s_bitmap);
+		free(sb->s_main_bitmap);
+		sb->s_main_bitmap = NULL;
+		free(sb->s_tier2_bitmap);
+		sb->s_tier2_bitmap = NULL;
 
 		/* The checkpoint-mapping blocks come before the superblock */
-		map_blocks = parse_cpoint_map_blocks(desc_base, desc_blocks,
-						     &index);
+		map_blocks = parse_cpoint_map_blocks(&cp_info, &index);
 		valid_blocks -= map_blocks;
 
-		bno = desc_base + index;
+		bno = cp_info.desc_base + index;
 		raw = read_object_nocheck(bno, sb->s_blocksize, &obj);
 		if (parse_object_flags(obj.flags, false) != APFS_OBJ_EPHEMERAL)
 			report("Checkpoint superblock", "bad storage type.");
@@ -1420,7 +1575,7 @@ void parse_filesystem(void)
 		parse_main_super(sb);
 
 		/* Do this now, after parse_main_super() allocated the bitmap */
-		container_bmap_mark_as_used(desc_base, desc_blocks);
+		container_bmap_mark_as_used(cp_info.desc_base, cp_info.desc_blocks);
 		container_bmap_mark_as_used(sb->s_data_base, sb->s_data_blocks);
 
 		check_container(sb);
@@ -1429,7 +1584,7 @@ void parse_filesystem(void)
 		sb->s_cpoint_map_table = NULL;
 
 		/* One more block for the checkpoint superblock itself */
-		index = (index + 1) % desc_blocks;
+		index = (index + 1) % cp_info.desc_blocks;
 		valid_blocks--;
 	}
 
@@ -1439,6 +1594,7 @@ void parse_filesystem(void)
 	if (!sb->s_raw)
 		report("Checkpoint descriptor area", "no valid superblocks.");
 	main_super_compare(sb->s_raw, msb_raw_copy);
+	fusion_super_compare(msb_raw_copy);
 	munmap(msb_raw_copy, sb->s_blocksize);
 }
 
@@ -1499,7 +1655,7 @@ static struct object *parse_reaper(u64 oid)
 			report_unknown("Nonempty reaper list");
 		/* TODO: nrl_free? */
 
-		munmap(list_raw, list.size);
+		free(list_raw);
 	} else {
 		if (raw->nr_completed_id || raw->nr_head || raw->nr_rlcount || raw->nr_type)
 			report("Reaper", "should be empty.");
@@ -1523,6 +1679,76 @@ static struct object *parse_reaper(u64 oid)
 	if (flags & APFS_NR_CONTINUE)
 		report_unknown("Object being reaped");
 
-	munmap(raw, reaper->size);
+	free(raw);
 	return reaper;
+}
+
+/**
+ * parse_fusion_wbc_list - Parse and check the whole list of wbc entries
+ * @head_oid:	first list block oid
+ * @tail_oid:	last list block oid
+ * @version:	fusion wbc version
+ */
+static void parse_fusion_wbc_list(u64 head_oid, u64 tail_oid, u64 version)
+{
+	if (head_oid || tail_oid)
+		report_unknown("Nonempty fusion wb cache");
+}
+
+/**
+ * parse_fusion_wbc_state - Parse the fusion wbc state and check for corruption
+ * @oid: object id for the fusion write-back cache state
+ *
+ * Returns a pointer to the object struct for the wbc.
+ */
+static struct object *parse_fusion_wbc_state(u64 oid)
+{
+	struct apfs_fusion_wbc_phys *wbc = NULL;
+	struct object *obj = NULL;
+
+	if (apfs_is_fusion_drive() != (bool)oid)
+		report("Fusion wb cache", "oid incorrectly set/unset.");
+	if (!oid)
+		return NULL;
+
+	obj = calloc(1, sizeof(*obj));
+	if (!obj)
+		system_error();
+
+	wbc = read_ephemeral_object(oid, obj);
+	if (obj->type != APFS_OBJECT_TYPE_NX_FUSION_WBC)
+		report("Fusion wb cache", "wrong object type.");
+	if (obj->subtype != APFS_OBJECT_TYPE_INVALID)
+		report("Fusion wb cache", "wrong object subtype.");
+
+	if (le64_to_cpu(wbc->fwp_version) != 0x70)
+		report_unknown("Unknown version of fusion wb cache");
+	if (wbc->fwp_reserved)
+		report("Fusion wb cache", "reserved field in use.");
+
+	parse_fusion_wbc_list(le64_to_cpu(wbc->fwp_listHeadOid), le64_to_cpu(wbc->fwp_listTailOid), le64_to_cpu(wbc->fwp_version));
+	if (wbc->fwp_stableHeadOffset || wbc->fwp_stableTailOffset || wbc->fwp_listBlocksCount || wbc->fwp_usedByRC)
+		report_unknown("Nonempty fusion wb cache");
+	if (wbc->fwp_rcStash.pr_start_paddr || wbc->fwp_rcStash.pr_block_count)
+		report_unknown("Nonempty fusion wb cache");
+
+	free(wbc);
+	return obj;
+}
+
+/**
+ * check_fusion_wbc - Check the address range for the wb cache
+ * @bno:	first block of the wb cache
+ * @blkcnt:	block count of the cache
+ */
+static void check_fusion_wbc(u64 bno, u64 blkcnt)
+{
+	if (!apfs_is_fusion_drive()) {
+		if (bno || blkcnt)
+			report("Fusion wb cache", "should not exist.");
+		return;
+	}
+	if (!bno || !blkcnt)
+		report("Fusion wb cache", "should exist.");
+	container_bmap_mark_as_used(bno, blkcnt);
 }

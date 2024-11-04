@@ -38,7 +38,7 @@ static void *read_object_nocheck_internal(u64 bno, u32 size, struct object *obj,
 {
 	struct apfs_obj_phys *raw;
 
-	raw = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, bno * sb->s_blocksize);
+	raw = apfs_mmap(NULL, size, PROT_READ, MAP_PRIVATE, bno * sb->s_blocksize);
 	if (raw == MAP_FAILED)
 		system_error();
 
@@ -235,26 +235,9 @@ void *read_object_noheader(u64 oid, struct htable_entry **omap_table, struct obj
 static void free_cpoint_map(struct htable_entry *entry)
 {
 	struct cpoint_map *map = (struct cpoint_map *)entry;
-	u32 blk_count = map->m_size >> sb->s_blocksize_bits;
-	u64 obj_start = map->m_paddr;
-	u64 obj_end = map->m_paddr + blk_count; /* Objects can't wrap, right? */
-	u64 data_start = sb->s_data_base;
-	u64 data_end = sb->s_data_base + sb->s_data_blocks;
-	u64 valid_start;
 
 	if (!map->m_seen)
 		report("Checkpoint map", "no object for mapping.");
-
-	if (obj_start < data_start || obj_end > data_end)
-		report("Checkpoint map", "block number is out of range.");
-
-	/* Not all blocks in the data area belong to the current checkpoint */
-	valid_start = sb->s_data_base + sb->s_data_index;
-	if (obj_start >= valid_start && obj_end > valid_start + sb->s_data_len)
-		report("Checkpoint map", "block number outside valid range.");
-	if (obj_start < valid_start &&
-	    obj_end + sb->s_data_blocks > valid_start + sb->s_data_len)
-		report("Checkpoint map", "block number outside valid range.");
 
 	if (map->m_oid < APFS_OID_RESERVED_COUNT)
 		report("Checkpoint map", "reserved object id.");
@@ -301,6 +284,8 @@ void *read_ephemeral_object(u64 oid, struct object *obj)
 	struct apfs_obj_phys *raw;
 	struct cpoint_map *map;
 	u32 storage_type;
+	void *block = NULL;
+	int i, data_idx;
 
 	assert(sb->s_cpoint_map_table);
 	assert(sb->s_xid);
@@ -312,8 +297,33 @@ void *read_ephemeral_object(u64 oid, struct object *obj)
 		report("Checkpoint map", "an ephemeral object id was reused.");
 	map->m_seen = true;
 
-	/* Multiblock ephemeral objects may exist, but are not supported yet */
-	raw = read_object_nocheck(map->m_paddr, map->m_size, obj);
+	raw = malloc(map->m_size);
+	if (!raw)
+		system_error();
+	data_idx = map->m_paddr - sb->s_data_base;
+	for (i = 0; i < map->m_size >> sb->s_blocksize_bits; ++i) {
+		block = apfs_mmap(NULL, sb->s_blocksize, PROT_READ, MAP_PRIVATE, (sb->s_data_base + data_idx) * sb->s_blocksize);
+		if (block == MAP_FAILED)
+			system_error();
+		memcpy((char *)raw + (i << sb->s_blocksize_bits), block, sb->s_blocksize);
+		munmap(block, sb->s_blocksize);
+		block = NULL;
+		/* Ephemeral objects can wrap around */
+		if (++data_idx == sb->s_data_blocks)
+			data_idx = 0;
+	}
+
+	if (!obj_verify_csum_with_size(raw, map->m_size))
+		report("Object header", "bad checksum in block 0x%llx.", (unsigned long long)map->m_paddr);
+
+	obj->oid = le64_to_cpu(raw->o_oid);
+	obj->xid = le64_to_cpu(raw->o_xid);
+	obj->block_nr = map->m_paddr;
+	obj->type = le32_to_cpu(raw->o_type) & APFS_OBJECT_TYPE_MASK;
+	obj->flags = le32_to_cpu(raw->o_type) & APFS_OBJECT_TYPE_FLAGS_MASK;
+	obj->subtype = le32_to_cpu(raw->o_subtype);
+	obj->size = map->m_size;
+
 	if ((obj->type | obj->flags) != map->m_type)
 		report("Ephemeral object", "type field doesn't match mapping.");
 	if (obj->subtype != map->m_subtype)
