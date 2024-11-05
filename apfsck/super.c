@@ -79,6 +79,10 @@ static struct apfs_nx_superblock *read_super_copy(void)
 		       fd_main, APFS_NX_BLOCK_NUM * bsize_tmp);
 	if (msb_raw == MAP_FAILED)
 		system_error();
+
+	if (le32_to_cpu(msb_raw->nx_magic) != APFS_NX_MAGIC)
+		report(NULL, "Not an apfs container - are you checking the right partition?");
+
 	sb->s_blocksize = le32_to_cpu(msb_raw->nx_block_size);
 	sb->s_blocksize_bits = blksize_bits(sb->s_blocksize);
 
@@ -91,8 +95,6 @@ static struct apfs_nx_superblock *read_super_copy(void)
 			system_error();
 	}
 
-	if (le32_to_cpu(msb_raw->nx_magic) != APFS_NX_MAGIC)
-		report("Block zero", "wrong magic.");
 	if (!obj_verify_csum(&msb_raw->nx_o))
 		report("Block zero", "bad checksum.");
 	if (le64_to_cpu(msb_raw->nx_o.o_oid) != APFS_OID_NX_SUPERBLOCK)
