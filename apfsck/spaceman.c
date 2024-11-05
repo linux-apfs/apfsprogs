@@ -414,28 +414,30 @@ static u16 spaceman_16_from_off(struct apfs_spaceman_phys *raw, u32 offset)
 }
 
 /**
- * spaceman_256_from_off - Get a pointer to the 256 bits on a spaceman offset
+ * spaceman_16_array_from_off - Get a pointer to the array on a spaceman offset
  * @raw:	pointer to the raw space manager
- * @offset:	offset of the 256-bit value in @raw
+ * @offset:	offset of the array of 16-bit entries in @raw
+ * @len:	number of entries in the array
  *
  * TODO: check that no values found by this function overlap with each other,
  * and also with spaceman_val_from_off()/spaceman_16_from_off().
  */
-static char *spaceman_256_from_off(struct apfs_spaceman_phys *raw, u32 offset)
+static __le16 *spaceman_16_array_from_off(struct apfs_spaceman_phys *raw, u32 offset, u32 len)
 {
 	struct spaceman *sm = &sb->s_spaceman;
-	char *value_p = (char *)raw + offset;
-	int sz_256 = 256 / 8;
+	__le16 *array_p = (void *)raw + offset;
 
 	assert(sm->sm_struct_size);
 
-	if (offset & 0x7)
-		report("Spaceman", "offset is not aligned to 8 bytes.");
+	if (offset & 0x1)
+		report("Spaceman", "offset is not aligned to 2 bytes.");
 	if (offset < sm->sm_struct_size)
 		report("Spaceman", "offset overlaps with structure.");
-	if (offset >= sm->sm_obj_size || offset + sz_256 > sm->sm_obj_size)
+	if (len > UINT32_MAX / 10 || offset > UINT32_MAX / 10)
+		report("Spaceman", "length or offset of array are not sane.");
+	if (offset >= sm->sm_obj_size || offset + sizeof(__le16) * len > sm->sm_obj_size)
 		report("Spaceman", "offset is out of bounds.");
-	return value_p;
+	return array_p;
 }
 
 /**
@@ -746,7 +748,7 @@ static void compare_container_bitmaps_dev(enum smdev which)
 
 /**
  * check_ip_free_next - Check the free_next field for the internal pool
- * @free_next:	256-bit field to check
+ * @free_next:	free_next list to check
  * @free_head:	first block in the linked list of free blocks
  * @free_tail:	last block in the linked list of free blocks
  * @bmap_count:	total number of ip bitmaps
@@ -838,7 +840,7 @@ static void parse_ip_bitmap_list(struct apfs_spaceman_phys *raw, char *bmap)
 	free_head = le16_to_cpu(raw->sm_ip_bm_free_head);
 	free_tail = le16_to_cpu(raw->sm_ip_bm_free_tail);
 
-	free_next = (__le16 *)spaceman_256_from_off(raw, le32_to_cpu(raw->sm_ip_bm_free_next_offset));
+	free_next = spaceman_16_array_from_off(raw, le32_to_cpu(raw->sm_ip_bm_free_next_offset), bmap_length);
 	used_count = check_ip_free_next((__le16 *)free_next, free_head, free_tail, bmap_length);
 	if (used_count != bm_size_in_blocks)
 		report("Internal pool", "incorrect count of used blocks.");
