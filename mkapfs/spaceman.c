@@ -524,11 +524,9 @@ static void calculate_dev_info(struct device_info *dev, enum smdev which)
 	if (dev->cab_count == 1)
 		dev->cab_count = 0;
 
-	if (dev->cab_count > 1000) {
-		/* Put some limit on cab count to avoid overflow issues */
-		printf("Device is too big\n");
-		exit(1);
-	}
+	/* Put some limit on cab count to avoid overflow issues */
+	if (dev->cab_count > 1000)
+		fatal("device is too big");
 }
 
 /**

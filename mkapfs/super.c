@@ -40,8 +40,7 @@ static void set_uuid(char *field, char *uuid)
 	if (ret == 16)
 		return;
 
-	printf("Please provide a UUID in standard format.\n");
-	exit(EXIT_FAILURE);
+	fatal("please provide a UUID in standard format");
 }
 
 /**

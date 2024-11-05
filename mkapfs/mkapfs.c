@@ -152,25 +152,17 @@ static void complete_parameters(void)
 		param->main_blkcnt = main_blkcnt_limit;
 	if (!param->tier2_blkcnt)
 		param->tier2_blkcnt = tier2_blkcnt_limit;
-	if (param->main_blkcnt > main_blkcnt_limit) {
-		fprintf(stderr, "%s: main device is not big enough\n", progname);
-		exit(EXIT_FAILURE);
-	}
-	if (param->tier2_blkcnt > tier2_blkcnt_limit) {
-		fprintf(stderr, "%s: tier 2 device is not big enough\n", progname);
-		exit(EXIT_FAILURE);
-	}
+	if (param->main_blkcnt > main_blkcnt_limit)
+		fatal("main device is not big enough");
+	if (param->tier2_blkcnt > tier2_blkcnt_limit)
+		fatal("tier 2 device is not big enough");
 	param->block_count = param->main_blkcnt + param->tier2_blkcnt;
 
-	if (param->main_blkcnt * param->blocksize < 512 * 1024) {
-		fprintf(stderr, "%s: such tiny containers are not supported\n",
-			progname);
-		exit(EXIT_FAILURE);
-	}
+	if (param->main_blkcnt * param->blocksize < 512 * 1024)
+		fatal("such tiny containers are not supported");
 	if (param->tier2_blkcnt && param->tier2_blkcnt * param->blocksize < 512 * 1024) {
 		/* TODO: is this really a problem for tier 2? */
-		fprintf(stderr, "%s: tier 2 is too small\n", progname);
-		exit(1);
+		fatal("tier 2 is too small");
 	}
 
 	/* Every volume must have a label; use the same default as Apple */
@@ -178,10 +170,8 @@ static void complete_parameters(void)
 		param->label = "untitled";
 
 	/* Make sure the volume label fits, along with its null termination */
-	if (strlen(param->label) + 1 > APFS_VOLNAME_LEN) {
-		fprintf(stderr, "%s: volume label is too long\n", progname);
-		exit(EXIT_FAILURE);
-	}
+	if (strlen(param->label) + 1 > APFS_VOLNAME_LEN)
+		fatal("volume label is too long");
 
 	if (!param->main_uuid)
 		param->main_uuid = get_random_uuid();
