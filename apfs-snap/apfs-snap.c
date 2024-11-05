@@ -20,7 +20,7 @@ static char *progname;
  */
 static void usage(void)
 {
-	fprintf(stderr, "usage: %s mountpoint name\n", progname);
+	fprintf(stderr, "usage: %s [-v] mountpoint name\n", progname);
 	exit(EXIT_FAILURE);
 }
 

@@ -25,7 +25,7 @@ static u64 nx_xid;
  */
 static void usage(void)
 {
-	fprintf(stderr, "usage: %s device\n", progname);
+	fprintf(stderr, "usage: %s [-v] device\n", progname);
 	exit(EXIT_FAILURE);
 }
 
