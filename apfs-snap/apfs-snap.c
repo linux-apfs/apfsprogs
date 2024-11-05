@@ -29,11 +29,13 @@ static void usage(void)
  */
 static void version(void)
 {
-	if (*GIT_COMMIT)
+	if (*GIT_COMMIT) {
 		printf("apfs-snap %s\n", GIT_COMMIT);
-	else
+		exit(EXIT_SUCCESS);
+	} else {
 		printf("apfs-snap - unknown git commit id\n");
-	exit(EXIT_FAILURE);
+		exit(EXIT_FAILURE);
+	}
 }
 
 /**
