@@ -1197,9 +1197,9 @@ static void check_container(struct super_block *sb)
 	sb->s_reaper = parse_reaper(le64_to_cpu(sb->s_raw->nx_reaper_oid));
 
 	/* Check the fusion structures now */
+	check_fusion_wbc(le64_to_cpu(sb->s_raw->nx_fusion_wbc.pr_start_paddr), le64_to_cpu(sb->s_raw->nx_fusion_wbc.pr_block_count));
 	sb->s_fusion_mt = parse_fusion_middle_tree(le64_to_cpu(sb->s_raw->nx_fusion_mt_oid));
 	sb->s_fusion_wbc = parse_fusion_wbc_state(le64_to_cpu(sb->s_raw->nx_fusion_wbc_oid));
-	check_fusion_wbc(le64_to_cpu(sb->s_raw->nx_fusion_wbc.pr_start_paddr), le64_to_cpu(sb->s_raw->nx_fusion_wbc.pr_block_count));
 
 	for (vol = 0; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol) {
 		struct apfs_superblock *vsb_raw;
@@ -1752,5 +1752,39 @@ static void check_fusion_wbc(u64 bno, u64 blkcnt)
 	}
 	if (!bno || !blkcnt)
 		report("Fusion wb cache", "should exist.");
+
+	if (bno >= APFS_FUSION_TIER2_DEVICE_BYTE_ADDR)
+		report("Fusion wb cache", "is in tier 2.");
 	container_bmap_mark_as_used(bno, blkcnt);
+
+	sb->s_wbc_bno = bno;
+	sb->s_wbc_blkcnt = blkcnt;
+}
+
+/**
+ * block_in_wbc - Does this block belong to the writeback cache?
+ * @bno: block number to check
+ */
+static inline bool block_in_wbc(u64 bno)
+{
+	u64 start = sb->s_wbc_bno;
+	u64 end = start + sb->s_wbc_blkcnt;
+
+	return bno >= start && bno < end;
+}
+
+/**
+ * range_in_wbc - Is this range included in the writeback cache?
+ * @paddr:	first block of the range
+ * @length:	length of the range
+ */
+bool range_in_wbc(u64 paddr, u64 length)
+{
+	u64 last = paddr + length - 1;
+	bool first_in_wbc = block_in_wbc(paddr);
+	bool last_in_wbc = block_in_wbc(last);
+
+	if ((first_in_wbc && !last_in_wbc) || (!first_in_wbc && last_in_wbc))
+		report("Writeback cache", "is overrun.");
+	return first_in_wbc;
 }

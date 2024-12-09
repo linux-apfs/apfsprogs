@@ -439,3 +439,17 @@ void read_omap_snap_key(void *raw, int size, struct key *key)
 	key->number = 0;
 	key->name = NULL;
 }
+
+void read_fusion_mt_key(void *raw, int size, struct key *key)
+{
+	struct apfs_fusion_mt_key *raw_key = NULL;
+
+	if (size != sizeof(*raw_key))
+		report("Fusion middle-tree", "wrong size of key.");
+	raw_key = raw;
+
+	key->id = le64_to_cpu(raw_key->fmk_paddr);
+	key->type = 0;
+	key->number = 0;
+	key->name = NULL;
+}

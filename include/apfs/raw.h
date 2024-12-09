@@ -1548,7 +1548,7 @@ struct apfs_fusion_wbc_phys {
 	__le32 fwp_listBlocksCount;
 	__le32 fwp_reserved;
 	__le64 fwp_usedByRC;
-	struct apfs_prange fwp_rcStash;;
+	struct apfs_prange fwp_rcStash;
 } __packed;
 
 struct apfs_fusion_wbc_list_entry {
@@ -1589,6 +1589,6 @@ struct apfs_fusion_mt_val {
 /* Flags for the fusion middle-tree */
 #define APFS_FUSION_MT_DIRTY	(1 << 0)
 #define APFS_FUSION_MT_TENANT	(1 << 1)
-#define APFS_FUSION_MT_ALLFLAGS	(FUSION_MT_DIRTY | FUSION_MT_TENANT)
+#define APFS_FUSION_MT_ALLFLAGS	(APFS_FUSION_MT_DIRTY | APFS_FUSION_MT_TENANT)
 
 #endif	/* _RAW_H */

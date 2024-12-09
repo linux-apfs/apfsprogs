@@ -435,7 +435,7 @@ static int node_locate_key(struct node *node, int index, int *off)
 		struct apfs_kvoff *entry;
 
 		entry = (struct apfs_kvoff *)raw->btn_data + index;
-		len = btree_is_snapshots(node->btree) ? 8 : 16;
+		len = btree_is_snapshots(node->btree) || btree_is_fusion_mt(node->btree) ? 8 : 16;
 		off_in_area = le16_to_cpu(entry->k);
 	} else {
 		/* These node types have variable length keys and data */
@@ -496,6 +496,8 @@ static int node_locate_data(struct node *node, int index, int *off)
 			len = node_is_leaf(node) ? sizeof(struct apfs_omap_snapshot) : 8;
 		if (btree_is_fext(btree))
 			len = node_is_leaf(node) ? sizeof(struct apfs_fext_tree_val) : 8;
+		if (btree_is_fusion_mt(btree))
+			len = node_is_leaf(node) ? sizeof(struct apfs_fusion_mt_val) : 8;
 
 		/* Value offsets are backwards from the end of the value area */
 		off_in_area = area_len - le16_to_cpu(entry->v);
@@ -666,6 +668,74 @@ static void parse_cat_record(void *key, void *val, int len)
 		break;
 	default:
 		report(NULL, "Bug!");
+	}
+}
+
+/**
+ * parse_fusion_mt_record - Parse a fusion mt value and check for corruption
+ * @key:	pointer to the raw key
+ * @val:	pointer to the raw value
+ * @len:	length of the raw value
+ *
+ * Internal consistency of @key must be checked before calling this function.
+ */
+static void parse_fusion_mt_record(struct apfs_fusion_mt_key *key, struct apfs_fusion_mt_val *val, int len)
+{
+	char *data_tier2 = NULL, *data_main = NULL;
+	u64 paddr_tier2, paddr_main;
+	u64 offset_tier2, offset_main;
+	u32 blkcnt;
+	u64 length;
+	u32 flags;
+
+	if (len != sizeof(*val))
+		report("Fusion middle-tree record", "wrong value size.");
+
+	paddr_tier2 = le64_to_cpu(key->fmk_paddr);
+	offset_tier2 = paddr_tier2 << sb->s_blocksize_bits;
+	if (offset_tier2 < APFS_FUSION_TIER2_DEVICE_BYTE_ADDR)
+		report("Fusion middle-tree record", "key address is in main.");
+
+	paddr_main = le64_to_cpu(val->fmv_lba);
+	offset_main = paddr_main << sb->s_blocksize_bits;
+	if (offset_main >= APFS_FUSION_TIER2_DEVICE_BYTE_ADDR)
+		report("Fusion middle-tree record", "value address is in tier 2.");
+
+	blkcnt = le32_to_cpu(val->fmv_length);
+
+	/*
+	 * The tier 2 blocks get counted when they are actually used; blocks in
+	 * the writeback cache were already counted by check_fusion_wbc().
+	 */
+	if (!range_in_wbc(paddr_main, blkcnt))
+		container_bmap_mark_as_used(paddr_main, blkcnt);
+
+	flags = le32_to_cpu(val->fmv_flags);
+	if ((flags & APFS_FUSION_MT_ALLFLAGS) != flags)
+		report("Fusion middle-tree record", "invalid flags in use.");
+	if ((flags & APFS_FUSION_MT_TENANT) && (flags & APFS_FUSION_MT_DIRTY))
+		report("Fusion middle-tree record", "can't be both dirty and tenant.");
+	if (flags & APFS_FUSION_MT_TENANT)
+		report_unknown("Tenant mt record");
+
+	if (!(flags & APFS_FUSION_MT_DIRTY)) {
+		length = (u64)blkcnt * sb->s_blocksize;
+		/*
+		 * This may actually not check the whole range if the fsck runs
+		 * in a 32-bit computer. I guess it doesn't matter.
+		 */
+		data_tier2 = apfs_mmap(NULL, length, PROT_READ, MAP_PRIVATE, offset_tier2);
+		if (data_tier2 == MAP_FAILED)
+			system_error();
+		data_main = apfs_mmap(NULL, length, PROT_READ, MAP_PRIVATE, offset_main);
+		if (data_main == MAP_FAILED)
+			system_error();
+		if (memcmp(data_tier2, data_main, length) != 0)
+			report("Fusion middle-tree record", "missing dirty flag.");
+		munmap(data_tier2, length);
+		data_tier2 = NULL;
+		munmap(data_main, length);
+		data_main = NULL;
 	}
 }
 
@@ -935,6 +1005,8 @@ static void parse_subtree(struct node *root,
 			read_omap_snap_key(raw_key, len, &curr_key);
 		if (btree_is_fext(btree))
 			read_fext_key(raw_key, len, &curr_key);
+		if (btree_is_fusion_mt(btree))
+			read_fusion_mt_key(raw_key, len, &curr_key);
 
 		if (keycmp(last_key, &curr_key) > 0)
 			report("B-tree", "keys are out of order.");
@@ -970,6 +1042,8 @@ static void parse_subtree(struct node *root,
 				parse_omap_snap_record(raw_key, raw_val, len);
 			if (btree_is_fext(btree))
 				parse_fext_record(raw_key, raw_val, len);
+			if (btree_is_fusion_mt(btree))
+				parse_fusion_mt_record(raw_key, raw_val, len);
 			continue;
 		}
 

@@ -97,6 +97,8 @@ struct super_block {
 	u32 s_data_index; /* Index of first valid block in checkpoint data */
 	u32 s_data_len; /* Number of valid blocks in checkpoint data area */
 	u64 s_reaper_fs_id; /* Volume id reported by the reaper */
+	u64 s_wbc_bno; /* First block of the writeback cache */
+	u64 s_wbc_blkcnt; /* Number of blocks in the writeback cache */
 
 	/* Hash table of ephemeral object mappings for the checkpoint */
 	struct htable_entry **s_cpoint_map_table;
@@ -214,5 +216,6 @@ extern void parse_filesystem(void);
 extern struct volume_superblock *alloc_volume_super(bool snap);
 extern void read_volume_super(int vol, struct volume_superblock *vsb, struct object *obj);
 extern void check_volume_super(void);
+extern bool range_in_wbc(u64 paddr, u64 length);
 
 #endif	/* _SUPER_H */

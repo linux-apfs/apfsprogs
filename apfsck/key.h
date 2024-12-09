@@ -134,5 +134,6 @@ extern void read_free_queue_key(void *raw, int size, struct key *key);
 extern void read_snap_key(void *raw, int size, struct key *key);
 extern void read_omap_snap_key(void *raw, int size, struct key *key);
 extern void read_fext_key(void *raw, int size, struct key *key);
+extern void read_fusion_mt_key(void *raw, int size, struct key *key);
 
 #endif	/* _KEY_H */
