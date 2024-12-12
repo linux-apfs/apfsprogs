@@ -132,10 +132,10 @@ static void node_parse_key_free_list(struct node *node)
 	int off;
 
 	/* Each bit represents a byte in the key area */
-	node->free_key_bmap = malloc((area_len + 7) / 8);
+	node->free_key_bmap = malloc(ROUND_UP(area_len, 8));
 	if (!node->free_key_bmap)
 		system_error();
-	memset(node->free_key_bmap, 0xFF, (area_len + 7) / 8);
+	memset(node->free_key_bmap, 0xFF, ROUND_UP(area_len, 8));
 
 	off = le16_to_cpu(free->off);
 	while (total > 0) {
@@ -195,10 +195,10 @@ static void node_parse_val_free_list(struct node *node)
 	end_raw = (void *)node->raw + node->data + area_len;
 
 	/* Each bit represents a byte in the value area */
-	node->free_val_bmap = malloc((area_len + 7) / 8);
+	node->free_val_bmap = malloc(ROUND_UP(area_len, 8));
 	if (!node->free_val_bmap)
 		system_error();
-	memset(node->free_val_bmap, 0xFF, (area_len + 7) / 8);
+	memset(node->free_val_bmap, 0xFF, ROUND_UP(area_len, 8));
 
 	off = le16_to_cpu(free->off);
 	while (total > 0) {
@@ -261,7 +261,7 @@ static void node_prepare_bitmaps(struct node *node)
 	keys_len = node->free - node->key;
 
 	/* Each bit represents a byte in the key area */
-	node->used_key_bmap = calloc(1, (keys_len + 7) / 8);
+	node->used_key_bmap = calloc(1, ROUND_UP(keys_len, 8));
 	if (!node->used_key_bmap)
 		system_error();
 
@@ -270,7 +270,7 @@ static void node_prepare_bitmaps(struct node *node)
 		     (node_is_root(node) ? sizeof(struct apfs_btree_info) : 0);
 
 	/* Each bit represents a byte in the value area */
-	node->used_val_bmap = calloc(1, (values_len + 7) / 8);
+	node->used_val_bmap = calloc(1, ROUND_UP(values_len, 8));
 	if (!node->used_val_bmap)
 		system_error();
 
@@ -1920,7 +1920,7 @@ static int node_query(struct query *query)
 			query->index = (left + right) / 2;
 		} else {
 			left = query->index;
-			query->index = DIV_ROUND_UP(left + right, 2);
+			query->index = ROUND_UP(left + right, 2);
 		}
 
 		query->key_len = node_locate_key(node, query->index,

@@ -255,7 +255,7 @@ static u64 omap_lookup(struct apfs_btree_node_phys *node, u64 oid)
 			index = (left + right) / 2;
 		} else {
 			left = index;
-			index = DIV_ROUND_UP(left + right, 2);
+			index = ROUND_UP(left + right, 2);
 		}
 
 		omap_node_locate_key(node, index, &key_off);

@@ -95,7 +95,7 @@ static u32 get_max_volumes(u64 size)
 	u32 max_vols;
 
 	/* Divide by 512 MiB and round up, as the reference requires */
-	max_vols = DIV_ROUND_UP(size, 512 * 1024 * 1024);
+	max_vols = ROUND_UP(size, 512 * 1024 * 1024);
 	if (max_vols > APFS_NX_MAX_FILE_SYSTEMS)
 		max_vols = APFS_NX_MAX_FILE_SYSTEMS;
 	return max_vols;
