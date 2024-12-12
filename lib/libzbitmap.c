@@ -1,11 +1,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <apfs/types.h>
 #include "apfs/libzbitmap.h"
 
 #define __packed    __attribute__((packed))
-
-#define MIN(x, y)   ((x) > (y) ? (y) : (x))
 
 #define ZBM_MAGIC   0x094D425A
 
