@@ -280,7 +280,7 @@ static u32 get_max_volumes(u64 size)
 	u32 max_vols;
 
 	/* Divide by 512 MiB and round up, as the reference requires */
-	max_vols = DIV_ROUND_UP(size, 512 * 1024 * 1024);
+	max_vols = ROUND_UP(size, 512 * 1024 * 1024);
 	if (max_vols > APFS_NX_MAX_FILE_SYSTEMS)
 		max_vols = APFS_NX_MAX_FILE_SYSTEMS;
 	return max_vols;
@@ -1270,13 +1270,13 @@ static void parse_main_super(struct super_block *sb)
 	 * A chunk is the disk section covered by a single block in the
 	 * allocation bitmap.
 	 */
-	max_main_chunk_count = DIV_ROUND_UP(sb->s_max_main_blkcnt, 8 * sb->s_blocksize);
+	max_main_chunk_count = ROUND_UP(sb->s_max_main_blkcnt, 8 * sb->s_blocksize);
 	sb->s_main_bitmap = calloc(max_main_chunk_count, sb->s_blocksize);
 	if (!sb->s_main_bitmap)
 		system_error();
 	((char *)sb->s_main_bitmap)[0] = 0x01; /* Block zero is always used */
 	if (sb->s_max_tier2_blkcnt) {
-		max_tier2_chunk_count = DIV_ROUND_UP(sb->s_max_tier2_blkcnt, 8 * sb->s_blocksize);
+		max_tier2_chunk_count = ROUND_UP(sb->s_max_tier2_blkcnt, 8 * sb->s_blocksize);
 		sb->s_tier2_bitmap = calloc(max_tier2_chunk_count, sb->s_blocksize);
 		if (!sb->s_tier2_bitmap)
 			system_error();

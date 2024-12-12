@@ -989,7 +989,7 @@ void check_spaceman(u64 oid)
 
 	sm->sm_ip_base = le64_to_cpu(raw->sm_ip_base);
 	sm->sm_ip_block_count = le64_to_cpu(raw->sm_ip_block_count);
-	ip_chunk_count = DIV_ROUND_UP(sm->sm_ip_block_count, 8 * sb->s_blocksize);
+	ip_chunk_count = ROUND_UP(sm->sm_ip_block_count, 8 * sb->s_blocksize);
 	if (ip_chunk_count != le32_to_cpu(raw->sm_ip_bm_size_in_blocks))
 		report("Space manager", "bad ip bm size.");
 	sb->s_ip_bitmap = calloc(ip_chunk_count, sb->s_blocksize);
