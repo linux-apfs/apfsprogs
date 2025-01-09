@@ -332,7 +332,7 @@ void apfs_compress_check(struct compress *compress)
     if(compress->size != size)
         report("Resource compressed file", "wrong reported length.");
 
-    block_num = (compress->size + APFS_COMPRESS_BLOCK - 1) / APFS_COMPRESS_BLOCK;
+    block_num = DIV_ROUND_UP(compress->size, APFS_COMPRESS_BLOCK);
     if(block_num != compress->block_num)
         report("Resource compressed file", "inconsistent block count.");
 }
