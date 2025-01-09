@@ -102,8 +102,6 @@ u32 spaceman_size(void)
 	return DIV_ROUND_UP(entry_count * sizeof(__le64) + main_dev->cib_addr_base_off, param->blocksize) * param->blocksize;
 }
 
-#define MIN(X, Y) ((X) <= (Y) ? (X) : (Y))
-
 /**
  * count_used_blocks_in_chunk - Calculate number of allocated blocks in a chunk
  * @dev:	device for the chunk
