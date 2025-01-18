@@ -222,9 +222,9 @@ static void omap_node_locate_val(struct apfs_btree_node_phys *node, int index, i
 static int omap_keycmp(struct apfs_omap_key *k1, struct apfs_omap_key *k2)
 {
 	if (le64_to_cpu(k1->ok_oid) != le64_to_cpu(k2->ok_oid))
-		return le64_to_cpu(k1->ok_oid) < le64_to_cpu(k2->ok_oid) ? -1 : 1;
+		return le64_to_cpu(k1->ok_oid) - le64_to_cpu(k2->ok_oid);
 	if (le64_to_cpu(k1->ok_xid) != le64_to_cpu(k2->ok_xid))
-		return le64_to_cpu(k1->ok_xid) < le64_to_cpu(k2->ok_xid) ? -1 : 1;
+		return le64_to_cpu(k1->ok_xid) - le64_to_cpu(k2->ok_xid);
 	return 0;
 }
 
