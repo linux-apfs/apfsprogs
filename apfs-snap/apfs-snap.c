@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <getopt.h>
 #include "version.h"
 
 static char *progname;
@@ -91,7 +92,13 @@ int main(int argc, char *argv[])
 	progname = argv[0];
 
 	while (1) {
-		int opt = getopt(argc, argv, "v");
+		static const struct option long_options[] = {
+			{ .name = "version", .has_arg = no_argument , .flag = NULL, .val = 'v' },
+			{ 0 },
+		};
+
+		int opt_index = 0;
+		int opt = getopt_long(argc, argv, "v", long_options, &opt_index);
 
 		if (opt == -1)
 			break;
