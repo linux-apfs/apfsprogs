@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -62,6 +61,27 @@ static __attribute__((noreturn)) void fatal(const char *message)
 	exit(EXIT_FAILURE);
 }
 
+static void *readall(int fd, size_t count, off_t offset)
+{
+	void *buf = NULL;
+	size_t copied;
+	ssize_t ret;
+
+	buf = malloc(count);
+	if (!buf)
+		system_error();
+
+	copied = 0;
+	while (count > 0) {
+		ret = pread(fd, buf + copied, count, offset + copied);
+		if (ret < 0)
+			system_error();
+		count -= ret;
+		copied += ret;
+	}
+	return buf;
+}
+
 /**
  * read_super_copy - Read the copy of the container superblock in block 0
  *
@@ -78,9 +98,7 @@ static struct apfs_nx_superblock *read_super_copy(void)
 	 */
 	bsize_tmp = APFS_NX_DEFAULT_BLOCK_SIZE;
 
-	msb_raw = mmap(NULL, bsize_tmp, PROT_READ, MAP_PRIVATE, dev_fd, APFS_NX_BLOCK_NUM * bsize_tmp);
-	if (msb_raw == MAP_FAILED)
-		system_error();
+	msb_raw = readall(dev_fd, bsize_tmp, APFS_NX_BLOCK_NUM * bsize_tmp);
 	if (le32_to_cpu(msb_raw->nx_magic) != APFS_NX_MAGIC)
 		fatal("not an apfs container");
 	s_blocksize = le32_to_cpu(msb_raw->nx_block_size);
@@ -88,11 +106,9 @@ static struct apfs_nx_superblock *read_super_copy(void)
 		fatal("reported blocksize is too small");
 
 	if (s_blocksize != bsize_tmp) {
-		munmap(msb_raw, bsize_tmp);
+		free(msb_raw);
 
-		msb_raw = mmap(NULL, s_blocksize, PROT_READ, MAP_PRIVATE, dev_fd, APFS_NX_BLOCK_NUM * s_blocksize);
-		if (msb_raw == MAP_FAILED)
-			system_error();
+		msb_raw = readall(dev_fd, s_blocksize, APFS_NX_BLOCK_NUM * s_blocksize);
 	}
 	return msb_raw;
 }
@@ -115,10 +131,8 @@ static struct apfs_nx_superblock *read_latest_super(u64 base, u32 blocks)
 
 	for (bno = base; bno < base + blocks; ++bno) {
 		if (current)
-			munmap(current, s_blocksize);
-		current = mmap(NULL, s_blocksize, PROT_READ, MAP_PRIVATE, dev_fd, bno * s_blocksize);
-		if (current == MAP_FAILED)
-			system_error();
+			free(current);
+		current = readall(dev_fd, s_blocksize, bno * s_blocksize);
 
 		if (le32_to_cpu(current->nx_magic) != APFS_NX_MAGIC)
 			continue; /* Not a superblock */
@@ -153,7 +167,7 @@ static struct apfs_nx_superblock *read_super(void)
 	desc_blocks = le32_to_cpu(msb->nx_xp_desc_blocks);
 	if (desc_blocks > 10000) /* Arbitrary loop limit, is it enough? */
 		fatal("too many checkpoint descriptors?");
-	munmap(msb, s_blocksize);
+	free(msb);
 	msb = NULL;
 
 	return read_latest_super(desc_base, desc_blocks);
@@ -165,15 +179,11 @@ static struct apfs_btree_node_phys *omap_bno_to_root(u64 omap_bno)
 	struct apfs_btree_node_phys *root = NULL;
 	u64 root_bno;
 
-	omap = mmap(NULL, s_blocksize, PROT_READ, MAP_PRIVATE, dev_fd, omap_bno * s_blocksize);
-	if (omap == MAP_FAILED)
-		system_error();
+	omap = readall(dev_fd, s_blocksize, omap_bno * s_blocksize);
 	root_bno = le64_to_cpu(omap->om_tree_oid);
-	munmap(omap, s_blocksize);
+	free(omap);
 
-	root = mmap(NULL, s_blocksize, PROT_READ, MAP_PRIVATE, dev_fd, root_bno * s_blocksize);
-	if (root == MAP_FAILED)
-		system_error();
+	root = readall(dev_fd, s_blocksize, root_bno * s_blocksize);
 
 	/* I don't think this can happen so I don't support it for now */
 	if ((le16_to_cpu(root->btn_flags) & APFS_BTNODE_LEAF) == 0)
@@ -293,17 +303,15 @@ static void list_labels(void)
 		if (vol_id == 0)
 			continue;
 		vol_bno = omap_lookup(omap, vol_id);
-		vsb = mmap(NULL, s_blocksize, PROT_READ, MAP_PRIVATE, dev_fd, vol_bno * s_blocksize);
-		if (vsb == MAP_FAILED)
-			system_error();
+		vsb = readall(dev_fd, s_blocksize, vol_bno * s_blocksize);
 		if (vsb->apfs_volname[APFS_VOLNAME_LEN - 1])
 			fatal("volume label is not properly null-terminated");
 		printf("%d\t%s\n", i, vsb->apfs_volname);
-		munmap(vsb, s_blocksize);
+		free(vsb);
 	}
 
-	munmap(omap, s_blocksize);
-	munmap(msb, s_blocksize);
+	free(omap);
+	free(msb);
 }
 
 int main(int argc, char *argv[])
