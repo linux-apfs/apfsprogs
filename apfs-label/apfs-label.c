@@ -130,20 +130,23 @@ static struct apfs_nx_superblock *read_latest_super(u64 base, u32 blocks)
 	u64 bno;
 
 	for (bno = base; bno < base + blocks; ++bno) {
-		if (current)
-			free(current);
 		current = readall(dev_fd, s_blocksize, bno * s_blocksize);
 
 		if (le32_to_cpu(current->nx_magic) != APFS_NX_MAGIC)
-			continue; /* Not a superblock */
+			goto next; /* Not a superblock */
 		if (le64_to_cpu(current->nx_o.o_xid) <= xid)
-			continue; /* Old */
+			goto next; /* Old */
 		if (!obj_verify_csum(&current->nx_o))
-			continue; /* Corrupted */
+			goto next; /* Corrupted */
 
 		xid = le64_to_cpu(current->nx_o.o_xid);
+		if (latest)
+			free(latest);
 		latest = current;
 		current = NULL;
+next:
+		if (current)
+			free(current);
 	}
 
 	if (!latest)
