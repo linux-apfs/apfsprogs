@@ -5,9 +5,10 @@
 #ifndef _MKAPFS_H
 #define _MKAPFS_H
 
+#include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
 #include <time.h>
+#include <unistd.h>
 #include <apfs/raw.h>
 
 /* Filesystem parameters */
@@ -157,49 +158,59 @@ extern struct ephemeral_info {
 extern __attribute__((noreturn)) void system_error(void);
 extern __attribute__((noreturn)) void fatal(const char *message);
 
-/* Forwards the mmap() call to the proper device of a fusion drive */
-static inline void *apfs_mmap(void *addr, size_t length, int prot, int flags, u64 offset)
+/* Forwards the pwrite() call to the proper device of a fusion drive */
+static inline void apfs_writeall(void *buf, u64 blkcnt, u64 bno)
 {
+	int proper_fd;
+	off_t offset;
+	size_t count, copied;
+	ssize_t ret;
+
+	offset = bno * param->blocksize;
+	count = blkcnt * param->blocksize;
+
+	proper_fd = fd_main;
 	if (offset >= APFS_FUSION_TIER2_DEVICE_BYTE_ADDR) {
 		if (fd_tier2 == -1)
 			fatal("allocation attempted in missing tier 2 device.");
 		offset -= APFS_FUSION_TIER2_DEVICE_BYTE_ADDR;
-		return mmap(addr, length, prot, flags, fd_tier2, (off_t)offset);
+		proper_fd = fd_tier2;
 	}
-	return mmap(addr, length, prot, flags, fd_main, (off_t)offset);
+
+	copied = 0;
+	while (count > 0) {
+		ret = pwrite(proper_fd, buf + copied, count, offset + copied);
+		if (ret < 0)
+			system_error();
+		count -= ret;
+		copied += ret;
+	}
+
+	free(buf);
 }
 
 /**
- * get_zeroed_blocks - Map and zero contiguous filesystem blocks
+ * get_zeroed_blocks - Return a number of zeroed blocks
  * @bno:	first block number
  * @count:	number of blocks
- *
- * Returns a pointer to the mapped area; the caller must unmap it after use.
  */
-static inline void *get_zeroed_blocks(u64 bno, u64 count)
+static inline void *get_zeroed_blocks(u64 count)
 {
 	void *blocks;
-	size_t size = param->blocksize * count;
 
-	if (size / count != param->blocksize)
-		fatal("overflow detected on disk area mapping");
-
-	blocks = apfs_mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, bno * param->blocksize);
-	if (blocks == MAP_FAILED)
+	blocks = calloc(count, param->blocksize);
+	if (!blocks)
 		system_error();
-	memset(blocks, 0, size);
 	return blocks;
 }
 
 /**
- * get_zeroed_block - Map and zero a filesystem block
+ * get_zeroed_block - Return a zeroed block
  * @bno: block number
- *
- * Returns a pointer to the mapped block; the caller must unmap it after use.
  */
-static inline void *get_zeroed_block(u64 bno)
+static inline void *get_zeroed_block(void)
 {
-	return get_zeroed_blocks(bno, 1);
+	return get_zeroed_blocks(1);
 }
 
 /**

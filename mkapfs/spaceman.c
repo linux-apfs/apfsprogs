@@ -188,7 +188,7 @@ static void make_main_alloc_bitmap(void)
 	void *bmap = NULL;
 
 	dev = &sm_info.dev_info[APFS_SD_MAIN];
-	bmap = get_zeroed_blocks(dev->first_chunk_bmap, dev->used_chunks_end);
+	bmap = get_zeroed_blocks(dev->used_chunks_end);
 
 	/* Block zero */
 	bmap_mark_as_used(bmap, 0, 1);
@@ -210,7 +210,7 @@ static void make_main_alloc_bitmap(void)
 		bmap_mark_as_used(bmap, FUSION_WBC_FIRST_BNO, 1);
 	}
 
-	munmap(bmap, dev->used_chunks_end * param->blocksize);
+	apfs_writeall(bmap, dev->used_chunks_end, dev->first_chunk_bmap);
 }
 
 /**
@@ -222,12 +222,12 @@ static void make_tier2_alloc_bitmap(void)
 	void *bmap = NULL;
 
 	dev = &sm_info.dev_info[APFS_SD_TIER2];
-	bmap = get_zeroed_blocks(dev->first_chunk_bmap, dev->used_chunks_end);
+	bmap = get_zeroed_blocks(dev->used_chunks_end);
 
 	/* Block zero */
 	bmap_mark_as_used(bmap, 0, 1);
 
-	munmap(bmap, dev->used_chunks_end * param->blocksize);
+	apfs_writeall(bmap, dev->used_chunks_end, dev->first_chunk_bmap);
 }
 
 /*
@@ -280,7 +280,7 @@ static u64 make_chunk_info(struct device_info *dev, struct apfs_chunk_info *chun
  */
 static u64 make_chunk_info_block(struct device_info *dev, u64 bno, int index, u64 start)
 {
-	struct apfs_chunk_info_block *cib = get_zeroed_block(bno);
+	struct apfs_chunk_info_block *cib = get_zeroed_block();
 	int i;
 
 	cib->cib_index = cpu_to_le32(index);
@@ -294,7 +294,7 @@ static u64 make_chunk_info_block(struct device_info *dev, u64 bno, int index, u6
 	set_object_header(&cib->cib_o, param->blocksize, bno,
 			  APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_SPACEMAN_CIB,
 			  APFS_OBJECT_TYPE_INVALID);
-	munmap(cib, param->blocksize);
+	apfs_writeall(cib, 1, bno);
 
 	return start;
 }
@@ -310,7 +310,7 @@ static u64 make_chunk_info_block(struct device_info *dev, u64 bno, int index, u6
  */
 static u64 make_cib_addr_block(struct device_info *dev, u64 bno, int index, u64 start)
 {
-	struct apfs_cib_addr_block *cab = get_zeroed_block(bno);
+	struct apfs_cib_addr_block *cab = get_zeroed_block();
 	int i;
 
 	cab->cab_index = cpu_to_le32(index);
@@ -331,7 +331,7 @@ static u64 make_cib_addr_block(struct device_info *dev, u64 bno, int index, u64 
 	set_object_header(&cab->cab_o, param->blocksize, bno,
 			  APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_SPACEMAN_CAB,
 			  APFS_OBJECT_TYPE_INVALID);
-	munmap(cab, param->blocksize);
+	apfs_writeall(cab, 1, bno);
 
 	return start;
 }
@@ -427,7 +427,7 @@ static void make_tier2_free_queue(struct apfs_spaceman_free_queue *fq)
  */
 static void make_ip_bitmap(void)
 {
-	void *bmap = get_zeroed_blocks(IP_BMAP_BASE, sm_info.ip_bm_size);
+	void *bmap = get_zeroed_blocks(sm_info.ip_bm_size);
 	struct device_info *main_dev = NULL, *tier2_dev = NULL;
 
 	main_dev = &sm_info.dev_info[APFS_SD_MAIN];
@@ -443,7 +443,7 @@ static void make_ip_bitmap(void)
 	bmap_mark_as_used(bmap, main_dev->first_chunk_bmap - sm_info.ip_base, main_dev->used_chunks_end);
 	bmap_mark_as_used(bmap, tier2_dev->first_chunk_bmap - sm_info.ip_base, tier2_dev->used_chunks_end);
 
-	munmap(bmap, param->blocksize);
+	apfs_writeall(bmap, sm_info.ip_bm_size, IP_BMAP_BASE);
 }
 
 /**
@@ -487,7 +487,7 @@ static void make_internal_pool(struct apfs_spaceman_phys *sm)
 	sm->sm_ip_bm_block_count = cpu_to_le32(sm_info.ip_bmap_blocks);
 	sm->sm_ip_bm_base = cpu_to_le64(IP_BMAP_BASE);
 	for (i = 0; i < sm_info.ip_bmap_blocks; ++i)
-		munmap(get_zeroed_block(IP_BMAP_BASE + i), param->blocksize);
+		apfs_writeall(get_zeroed_block(), 1, IP_BMAP_BASE + i);
 
 	/* The current bitmaps are the first in the ring */
 	sm->sm_ip_bitmap_offset = cpu_to_le32(sm_info.bm_addr_off);
@@ -592,7 +592,7 @@ void make_spaceman(u64 bno, u64 oid)
 {
 	struct apfs_spaceman_phys *sm = NULL;
 
-	sm = get_zeroed_blocks(bno, spaceman_size() / param->blocksize);
+	sm = get_zeroed_blocks(spaceman_size() / param->blocksize);
 
 	sm->sm_block_size = cpu_to_le32(param->blocksize);
 	sm->sm_blocks_per_chunk = cpu_to_le32(blocks_per_chunk());
@@ -612,5 +612,5 @@ void make_spaceman(u64 bno, u64 oid)
 	set_object_header(&sm->sm_o, spaceman_size(), oid,
 			  APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_SPACEMAN,
 			  APFS_OBJECT_TYPE_INVALID);
-	munmap(sm, spaceman_size());
+	apfs_writeall(sm, spaceman_size() / param->blocksize, bno);
 }

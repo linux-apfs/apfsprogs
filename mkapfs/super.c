@@ -54,8 +54,8 @@ static void zero_area(u64 start, u64 blocks)
 	void *block;
 
 	for (bno = start; bno < start + blocks; ++bno) {
-		block = get_zeroed_block(bno);
-		munmap(block, param->blocksize);
+		block = get_zeroed_block();
+		apfs_writeall(block, 1, bno);
 	}
 }
 
@@ -143,7 +143,7 @@ static void set_meta_crypto(struct apfs_wrapped_meta_crypto_state *wmcs)
  */
 static void make_volume(u64 bno, u64 oid)
 {
-	struct apfs_superblock *vsb = get_zeroed_block(bno);
+	struct apfs_superblock *vsb = get_zeroed_block();
 
 	vsb->apfs_magic = cpu_to_le32(APFS_MAGIC);
 
@@ -201,7 +201,7 @@ static void make_volume(u64 bno, u64 oid)
 	set_object_header(&vsb->apfs_o, param->blocksize, oid,
 			  APFS_OBJ_VIRTUAL | APFS_OBJECT_TYPE_FS,
 			  APFS_OBJECT_TYPE_INVALID);
-	munmap(vsb, param->blocksize);
+	apfs_writeall(vsb, 1, bno);
 }
 
 /**
@@ -210,7 +210,7 @@ static void make_volume(u64 bno, u64 oid)
  */
 static void make_cpoint_map_block(u64 bno)
 {
-	struct apfs_checkpoint_map_phys *block = get_zeroed_block(bno);
+	struct apfs_checkpoint_map_phys *block = get_zeroed_block();
 	struct apfs_checkpoint_mapping *map;
 	int idx = 0;
 
@@ -275,7 +275,7 @@ static void make_cpoint_map_block(u64 bno)
 	set_object_header(&block->cpm_o, param->blocksize, bno,
 			  APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_CHECKPOINT_MAP,
 			  APFS_OBJECT_TYPE_INVALID);
-	munmap(block, param->blocksize);
+	apfs_writeall(block, 1, bno);
 }
 
 /**
@@ -288,10 +288,10 @@ static void make_cpoint_map_block(u64 bno)
  */
 static void make_cpoint_superblock(u64 bno, struct apfs_nx_superblock *sb_copy)
 {
-	struct apfs_nx_superblock *sb = get_zeroed_block(bno);
+	struct apfs_nx_superblock *sb = get_zeroed_block();
 
 	memcpy(sb, sb_copy, sizeof(*sb));
-	munmap(sb, param->blocksize);
+	apfs_writeall(sb, 1, bno);
 }
 
 /**
@@ -302,7 +302,7 @@ static void make_tier2_superblock(struct apfs_nx_superblock *sb)
 {
 	struct apfs_nx_superblock *tier2_sb = NULL;
 
-	tier2_sb = get_zeroed_block(APFS_FUSION_TIER2_DEVICE_BYTE_ADDR / param->blocksize);
+	tier2_sb = get_zeroed_block();
 	memcpy(tier2_sb, sb, sizeof(*sb));
 
 	/* The top bit is used to tell apart the main and tier 2 devices */
@@ -312,7 +312,7 @@ static void make_tier2_superblock(struct apfs_nx_superblock *sb)
 	set_object_header(&tier2_sb->nx_o, param->blocksize, APFS_OID_NX_SUPERBLOCK,
 			  APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_NX_SUPERBLOCK,
 			  APFS_OBJECT_TYPE_INVALID);
-	munmap(tier2_sb, param->blocksize);
+	apfs_writeall(tier2_sb, 1, APFS_FUSION_TIER2_DEVICE_BYTE_ADDR / param->blocksize);
 }
 
 /**
@@ -322,7 +322,7 @@ static void make_tier2_superblock(struct apfs_nx_superblock *sb)
  */
 static void make_empty_reaper(u64 bno, u64 oid)
 {
-	struct apfs_nx_reaper_phys *reaper = get_zeroed_block(bno);
+	struct apfs_nx_reaper_phys *reaper = get_zeroed_block();
 
 	reaper->nr_next_reap_id = cpu_to_le64(1);
 	reaper->nr_flags = cpu_to_le32(APFS_NR_BHM_FLAG);
@@ -332,7 +332,7 @@ static void make_empty_reaper(u64 bno, u64 oid)
 	set_object_header(&reaper->nr_o, param->blocksize, oid,
 			  APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_NX_REAPER,
 			  APFS_OBJECT_TYPE_INVALID);
-	munmap(reaper, param->blocksize);
+	apfs_writeall(reaper, 1, bno);
 }
 
 /**
@@ -342,12 +342,12 @@ static void make_empty_reaper(u64 bno, u64 oid)
  */
 static void make_empty_fusion_wbc_state(u64 bno, u64 oid)
 {
-	struct apfs_fusion_wbc_phys *wbc = get_zeroed_block(bno);
+	struct apfs_fusion_wbc_phys *wbc = get_zeroed_block();
 
 	wbc->fwp_version = cpu_to_le64(0x70);
 
 	set_object_header(&wbc->fwp_objHdr, param->blocksize, oid, APFS_OBJ_EPHEMERAL | APFS_OBJECT_TYPE_NX_FUSION_WBC, APFS_OBJECT_TYPE_INVALID);
-	munmap(wbc, param->blocksize);
+	apfs_writeall(wbc, 1, bno);
 }
 
 /**
@@ -381,7 +381,7 @@ void make_container(void)
 	struct apfs_nx_superblock *sb_copy = NULL;
 	u64 size = param->blocksize * param->block_count;
 
-	sb_copy = get_zeroed_block(APFS_NX_BLOCK_NUM);
+	sb_copy = get_zeroed_block();
 
 	sb_copy->nx_magic = cpu_to_le32(APFS_NX_MAGIC);
 	sb_copy->nx_block_size = cpu_to_le32(param->blocksize);
@@ -448,5 +448,5 @@ void make_container(void)
 	if (fd_tier2 != -1)
 		make_tier2_superblock(sb_copy);
 
-	munmap(sb_copy, param->blocksize);
+	apfs_writeall(sb_copy, 1, APFS_NX_BLOCK_NUM);
 }

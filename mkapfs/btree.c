@@ -99,7 +99,7 @@ static int min_table_size(u32 type)
  */
 void make_empty_btree_root(u64 bno, u64 oid, u32 subtype)
 {
-	struct apfs_btree_node_phys *root = get_zeroed_block(bno);
+	struct apfs_btree_node_phys *root = get_zeroed_block();
 	u32 type;
 	u16 flags;
 	int toc_len, free_len;
@@ -137,7 +137,7 @@ void make_empty_btree_root(u64 bno, u64 oid, u32 subtype)
 		type |= APFS_OBJ_PHYSICAL;
 	set_object_header(&root->btn_o, param->blocksize, oid, type, subtype);
 
-	munmap(root, param->blocksize);
+	apfs_writeall(root, 1, bno);
 }
 
 /**
@@ -164,7 +164,7 @@ static void set_omap_info(struct apfs_btree_info *info, int nkeys)
  */
 static void make_omap_root(u64 bno, bool is_vol)
 {
-	struct apfs_btree_node_phys *root = get_zeroed_block(bno);
+	struct apfs_btree_node_phys *root = get_zeroed_block();
 	struct apfs_omap_key *key;
 	struct apfs_omap_val *val;
 	struct apfs_kvoff *kvoff;
@@ -219,7 +219,7 @@ static void make_omap_root(u64 bno, bool is_vol)
 	set_object_header(&root->btn_o, param->blocksize, bno,
 			  APFS_OBJECT_TYPE_BTREE | APFS_OBJ_PHYSICAL,
 			  APFS_OBJECT_TYPE_OMAP);
-	munmap(root, param->blocksize);
+	apfs_writeall(root, 1, bno);
 }
 
 /**
@@ -229,7 +229,7 @@ static void make_omap_root(u64 bno, bool is_vol)
  */
 void make_omap_btree(u64 bno, bool is_vol)
 {
-	struct apfs_omap_phys *omap = get_zeroed_block(bno);
+	struct apfs_omap_phys *omap = get_zeroed_block();
 
 	if (!is_vol)
 		omap->om_flags = cpu_to_le32(APFS_OMAP_MANUALLY_MANAGED);
@@ -248,7 +248,7 @@ void make_omap_btree(u64 bno, bool is_vol)
 	set_object_header(&omap->om_o, param->blocksize, bno,
 			  APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_OMAP,
 			  APFS_OBJECT_TYPE_INVALID);
-	munmap(omap, param->blocksize);
+	apfs_writeall(omap, 1, bno);
 }
 
 /**
@@ -282,7 +282,7 @@ static void set_cat_info(struct apfs_btree_info *info)
  */
 void make_cat_root(u64 bno, u64 oid)
 {
-	struct apfs_btree_node_phys *root = get_zeroed_block(bno);
+	struct apfs_btree_node_phys *root = get_zeroed_block();
 	struct apfs_kvloc *kvloc;
 	void *key, *key_area, *val_end, *val_area_end;
 	int toc_len, key_len, free_len, val_len;
@@ -327,5 +327,5 @@ void make_cat_root(u64 bno, u64 oid)
 	set_object_header(&root->btn_o, param->blocksize, oid,
 			  APFS_OBJECT_TYPE_BTREE | APFS_OBJ_VIRTUAL,
 			  APFS_OBJECT_TYPE_FSTREE);
-	munmap(root, param->blocksize);
+	apfs_writeall(root, 1, bno);
 }
