@@ -72,11 +72,11 @@ void read_free_queue_key(void *raw, int size, struct key *key)
 int keycmp(struct key *k1, struct key *k2)
 {
 	if (k1->id != k2->id)
-		return k1->id < k2->id ? -1 : 1;
+		return k1->id - k2->id;
 	if (k1->type != k2->type)
-		return k1->type < k2->type ? -1 : 1;
+		return k1->type - k2->type;
 	if (k1->number != k2->number)
-		return k1->number < k2->number ? -1 : 1;
+		return k1->number - k2->number;
 	if (!k1->name) /* Keys of this type have no name */
 		return 0;
 
